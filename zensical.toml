@@ -1,0 +1,183 @@
+[project]
+site_name = "trailrunner"
+site_description = "Model-based supply chain traversal for life cycle inventories"
+site_author = "Timo Diepers"
+site_url = "https://timodiepers.github.io/trailrunner/"
+
+repo_name = "TimoDiepers/trailrunner"
+repo_url = "https://github.com/TimoDiepers/trailrunner"
+edit_uri = "edit/main/docs/"
+
+copyright = "Copyright &copy; 2026 trailrunner developers"
+
+nav = [
+  { Home = [
+    { Overview = "index.md" },
+  ]},
+  { "User Guide" = [
+    { Installation = "content/installation.md" },
+    { "Quick Start" = "content/getting_started/quickstart.md" },
+    { "Core Concepts" = "content/concepts.md" },
+    { "Writing a Model" = "content/writing_a_model.md" },
+    { Parameters = "content/parameters.md" },
+    { "Reading a Report" = "content/reports.md" },
+  ]},
+  { "API Reference" = [
+    "api/index.md",
+    { Flows = "api/flow.md" },
+    { Model = "api/model.md" },
+    { Result = "api/result.md" },
+    { Settings = "api/settings.md" },
+    { Glossary = "api/glossary.md" },
+    { Orchestrator = "api/orchestrator.md" },
+    { Runner = "api/runner.md" },
+    { Queue = "api/queue.md" },
+    { Log = "api/log.md" },
+    { Report = "api/report.md" },
+    { "Parameter Set" = "api/parameter_set.md" },
+    { "Location Hierarchy" = "api/location.md" },
+    { Coverage = "api/coverage.md" },
+    { Errors = "api/errors.md" },
+    { "Example Models" = "api/models.md" },
+  ]},
+]
+
+extra_css = [
+  "stylesheets/extra.css",
+]
+
+[project.theme]
+language = "en"
+features = [
+  "announce.dismiss",
+  "content.action.edit",
+  "content.action.view",
+  "content.code.copy",
+  "content.code.annotate",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.tabs",
+  "navigation.indexes",
+  "navigation.path",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "search.share",
+  "search.suggest",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "teal"
+accent = "teal"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "teal"
+accent = "teal"
+toggle.icon = "lucide/moon-star"
+toggle.name = "Switch to light mode"
+
+[project.theme.icon]
+repo = "fontawesome/brands/github"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/TimoDiepers/trailrunner"
+name = "Open this Repo on GitHub"
+
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.betterem]
+smart_enable = "all"
+[project.markdown_extensions.pymdownx.blocks.caption]
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "zensical.extensions.emoji.twemoji"
+emoji_generator = "zensical.extensions.emoji.to_svg"
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.smartsymbols]
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+[project.markdown_extensions.pymdownx.tilde]
+
+[project.plugins.mkdocstrings]
+enabled = true
+default_handler = "python"
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["."]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+docstring_section_style = "table"
+show_root_heading = true
+show_root_toc_entry = true
+show_root_full_path = false
+show_object_full_path = false
+show_category_heading = true
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+members_order = "source"
+group_by_category = true
+show_if_no_docstring = false
+show_signature = true
+show_signature_annotations = true
+separate_signature = false
+signature_crossrefs = true
+merge_init_into_class = true
+show_source = true
+inherited_members = false
+filters = ["!^_", "!^__"]
+
+[project.plugins.tags]
+
+[project.markdown_extensions.zensical.extensions.preview]
+configurations = [
+  { targets.include = ["**"], targets.exclude = ["**/*.svg", "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif", "**/*.webp"] },
+]
+
+[project.validation]
+invalid_links = true
+invalid_link_anchors = true
+
+[project.extra.tags]
+api = "api"
+tutorial = "tutorial"
+concepts = "concepts"
+parameters = "parameters"
+installation = "installation"
+
+[project.theme.icon.tag]
+api = "lucide/code"
+tutorial = "lucide/footprints"
+concepts = "lucide/book-open"
+parameters = "lucide/sliders-horizontal"
+installation = "lucide/download"
