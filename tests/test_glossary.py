@@ -55,6 +55,21 @@ def test_two_matching_producers_raise_and_name_the_candidates():
     assert CAPTURED in str(excinfo.value)
 
 
+def test_declared_producers_ignore_coverage():
+    """Lets the caller tell "nobody models this" from "coverage filtered it out"."""
+    swiss = SwissCapturer()
+    glossary = Glossary([swiss])
+    assert glossary.declared_producers(Flow(iri=CAPTURED, location="FR")) == [swiss]
+    assert glossary.declared_producers(Flow(iri=HEAT)) == []
+
+
+def test_declared_producers_does_not_disturb_resolve():
+    glossary = Glossary([Capturer(), Capturer()])
+    assert len(glossary.declared_producers(Flow(iri=CAPTURED))) == 2
+    with pytest.raises(AmbiguousProducer):
+        glossary.resolve(Flow(iri=CAPTURED))
+
+
 def test_register_adds_a_model_after_construction():
     glossary = Glossary()
     model = Capturer()
