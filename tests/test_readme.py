@@ -28,7 +28,7 @@ def test_the_readme_shows_how_to_write_a_model():
     exec(readme_block_defining("MyBoiler"), namespace)  # noqa: S102 — that is the point
     boiler = namespace["MyBoiler"]()
 
-    heat = [iri for iri in boiler.produces][0]
+    heat = list(boiler.produces)[0]
     demand = Demand(flow=Flow(iri=heat, location="CH", time=2030), amount=100.0, unit="MJ")
     result = Runner(Glossary([boiler])).apply(demand)
 
