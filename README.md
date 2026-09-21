@@ -85,3 +85,8 @@ for record in report.unresolved:
 A demand nobody models is reported as unresolved, never silently treated as
 zero. Every parameter fallback used along the way shows up in
 `report.provenance`.
+
+[`examples/dac.ipynb`](examples/dac.ipynb) walks through this end to end with
+explanation: writing the parameter parquet, location fallback and year
+interpolation, why the regeneration heat has to be code, the cutoff leaves, and
+the coverage boundary.
