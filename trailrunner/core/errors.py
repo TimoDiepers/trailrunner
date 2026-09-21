@@ -23,3 +23,12 @@ class ValidationError(TrailrunnerError):
 
 class ParameterNotFound(TrailrunnerError):
     """No parameter row could be resolved for the requested location and time."""
+
+
+class MissingUnit(TrailrunnerError):
+    """A parameter column asked for a unit has none declared in its datapackage.
+
+    Raised where the unit is read rather than carried onward as ``None``: an
+    Exchange's unit is a ``str``, and a silent ``None`` surfaces much later as
+    a validation error blaming the model for what is really missing metadata.
+    """
