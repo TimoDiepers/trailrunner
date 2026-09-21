@@ -1,3 +1,4 @@
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from trailrunner.core.flow import Demand, Exchange, Flow
@@ -69,15 +70,19 @@ def test_warnings_are_collected():
     assert log.warnings == [("flow repeats on path", 3)]
 
 
+def rows_of_kind(path, kind):
+    return [row for row in pq.read_table(path).to_pylist() if row["kind"] == kind]
+
+
 def test_to_parquet_writes_one_row_per_biosphere_exchange(tmp_path):
     log = Log()
     demand = a_demand()
     log.write(demand, a_result(demand), depth=0, parent=None)
     path = tmp_path / "log.parquet"
     log.to_parquet(path)
-    table = pq.read_table(path)
-    assert table.num_rows == 1
-    row = table.to_pylist()[0]
+    rows = rows_of_kind(path, "biosphere")
+    assert len(rows) == 1
+    row = rows[0]
     assert row["node"] == 0
     assert row["flow_iri"] == CO2
     assert row["amount"] == 12.0
@@ -85,7 +90,70 @@ def test_to_parquet_writes_one_row_per_biosphere_exchange(tmp_path):
     assert row["demand_iri"] == CAPTURED
 
 
+def test_to_parquet_writes_the_provenance_of_every_node(tmp_path):
+    """Two runs differing only in their parameter fallbacks must differ on disk."""
+    log = Log()
+    demand = a_demand()
+    log.write(demand, a_result(demand))
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    provenance = {row["key"]: row["value"] for row in rows_of_kind(path, "provenance")}
+    assert provenance == {"location_used": "RER", "location_fallback": "True"}
+
+
+def test_to_parquet_keeps_a_node_that_emitted_nothing(tmp_path):
+    log = Log()
+    demand = a_demand()
+    log.write(demand, Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]))
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    rows = rows_of_kind(path, "node")
+    assert len(rows) == 1
+    assert rows[0]["demand_iri"] == CAPTURED
+    assert rows[0]["demand_amount"] == 1000.0
+
+
+def test_to_parquet_writes_the_unresolved_leaves(tmp_path):
+    """Two runs differing only in their cutoffs must differ on disk."""
+    log = Log()
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_producer", depth=1, parent=0)
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    rows = rows_of_kind(path, "unresolved")
+    assert len(rows) == 1
+    assert rows[0]["demand_iri"] == HEAT
+    assert rows[0]["reason"] == "no_producer"
+    assert rows[0]["parent"] == 0
+    assert rows[0]["depth"] == 1
+
+
+def test_a_complete_run_round_trips(tmp_path):
+    log = Log()
+    demand = a_demand()
+    node = log.write(demand, a_result(demand))
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_producer", parent=node)
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    kinds = [row["kind"] for row in pq.read_table(path).to_pylist()]
+    assert sorted(kinds) == ["biosphere", "provenance", "provenance", "unresolved"]
+
+
 def test_to_parquet_on_an_empty_log_writes_an_empty_table(tmp_path):
     path = tmp_path / "log.parquet"
     Log().to_parquet(path)
     assert pq.read_table(path).num_rows == 0
+
+
+def test_an_empty_log_table_concatenates_with_a_populated_one(tmp_path):
+    """Both branches must declare the same schema, not null-typed columns."""
+    empty_path = tmp_path / "empty.parquet"
+    Log().to_parquet(empty_path)
+
+    log = Log()
+    demand = a_demand()
+    log.write(demand, a_result(demand))
+    populated_path = tmp_path / "populated.parquet"
+    log.to_parquet(populated_path)
+
+    combined = pa.concat_tables([pq.read_table(empty_path), pq.read_table(populated_path)])
+    assert combined.num_rows == 3
