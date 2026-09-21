@@ -3,6 +3,7 @@ from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
+from trailrunner.params.coverage import Coverage
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
@@ -123,6 +124,35 @@ def test_a_loop_is_warned_about():
 
     report = Orchestrator(Glossary([SelfFeeder()]), max_depth=3).calculate(ROOT)
     assert any(CAPTURED in message for message, _ in report.warnings)
+
+
+class DatedCapturer(Model):
+    """Only valid 2020-2050, so a flow with no year at all falls outside it."""
+
+    produces = [CAPTURED]
+    coverage = Coverage(time_range=(2020, 2050))
+
+    def apply(self, demand: Demand) -> Result:
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+def test_a_flow_its_only_model_excludes_is_not_reported_as_unmodelled():
+    """The registered-but-filtered-out case must not read as "nobody makes this"."""
+    undated = Demand(flow=Flow(iri=CAPTURED, location="CH"), amount=1000.0, unit="kg")
+    report = Orchestrator(Glossary([DatedCapturer()])).calculate(undated)
+    assert [r.reason for r in report.unresolved] == ["coverage_excluded"]
+
+
+def test_a_coverage_excluded_leaf_names_the_model_that_nearly_matched():
+    undated = Demand(flow=Flow(iri=CAPTURED, location="CH"), amount=1000.0, unit="kg")
+    report = Orchestrator(Glossary([DatedCapturer()])).calculate(undated)
+    assert "DatedCapturer" in report.unresolved[0].detail
+
+
+def test_a_genuinely_unmodelled_flow_is_still_no_producer():
+    report = Orchestrator(Glossary([Capturer()])).calculate(ROOT)
+    assert [r.reason for r in report.unresolved] == ["no_producer"]
+    assert report.unresolved[0].detail is None
 
 
 def test_priority_callable_is_passed_through_to_the_queue():

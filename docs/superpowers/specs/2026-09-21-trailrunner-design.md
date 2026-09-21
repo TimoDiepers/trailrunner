@@ -162,6 +162,12 @@ glossary.resolve(flow) -> Model | None
 - 2+ hits → `AmbiguousProducer`, naming the candidates. Ambiguity is a data
   error, not something to resolve by silent precedence.
 
+`resolve` returns `None` both when no model declares the product and when one
+does but its coverage rejected the flow, so `declared_producers(flow)` answers
+the second question separately, ignoring coverage. The Orchestrator uses it to
+tell the two cases apart in the unresolved list; `resolve`'s three-way contract
+is left alone.
+
 ## Runner
 
 Synchronous. The single place where validation happens.
@@ -236,7 +242,9 @@ structure is read back out of it to build the report.
 
 ```python
 report.inventory     # biosphere aggregated by (iri, location, time), per unit
-report.unresolved    # dangling demands with reason (no_producer, max_depth)
+report.unresolved    # dangling demands with reason (no_producer,
+                     # coverage_excluded, max_depth, max_nodes) and, where
+                     # there is one, a detail naming the near-miss model
 report.provenance    # per node: parameter rows and fallbacks used
 report.graph         # nodes and edges, for later tree/Sankey rendering
 ```
@@ -256,6 +264,7 @@ concatenated.
 | Situation | Behavior |
 |---|---|
 | No model produces a flow | Unresolved leaf, reason `no_producer`. Traversal continues. |
+| A model produces the flow but its `coverage` excludes it | Unresolved leaf, reason `coverage_excluded`, with the near-miss models named in `detail`. Traversal continues. |
 | Several models produce a flow | `AmbiguousProducer` raised, candidates named. |
 | Production does not cover the demand | `ValidationError` from the Runner, node identified. |
 | Unit mismatch on any exchange | `ValidationError` from the Runner. |
