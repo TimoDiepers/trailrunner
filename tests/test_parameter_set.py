@@ -70,7 +70,45 @@ def test_omitting_location_ignores_the_location_column(dac_parameter_file):
     params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
     row = params.at(time=2030)
     assert row["heat_demand"] == 5.0
-    assert row.provenance["location_used"] is None
+    assert row.provenance["location_requested"] is None
+
+
+def test_omitting_location_still_says_which_row_was_used(dac_parameter_file):
+    """Taking the first of several locations is a choice; the provenance says so.
+
+    Nothing was substituted, so it is not a fallback -- but reporting
+    ``location_used: None`` while returning the CH row is the silent precedence
+    the design forbids.
+    """
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(time=2030)
+    assert row["location"] == "CH"
+    assert row.provenance["location_used"] == "CH"
+    assert row.provenance["location_fallback"] is False
+
+
+def test_interpolated_row_reports_the_location_it_interpolated_within(dac_parameter_file):
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="FR", time=2025)
+    assert row.provenance["location_used"] == "RER"
+    assert row.provenance["location_fallback"] is True
+
+
+def test_a_returned_row_cannot_be_used_to_corrupt_the_parameter_set(dac_parameter_file):
+    """ParameterRow is frozen; its mappings must not alias the set's own state."""
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="CH", time=2030)
+
+    row.values["heat_demand"] = 999.0
+    with pytest.raises(TypeError):
+        row.units["heat_demand"] = "kJ"
+    with pytest.raises(TypeError):
+        row.iris["heat_demand"] = "urn:nonsense"
+
+    later = params.at(location="CH", time=2030)
+    assert later["heat_demand"] == 5.0
+    assert later.unit_of("heat_demand") == "MJ"
+    assert later.iri_of("heat_demand") == HEAT_DEMAND_IRI
 
 
 def test_omitting_time_returns_the_first_matching_row(dac_parameter_file):

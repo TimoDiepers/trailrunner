@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pyarrow.parquet as pq
@@ -20,6 +21,10 @@ class ParameterRow:
     """One resolved set of parameter values, plus how it was obtained.
 
     Values are reachable as ``row["heat_demand"]`` or ``row.heat_demand``.
+
+    The row owns its ``values`` and sees ``units`` and ``iris`` through
+    read-only views, so nothing done to a row can reach back into the
+    ParameterSet that produced it.
     """
 
     values: Mapping[str, Any]
@@ -119,14 +124,30 @@ class ParameterSet:
             if resolved is None:
                 continue
             values, time_provenance = resolved
+            # The location of the row actually taken, not the candidate that
+            # was searched for: with no location requested every row is a
+            # candidate and the first one wins, and the provenance has to name
+            # it. Reporting ``None`` there while handing back the CH row is
+            # precisely the silent precedence this design refuses.
+            location_used = values.get(self._location_column, candidate)
             provenance = {
                 "location_requested": location,
-                "location_used": candidate,
-                "location_fallback": candidate != location,
+                "location_used": location_used,
+                # Nothing was substituted if nothing was asked for.
+                "location_fallback": location is not None and location_used != location,
                 "time_requested": time,
                 **time_provenance,
             }
-            return ParameterRow(values, self._units, self._iris, provenance)
+            # dict() and read-only views: ParameterRow advertises immutability,
+            # and these mappings are the ParameterSet's own live state. One
+            # ``row.values[k] = ...`` would otherwise corrupt every later
+            # lookup in the run.
+            return ParameterRow(
+                dict(values),
+                MappingProxyType(self._units),
+                MappingProxyType(self._iris),
+                provenance,
+            )
         raise ParameterNotFound(
             f"no parameter row for location={location!r} time={time!r} "
             f"(tried {self._hierarchy.chain(location)})"
