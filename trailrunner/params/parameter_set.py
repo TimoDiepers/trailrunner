@@ -175,6 +175,15 @@ class ParameterSet:
                 interpolated[column] = time
                 continue
             high_value = upper.get(column)
-            if isinstance(low_value, Real) and isinstance(high_value, Real):
+            # bool is a numbers.Real (bool subclasses int, int is Integral,
+            # Integral is Real), so it must be excluded explicitly here or a
+            # boolean column gets averaged into a meaningless float instead
+            # of falling through to the lower row's value below.
+            if (
+                isinstance(low_value, Real)
+                and not isinstance(low_value, bool)
+                and isinstance(high_value, Real)
+                and not isinstance(high_value, bool)
+            ):
                 interpolated[column] = low_value + (high_value - low_value) * fraction
         return interpolated
