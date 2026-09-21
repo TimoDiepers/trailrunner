@@ -2,6 +2,7 @@
 
 from trailrunner.core.errors import (
     AmbiguousProducer,
+    MissingUnit,
     NoProducer,
     ParameterNotFound,
     TrailrunnerError,
@@ -26,6 +27,7 @@ __all__ = [
     # ValidationError and ParameterNotFound straight to the caller, so they
     # belong here rather than behind trailrunner.core.errors.
     "AmbiguousProducer",
+    "MissingUnit",
     "NoProducer",
     "ParameterNotFound",
     "TrailrunnerError",

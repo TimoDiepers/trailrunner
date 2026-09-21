@@ -1,6 +1,6 @@
 import pytest
 
-from trailrunner.core.errors import ParameterNotFound
+from trailrunner.core.errors import MissingUnit, ParameterNotFound
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
@@ -26,7 +26,38 @@ def test_units_and_iris_come_from_the_embedded_datapackage(dac_parameter_file):
     row = params.at(location="CH", time=2030)
     assert row.unit_of("heat_demand") == "MJ"
     assert row.iri_of("heat_demand") == HEAT_DEMAND_IRI
-    assert row.unit_of("location") is None
+    assert row.iri_of("location") is None
+
+
+def test_a_column_with_no_declared_unit_raises_naming_the_column_and_the_file(
+    dac_parameter_file,
+):
+    """``unit_of`` feeds ``Exchange.unit``, which is ``str``, not ``str | None``.
+
+    Returning None here would type-check, travel into a model's Result and
+    surface much later as a Runner error blaming the model for what is really
+    missing parquet metadata.
+    """
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="CH", time=2030)
+    with pytest.raises(MissingUnit) as excinfo:
+        row.unit_of("location")
+    assert "location" in str(excinfo.value)
+    assert str(dac_parameter_file) in str(excinfo.value)
+
+
+def test_a_missing_unit_can_still_be_queried_without_raising(dac_parameter_file):
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="CH", time=2030)
+    assert row.unit_of("location", default=None) is None
+    assert row.unit_of("heat_demand", default=None) == "MJ"
+
+
+def test_a_parameter_set_built_in_memory_says_so_when_a_unit_is_missing():
+    params = ParameterSet([{"location": "CH", "time": 2030, "heat_demand": 5.0}])
+    with pytest.raises(MissingUnit) as excinfo:
+        params.at(location="CH", time=2030).unit_of("heat_demand")
+    assert "heat_demand" in str(excinfo.value)
 
 
 def test_location_falls_back_up_the_hierarchy_and_says_so(dac_parameter_file):
