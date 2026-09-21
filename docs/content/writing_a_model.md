@@ -59,6 +59,13 @@ Four rules the [`Runner`](../api/runner.md) checks on every result:
 
 Breaking any of them raises [`ValidationError`](../api/errors.md) naming the model.
 
+!!! note "Assign `produces`, never append to it"
+
+    The base class default is an empty tuple, not a list, because a mutable class attribute
+    is shared: a subclass appending instead of assigning would add its product to every
+    other model in the run. A subclass may assign either a list or a tuple — only
+    membership is ever tested.
+
 !!! warning "Do not scale to a unit demand"
 
     `apply` gets `demand.amount` as it is. Writing a model that returns per-unit figures and
