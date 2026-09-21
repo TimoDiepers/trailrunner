@@ -242,7 +242,14 @@ report.graph         # nodes and edges, for later tree/Sankey rendering
 ```
 
 `log.to_parquet()` writes the same records to disk — symmetry with trailpack,
-and it makes results diffable between runs.
+and it makes results diffable between runs. *All* of the records: one flat
+table under a single explicit schema, with a `kind` column distinguishing a
+biosphere exchange, a node that emitted none, an unresolved leaf and one row
+per provenance key. Writing only the biosphere exchanges would make two runs
+that differ solely in their cutoffs or their parameter fallbacks serialize
+identically, which is the opposite of diffable. The schema is declared rather
+than inferred so that an empty log and a populated one share a type and can be
+concatenated.
 
 ## Error handling
 
