@@ -1,20 +1,44 @@
 [project]
 name = "trailrunner"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Model-based supply chain traversal for life cycle inventories"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Timo Diepers", email = "timo.diepers@ltt.rwth-aachen.de" }]
+maintainers = [{ name = "Timo Diepers", email = "timo.diepers@ltt.rwth-aachen.de" }]
+keywords = ["Life Cycle Assessment", "LCA", "inventory", "supply chain", "brightway"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
 requires-python = ">=3.11"
 dependencies = ["pyarrow>=15"]
+
+[project.urls]
+source = "https://github.com/TimoDiepers/trailrunner"
+homepage = "https://github.com/TimoDiepers/trailrunner"
+tracker = "https://github.com/TimoDiepers/trailrunner/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "trailrunner/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["trailrunner"]
+
+[tool.hatch.build.targets.sdist]
+include = ["trailrunner", "tests", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
