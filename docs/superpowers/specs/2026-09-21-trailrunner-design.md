@@ -175,8 +175,17 @@ class Runner:
         return result
 ```
 
-`validate` checks that production covers the demand (matching IRI, compatible
-unit, positive amount) and that every exchange carries a known unit.
+`validate` checks that production covers the demand — matching IRI, compatible
+unit, positive amount, and a summed amount of the demanded product that is at
+least the demanded amount (within a small relative tolerance, since models
+built on interpolated parameters do not round-trip to the last bit) — and that
+every exchange carries a known unit.
+
+The amount check is load-bearing rather than cosmetic: `apply` receives the
+*full* demand amount and nothing downstream rescales the Result, so a model
+that answers a 1000 kg demand with 1 kg of production would otherwise shrink
+the whole inventory by three orders of magnitude, silently. Over-production is
+permitted: a process may legitimately make more than was asked of it.
 
 The Runner is a separate object precisely so a concurrent implementation can
 replace it behind the same interface without touching the Orchestrator.

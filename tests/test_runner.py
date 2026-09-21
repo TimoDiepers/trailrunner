@@ -78,6 +78,65 @@ def test_production_amount_must_be_positive():
         runner.apply(DEMAND)
 
 
+def test_production_below_the_demand_is_rejected():
+    """The load-bearing invariant: nothing downstream rescales the result.
+
+    ``apply`` receives the full demand amount, so a model that produces one
+    kilogram against a demand for a thousand would silently yield an inventory
+    a thousandfold too low.
+    """
+    runner = make_runner(
+        Result(
+            production=[Exchange(flow=DEMAND.flow, amount=1.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2), amount=0.01, unit="kg")],
+        )
+    )
+    with pytest.raises(ValidationError) as excinfo:
+        runner.apply(DEMAND)
+    message = str(excinfo.value)
+    assert "Stub" in message
+    assert "1.0" in message
+    assert "1000.0" in message
+
+
+def test_production_split_over_several_entries_is_summed():
+    runner = make_runner(
+        Result(
+            production=[
+                Exchange(flow=DEMAND.flow, amount=400.0, unit="kg"),
+                Exchange(flow=DEMAND.flow, amount=600.0, unit="kg"),
+            ]
+        )
+    )
+    assert len(runner.apply(DEMAND).production) == 2
+
+
+def test_production_within_relative_tolerance_of_the_demand_is_accepted():
+    """Interpolated parameters do not round-trip to the last bit."""
+    runner = make_runner(
+        Result(production=[Exchange(flow=DEMAND.flow, amount=1000.0 * (1 - 1e-12), unit="kg")])
+    )
+    assert runner.apply(DEMAND).production[0].amount < 1000.0
+
+
+def test_over_production_is_allowed():
+    """A process may legitimately make more than was asked of it."""
+    runner = make_runner(
+        Result(production=[Exchange(flow=DEMAND.flow, amount=1500.0, unit="kg")])
+    )
+    assert runner.apply(DEMAND).production[0].amount == 1500.0
+
+
+def test_a_missing_unit_is_reported_even_when_the_amount_is_also_wrong():
+    """The unit rule must not be masked by the amount rule on the same exchange."""
+    runner = make_runner(
+        Result(production=[Exchange(flow=DEMAND.flow, amount=0.0, unit="")])
+    )
+    with pytest.raises(ValidationError) as excinfo:
+        runner.apply(DEMAND)
+    assert "without a unit" in str(excinfo.value)
+
+
 def test_every_exchange_must_carry_a_unit():
     runner = make_runner(
         Result(
