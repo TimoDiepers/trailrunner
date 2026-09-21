@@ -127,3 +127,31 @@ params = ParameterSet(
 
 `source` is optional and only used in error messages; `from_parquet` fills it with the path
 it read, so a `MissingUnit` can point at the file.
+
+## When many rows are the answer: fleets
+
+A parameter lookup resolves to one row. Some tables are not like that: a list of plants that
+were actually built is a table where *every* row running in the demanded year is part of the
+answer, because each was built in its own year and its construction belongs in that year.
+
+[`Fleet`](../api/fleet.md) reads that shape:
+
+```python
+from trailrunner import Fleet
+
+fleet = Fleet.from_parquet("dac_fleet.parquet", hierarchy=hierarchy)
+running = fleet.operating(location="CH", time=2030)
+
+running.provenance["plants"]   # ['ch-1', 'ch-2']
+running.total_capacity         # 52000.0, in running.unit_of("capacity")
+running.mean_build_year        # 2028.3, weighted by capacity
+```
+
+`operating` keeps the plants with `build_year <= time < build_year + lifetime` and widens
+through the [`LocationHierarchy`](../api/location.md) when a location has none running. It
+never interpolates a plant into existence, and it never pools two levels of the hierarchy —
+a fleet mixing the Swiss plants with the European ones would double-count the Swiss ones.
+
+`DirectAirCapture` uses one to put construction in the years it happened: it amortizes each
+running plant over its capacity and lifetime and demands that plant's share **in the plant's
+own build year**, several years before the capture it pays for.
