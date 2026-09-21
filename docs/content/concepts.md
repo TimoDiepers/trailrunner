@@ -124,4 +124,12 @@ The split is deliberate:
   `coverage_excluded`, `max_depth`, `max_nodes`.
 - **Unresolvable contracts** raise: [`AmbiguousProducer`](../api/errors.md),
   [`ValidationError`](../api/errors.md), [`ParameterNotFound`](../api/errors.md),
-  [`NoProducer`](../api/errors.md) when a model is asked for directly.
+  [`MissingUnit`](../api/errors.md), and [`NoProducer`](../api/errors.md) when a model is
+  asked for directly.
+
+`Orchestrator.calculate` propagates these straight to the caller, so they are importable
+from the package root alongside the types:
+
+```python
+from trailrunner import MissingUnit, TrailrunnerError, ValidationError
+```

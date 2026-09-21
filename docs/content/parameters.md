@@ -62,6 +62,23 @@ row.iri_of("heat_demand")     # "https://vocab.sentier.dev/parameters/heat-deman
 row.provenance
 ```
 
+!!! warning "`unit_of` is strict by default"
+
+    A column with no declared unit raises [`MissingUnit`](../api/errors.md), naming the
+    column and the file it came from. The caller is almost always building an `Exchange`,
+    whose `unit` is a `str`: handing back `None` there type-checks, travels into the model's
+    result and only fails later in the [`Runner`](../api/runner.md), with a message blaming
+    the model for what is really a gap in the parquet's metadata.
+
+    Pass a `default` to ask without asserting:
+
+    ```python
+    row.unit_of("location", default=None)   # None, no exception
+    ```
+
+    `iri_of` stays permissive and returns `None`, since an IRI is metadata rather than
+    something that travels into a result.
+
 ```python
 {
     "location_requested": "CH",
@@ -104,5 +121,9 @@ params = ParameterSet(
     units={"heat_demand": "MJ"},
     iris={"heat_demand": "https://vocab.sentier.dev/parameters/heat-demand"},
     hierarchy=LocationHierarchy({"CH": "RER", "RER": "GLO"}),
+    source="hand-written parameters",
 )
 ```
+
+`source` is optional and only used in error messages; `from_parquet` fills it with the path
+it read, so a `MissingUnit` can point at the file.
