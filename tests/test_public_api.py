@@ -18,7 +18,13 @@ def test_the_exceptions_a_calculation_can_raise_are_importable_from_the_top():
 
 
 def test_every_exported_error_is_a_trailrunner_error():
-    for name in ("NoModelFound", "AmbiguousModelMatch", "ValidationError", "ParameterNotFound"):
+    for name in (
+        "NoModelFound",
+        "AmbiguousModelMatch",
+        "ValidationError",
+        "ParameterNotFound",
+        "MissingUnit",
+    ):
         assert issubclass(getattr(trailrunner, name), trailrunner.TrailrunnerError)
 
 

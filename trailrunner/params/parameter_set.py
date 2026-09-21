@@ -10,10 +10,13 @@ from typing import Any
 
 import pyarrow.parquet as pq
 
-from trailrunner.core.errors import ParameterNotFound
+from trailrunner.core.errors import MissingUnit, ParameterNotFound
 from trailrunner.params.location import LocationHierarchy
 
 DATAPACKAGE_KEY = b"datapackage.json"
+
+_REQUIRED = object()
+"""Sentinel: ``unit_of`` raises unless the caller passes an explicit default."""
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,8 @@ class ParameterRow:
     units: Mapping[str, str]
     iris: Mapping[str, str]
     provenance: Mapping[str, Any]
+    source: str | None = None
+    """Where these values came from, so a complaint can name the file."""
 
     def __getitem__(self, column: str) -> Any:
         return self.values[column]
@@ -41,8 +46,26 @@ class ParameterRow:
         except KeyError:
             raise AttributeError(column) from None
 
-    def unit_of(self, column: str) -> str | None:
-        return self.units.get(column)
+    def unit_of(self, column: str, default: Any = _REQUIRED) -> Any:
+        """The unit declared for ``column``, raising when there is none.
+
+        Strict by default because the caller is almost always building an
+        ``Exchange``, whose ``unit`` is a ``str``: handing back ``None`` there
+        type-checks, travels into the model's Result and only fails later, in
+        the Runner, with a message blaming the model for what is really a gap
+        in the parquet's metadata. Pass ``default=`` to ask without asserting.
+        """
+        unit = self.units.get(column)
+        if unit is not None:
+            return unit
+        if default is not _REQUIRED:
+            return default
+        where = self.source or "this ParameterSet"
+        known = ", ".join(sorted(self.units)) or "none"
+        raise MissingUnit(
+            f"column {column!r} has no unit declared in {where} "
+            f"(columns with units: {known})"
+        )
 
     def iri_of(self, column: str) -> str | None:
         return self.iris.get(column)
@@ -88,6 +111,7 @@ class ParameterSet:
         hierarchy: LocationHierarchy | None = None,
         location_column: str = "location",
         time_column: str = "time",
+        source: str | None = None,
     ) -> None:
         self._rows = [dict(row) for row in rows]
         self._units = dict(units or {})
@@ -95,6 +119,7 @@ class ParameterSet:
         self._hierarchy = hierarchy or LocationHierarchy()
         self._location_column = location_column
         self._time_column = time_column
+        self._source = source
 
     @classmethod
     def from_parquet(
@@ -113,6 +138,7 @@ class ParameterSet:
             hierarchy=hierarchy,
             location_column=location_column,
             time_column=time_column,
+            source=str(path),
         )
 
     def at(self, location: str | None = None, time: int | None = None) -> ParameterRow:
@@ -147,6 +173,7 @@ class ParameterSet:
                 MappingProxyType(self._units),
                 MappingProxyType(self._iris),
                 provenance,
+                self._source,
             )
         raise ParameterNotFound(
             f"no parameter row for location={location!r} time={time!r} "

@@ -269,6 +269,7 @@ concatenated.
 | Production does not cover the demand | `ValidationError` from the Runner, node identified. |
 | Unit mismatch on any exchange | `ValidationError` from the Runner. |
 | No parameter row resolvable | `ParameterNotFound` from ParameterSet. |
+| A parameter column asked for a unit declares none | `MissingUnit` from the ParameterRow, naming the column and the file. Raised where the unit is read, not carried onward as `None`. |
 | Depth or node budget exhausted | Unresolved leaf, reason `max_depth` / `max_nodes`. Report says the traversal was truncated. |
 
 Unresolvable *data* produces a recorded leaf; unresolvable *contracts* raise.
