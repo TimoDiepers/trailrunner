@@ -3,7 +3,14 @@ import pytest
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
-from trailrunner.models.dac import CO2_AIR, CO2_CAPTURED, ELECTRICITY, HEAT, DirectAirCapture
+from trailrunner.models.dac import (
+    CO2_AIR,
+    CO2_CAPTURED,
+    ELECTRICITY,
+    HEAT,
+    DirectAirCapture,
+    ambient_penalty,
+)
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.params.location import LocationHierarchy
@@ -64,13 +71,38 @@ def test_dac_takes_co2_from_air_as_a_negative_biosphere_flow(dac_params):
     assert uptake.unit == "kg"
 
 
-def test_drier_colder_air_costs_more_heat(dac_params):
-    """The whole reason models are code: this is not a fixed coefficient."""
+def test_ambient_penalty_at_reference_conditions_is_exactly_one():
+    assert ambient_penalty(10.0, 0.70) == 1.0
+
+
+def test_ambient_penalty_for_warmer_slightly_drier_air():
+    assert ambient_penalty(12.0, 0.65) == pytest.approx(0.995)
+
+
+def test_ambient_penalty_increases_for_colder_and_drier_air():
+    assert ambient_penalty(5.0, 0.50) == pytest.approx(1.11)
+
+
+def test_ambient_penalty_decreases_for_warmer_and_wetter_air():
+    assert ambient_penalty(15.0, 0.90) == pytest.approx(0.89)
+
+
+def test_dac_heat_demand_equals_row_baseline_times_ambient_penalty(dac_params):
+    """Pins the two rows' heat demand to their computed values.
+
+    CH is at reference conditions (penalty 1.0), so its heat demand is exactly
+    its row's baseline. RER is warmer and slightly drier than reference; the
+    warmth dominates the dryness, so its penalty (0.995) is *below* 1.0 even
+    though its baseline is higher. A broken ``ambient_penalty`` -- e.g. one
+    that always returns 1.0, or with its sign reversed -- would fail this,
+    unlike a bare ``!=`` on the two amounts.
+    """
     swiss = DirectAirCapture(params=dac_params).apply(demand(location="CH"))
     european = DirectAirCapture(params=dac_params).apply(demand(location="RER"))
     swiss_heat = [d for d in swiss.technosphere if d.flow.iri == HEAT][0]
     european_heat = [d for d in european.technosphere if d.flow.iri == HEAT][0]
-    assert swiss_heat.amount != european_heat.amount
+    assert swiss_heat.amount == pytest.approx(5000.0)
+    assert european_heat.amount == pytest.approx(5472.5)
 
 
 def test_dac_records_which_parameter_row_it_used(dac_params):
