@@ -1,5 +1,5 @@
 [project]
-name = "trailrunner"
+name = "sentier-trailrunner"
 dynamic = ["version"]
 description = "Model-based supply chain traversal for life cycle inventories"
 readme = "README.md"

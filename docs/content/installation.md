@@ -8,9 +8,11 @@ tags:
 `trailrunner` needs Python 3.11 or newer. Its only runtime dependency is
 [`pyarrow`](https://arrow.apache.org/docs/python/), used to read trailpack parquet files.
 
+The distribution is named `sentier-trailrunner`; the import name stays `trailrunner`.
+
 ## From source
 
-`trailrunner` is not on PyPI yet, so install it from the repository:
+`sentier-trailrunner` is not on PyPI yet, so install it from the repository:
 
 ```bash
 git clone https://github.com/TimoDiepers/trailrunner.git

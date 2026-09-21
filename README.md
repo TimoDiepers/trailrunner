@@ -1,6 +1,8 @@
-# trailrunner
+# sentier-trailrunner
 
 Model-based supply chain traversal for life cycle inventories.
+
+Installs as `sentier-trailrunner`, imports as `trailrunner`.
 
 A *model* is Python code for one process. It reads its parameters from a
 [trailpack](https://github.com/TimoDiepers/trailpack) parquet file and answers
