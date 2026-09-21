@@ -116,13 +116,13 @@ def test_to_parquet_keeps_a_node_that_emitted_nothing(tmp_path):
 def test_to_parquet_writes_the_unresolved_leaves(tmp_path):
     """Two runs differing only in their cutoffs must differ on disk."""
     log = Log()
-    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_producer", depth=1, parent=0)
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_model_found", depth=1, parent=0)
     path = tmp_path / "log.parquet"
     log.to_parquet(path)
     rows = rows_of_kind(path, "unresolved")
     assert len(rows) == 1
     assert rows[0]["demand_iri"] == HEAT
-    assert rows[0]["reason"] == "no_producer"
+    assert rows[0]["reason"] == "no_model_found"
     assert rows[0]["parent"] == 0
     assert rows[0]["depth"] == 1
 
@@ -131,7 +131,7 @@ def test_a_complete_run_round_trips(tmp_path):
     log = Log()
     demand = a_demand()
     node = log.write(demand, a_result(demand))
-    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_producer", parent=node)
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_model_found", parent=node)
     path = tmp_path / "log.parquet"
     log.to_parquet(path)
     kinds = [row["kind"] for row in pq.read_table(path).to_pylist()]

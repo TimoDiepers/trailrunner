@@ -42,3 +42,15 @@ class Glossary:
                 f"at location={flow.location!r} time={flow.time!r}: {names}"
             )
         return candidates[0]
+
+    def declared_producers(self, flow: Flow) -> list[Model]:
+        """Every model that declares ``flow.iri``, coverage ignored.
+
+        Separate from ``resolve`` on purpose: ``resolve`` keeps its three-way
+        contract (0 → ``None``, 1 → the model, 2+ → ``AmbiguousModelMatch``).
+        This answers the different question the caller needs when ``resolve``
+        returned ``None`` — is this flow unmodelled, or did a registered
+        model's coverage filter it out? Those are very different bugs, and
+        reporting the second as the first is the hardest kind to track down.
+        """
+        return [model for model in self._models if flow.iri in model.produces]

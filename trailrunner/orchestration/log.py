@@ -31,6 +31,7 @@ LOG_SCHEMA = pa.schema(
         ("amount", pa.float64()),
         ("unit", pa.string()),
         ("reason", pa.string()),
+        ("detail", pa.string()),
         ("key", pa.string()),
         ("value", pa.string()),
     ]
@@ -59,6 +60,9 @@ class UnresolvedRecord:
     reason: str
     depth: int
     parent: int | None
+    detail: str | None = None
+    """Free text qualifying ``reason`` — for ``coverage_excluded``, the models
+    that declare the product but whose coverage rejected this flow."""
 
 
 @dataclass
@@ -91,10 +95,17 @@ class Log:
         return node_id
 
     def unresolved(
-        self, demand: Demand, reason: str, depth: int = 0, parent: int | None = None
+        self,
+        demand: Demand,
+        reason: str,
+        depth: int = 0,
+        parent: int | None = None,
+        detail: str | None = None,
     ) -> None:
         self.unresolved_records.append(
-            UnresolvedRecord(demand=demand, reason=reason, depth=depth, parent=parent)
+            UnresolvedRecord(
+                demand=demand, reason=reason, depth=depth, parent=parent, detail=detail
+            )
         )
 
     def warn(self, message: str, node: int | None = None) -> None:
@@ -160,6 +171,7 @@ class Log:
                     "demand_amount": record.demand.amount,
                     "demand_unit": record.demand.unit,
                     "reason": record.reason,
+                    "detail": record.detail,
                 }
             )
 
