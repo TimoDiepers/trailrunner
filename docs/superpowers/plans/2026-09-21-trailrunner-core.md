@@ -1203,9 +1203,23 @@ class ParameterSet:
         return interpolated
 ```
 
-Note on `isinstance(x, Real)`: `bool` is not a `Real`, and `None` is not
-either, so boolean and missing columns correctly fall through to the lower
-row's value rather than being interpolated.
+Note on the interpolation guard: `None` is not a `Real`, so missing columns fall
+through to the lower row's value. `bool`, however, **is** a `Real` — `bool`
+subclasses `int`, which is registered under `numbers.Integral` ⊂ `numbers.Real`
+— so it must be excluded explicitly, or a boolean column interpolates into a
+meaningless float. The guard reads:
+
+```python
+if (
+    isinstance(low_value, Real)
+    and not isinstance(low_value, bool)
+    and isinstance(high_value, Real)
+    and not isinstance(high_value, bool)
+):
+```
+
+Add a test that interpolates across a boolean column and asserts the result
+keeps the lower row's boolean value unchanged.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
