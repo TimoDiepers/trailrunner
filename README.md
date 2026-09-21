@@ -20,3 +20,30 @@ Early development. Inventory only — no impact characterization yet.
 uv sync --extra dev
 uv run pytest
 ```
+
+## Example
+
+```python
+from trailrunner import Demand, Flow, Glossary, LocationHierarchy, Orchestrator, ParameterSet
+from trailrunner.models.dac import CO2_CAPTURED, DirectAirCapture
+
+params = ParameterSet.from_parquet(
+    "dac_params.parquet",
+    hierarchy=LocationHierarchy({"CH": "RER", "RER": "GLO"}),
+)
+glossary = Glossary([DirectAirCapture(params=params)])
+
+report = Orchestrator(glossary).calculate(
+    Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg")
+)
+
+for (flow, unit), amount in report.inventory.items():
+    print(f"{amount:>12.2f} {unit}  {flow.iri}")
+
+for record in report.unresolved:
+    print(f"unresolved: {record.demand.flow.iri} ({record.reason})")
+```
+
+A demand nobody models is reported as unresolved, never silently treated as
+zero. Every parameter fallback used along the way shows up in
+`report.provenance`.
