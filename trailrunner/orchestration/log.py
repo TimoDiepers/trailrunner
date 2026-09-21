@@ -9,21 +9,40 @@ import pyarrow.parquet as pq
 from trailrunner.core.flow import Demand
 from trailrunner.core.result import Result
 
-LOG_COLUMNS = (
-    "node",
-    "parent",
-    "depth",
-    "demand_iri",
-    "demand_location",
-    "demand_time",
-    "demand_amount",
-    "demand_unit",
-    "flow_iri",
-    "flow_location",
-    "flow_time",
-    "amount",
-    "unit",
+LOG_SCHEMA = pa.schema(
+    [
+        # Which kind of record this row is: "biosphere" (one per biosphere
+        # exchange), "node" (a node that emitted none, so it does not vanish),
+        # "unresolved" (a cutoff leaf) or "provenance" (one per key a node
+        # recorded). One flat table rather than four files, because the point
+        # is to diff two runs with a single read.
+        ("kind", pa.string()),
+        ("node", pa.int64()),
+        ("parent", pa.int64()),
+        ("depth", pa.int64()),
+        ("demand_iri", pa.string()),
+        ("demand_location", pa.string()),
+        ("demand_time", pa.int64()),
+        ("demand_amount", pa.float64()),
+        ("demand_unit", pa.string()),
+        ("flow_iri", pa.string()),
+        ("flow_location", pa.string()),
+        ("flow_time", pa.int64()),
+        ("amount", pa.float64()),
+        ("unit", pa.string()),
+        ("reason", pa.string()),
+        ("detail", pa.string()),
+        ("key", pa.string()),
+        ("value", pa.string()),
+    ]
 )
+"""One explicit schema for every row kind, used by both the populated and the
+empty branch of :meth:`Log.to_parquet`.
+
+Declaring it here rather than inferring it from the rows is what lets an empty
+log concatenate with a populated one: inferred columns of an empty table are
+pyarrow ``null``-typed and will not merge with ``int64`` or ``string``.
+"""
 
 
 @dataclass
@@ -41,6 +60,9 @@ class UnresolvedRecord:
     reason: str
     depth: int
     parent: int | None
+    detail: str | None = None
+    """Free text qualifying ``reason`` — for ``coverage_excluded``, the models
+    that declare the product but whose coverage rejected this flow."""
 
 
 @dataclass
@@ -73,23 +95,35 @@ class Log:
         return node_id
 
     def unresolved(
-        self, demand: Demand, reason: str, depth: int = 0, parent: int | None = None
+        self,
+        demand: Demand,
+        reason: str,
+        depth: int = 0,
+        parent: int | None = None,
+        detail: str | None = None,
     ) -> None:
         self.unresolved_records.append(
-            UnresolvedRecord(demand=demand, reason=reason, depth=depth, parent=parent)
+            UnresolvedRecord(
+                demand=demand, reason=reason, depth=depth, parent=parent, detail=detail
+            )
         )
 
     def warn(self, message: str, node: int | None = None) -> None:
         self.warnings.append((message, node))
 
     def to_parquet(self, path: str | Path) -> None:
-        """Write one row per biosphere exchange, keyed to its node.
+        """Write the whole log — nodes, biosphere exchanges, cutoff leaves and
+        provenance — one row each, tagged by ``kind``.
 
-        Makes two runs diffable, and mirrors the parquet-in, parquet-out shape
-        of the trailpack side.
+        Everything the Log holds goes out, because the unresolved list and the
+        provenance are as much a part of the answer as the numbers are: two
+        runs that differ only in which cutoffs they hit or which parameter
+        fallbacks they took must differ on disk too. Mirrors the parquet-in,
+        parquet-out shape of the trailpack side.
         """
-        rows = [
-            {
+        rows: list[dict] = []
+        for node in self.nodes:
+            base = {
                 "node": node.id,
                 "parent": node.parent,
                 "depth": node.depth,
@@ -98,17 +132,47 @@ class Log:
                 "demand_time": node.demand.flow.time,
                 "demand_amount": node.demand.amount,
                 "demand_unit": node.demand.unit,
-                "flow_iri": exchange.flow.iri,
-                "flow_location": exchange.flow.location,
-                "flow_time": exchange.flow.time,
-                "amount": exchange.amount,
-                "unit": exchange.unit,
             }
-            for node in self.nodes
-            for exchange in node.result.biosphere
-        ]
-        if rows:
-            table = pa.Table.from_pylist(rows)
-        else:
-            table = pa.Table.from_pydict({column: [] for column in LOG_COLUMNS})
-        pq.write_table(table, path)
+            for exchange in node.result.biosphere:
+                rows.append(
+                    {
+                        **base,
+                        "kind": "biosphere",
+                        "flow_iri": exchange.flow.iri,
+                        "flow_location": exchange.flow.location,
+                        "flow_time": exchange.flow.time,
+                        "amount": exchange.amount,
+                        "unit": exchange.unit,
+                    }
+                )
+            if not node.result.biosphere:
+                # A node that emitted nothing still ran, and still has a place
+                # in the graph; without this row it would vanish from the file.
+                rows.append({**base, "kind": "node"})
+            for key, value in node.result.provenance.items():
+                rows.append(
+                    {
+                        **base,
+                        "kind": "provenance",
+                        "key": str(key),
+                        "value": None if value is None else str(value),
+                    }
+                )
+
+        for record in self.unresolved_records:
+            rows.append(
+                {
+                    "kind": "unresolved",
+                    "parent": record.parent,
+                    "depth": record.depth,
+                    "demand_iri": record.demand.flow.iri,
+                    "demand_location": record.demand.flow.location,
+                    "demand_time": record.demand.flow.time,
+                    "demand_amount": record.demand.amount,
+                    "demand_unit": record.demand.unit,
+                    "reason": record.reason,
+                    "detail": record.detail,
+                }
+            )
+
+        pq.write_table(pa.Table.from_pylist(rows, schema=LOG_SCHEMA), path)
