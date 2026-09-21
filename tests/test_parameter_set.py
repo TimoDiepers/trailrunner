@@ -4,7 +4,7 @@ from trailrunner.core.errors import ParameterNotFound
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
-from .conftest import HEAT_DEMAND_IRI
+from .conftest import HEAT_DEMAND_IRI, write_parameter_parquet
 
 # FR must be in the map: chain("FR") with only {"CH": "RER"} would be
 # ["FR", "GLO"] and never reach the RER rows.
@@ -85,3 +85,28 @@ def test_unknown_column_raises_attribute_error(dac_parameter_file):
     row = params.at(location="CH", time=2030)
     with pytest.raises(AttributeError):
         row.nonexistent_column
+
+
+def test_boolean_column_is_not_interpolated(tmp_path):
+    # bool is a numbers.Real (bool subclasses int, int is Integral, Integral
+    # is Real), so it must be excluded explicitly or it gets averaged into a
+    # meaningless float. The interpolated row must keep the lower row's
+    # boolean value unchanged.
+    path = tmp_path / "bool_params.parquet"
+    write_parameter_parquet(
+        path,
+        rows=[
+            {"location": "CH", "time": 2020, "heat_demand": 6.0, "is_pilot_plant": True},
+            {"location": "CH", "time": 2030, "heat_demand": 5.0, "is_pilot_plant": False},
+        ],
+        fields=[
+            {"name": "location", "type": "string", "unit": None, "iri": None},
+            {"name": "time", "type": "integer", "unit": "year", "iri": None},
+            {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": HEAT_DEMAND_IRI},
+            {"name": "is_pilot_plant", "type": "boolean", "unit": None, "iri": None},
+        ],
+    )
+    params = ParameterSet.from_parquet(path, hierarchy=HIERARCHY)
+    row = params.at(location="CH", time=2025)
+    assert row["is_pilot_plant"] is True
+    assert row["heat_demand"] == pytest.approx(5.5)
