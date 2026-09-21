@@ -2435,13 +2435,31 @@ def test_dac_takes_co2_from_air_as_a_negative_biosphere_flow(dac_params):
     assert uptake.unit == "kg"
 
 
-def test_drier_colder_air_costs_more_heat(dac_params):
-    """The whole reason models are code: this is not a fixed coefficient."""
+def test_ambient_penalty_is_one_at_the_reference_point():
+    assert ambient_penalty(REFERENCE_TEMPERATURE, REFERENCE_HUMIDITY) == 1.0
+
+
+def test_colder_and_drier_air_costs_more():
+    assert ambient_penalty(5.0, 0.50) > 1.0
+
+
+def test_warmer_and_wetter_air_costs_less():
+    assert ambient_penalty(15.0, 0.90) < 1.0
+
+
+def test_heat_demand_reflects_the_ambient_penalty(dac_params):
+    """The whole reason models are code: this is not a fixed coefficient.
+
+    Pin the exact amounts. Asserting only that the two differ would pass even
+    if ambient_penalty ignored its inputs entirely, because the two fixture
+    rows also carry different baseline heat_demand values.
+    """
     swiss = DirectAirCapture(params=dac_params).apply(demand(location="CH"))
     european = DirectAirCapture(params=dac_params).apply(demand(location="RER"))
     swiss_heat = [d for d in swiss.technosphere if d.flow.iri == HEAT][0]
     european_heat = [d for d in european.technosphere if d.flow.iri == HEAT][0]
-    assert swiss_heat.amount != european_heat.amount
+    assert swiss_heat.amount == pytest.approx(5000.0)     # 5.0 * 1.0   * 1000
+    assert european_heat.amount == pytest.approx(5472.5)  # 5.5 * 0.995 * 1000
 
 
 def test_dac_records_which_parameter_row_it_used(dac_params):
