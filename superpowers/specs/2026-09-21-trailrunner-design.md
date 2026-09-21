@@ -306,7 +306,7 @@ trailrunner/
 │   │                         # orchestrator.py log.py report.py
 │   └── models/               # dac.py
 ├── tests/
-└── docs/superpowers/specs/
+└── superpowers/specs/
 ```
 
 Clean minimal uv project. Sphinx docs, CI workflows and packaging recipes are

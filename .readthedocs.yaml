@@ -1,0 +1,17 @@
+# .readthedocs.yaml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+# Required
+version: 2
+
+build:
+   os: "ubuntu-lts-latest"
+   tools:
+      python: "3.12"
+   commands:
+      - pip install -r docs/requirements.txt
+      - pip install -e .
+      - zensical build
+      - mkdir -p $READTHEDOCS_OUTPUT/html
+      - cp -r site/* $READTHEDOCS_OUTPUT/html/

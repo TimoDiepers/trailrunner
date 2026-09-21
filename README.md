@@ -8,7 +8,7 @@ one question: *given this demand, what did I produce, what do I need, and what
 did I emit?* The orchestrator walks the resulting demands outward through the
 supply chain and accumulates an inventory.
 
-Design: `docs/superpowers/specs/2026-09-21-trailrunner-design.md`
+Design: `superpowers/specs/2026-09-21-trailrunner-design.md`
 
 ## Status
 
