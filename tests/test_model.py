@@ -58,6 +58,21 @@ def test_model_subclass_declares_products_and_returns_a_result():
     assert result.biosphere[0].amount == pytest.approx(1.0)
 
 
+def test_a_subclass_cannot_mutate_the_base_classs_product_list():
+    """``produces`` is a class attribute; a mutable default is shared by every
+    model that appends to it rather than assigning."""
+    class Appender(Model):
+        pass
+
+    with pytest.raises(AttributeError):
+        Appender.produces.append(CAPTURED)
+    assert Model.produces == ()
+
+
+def test_membership_still_works_on_the_base_default():
+    assert HEAT not in Model.produces
+
+
 def test_model_takes_settings_and_params_at_construction():
     class Trivial(Model):
         produces = [CAPTURED]

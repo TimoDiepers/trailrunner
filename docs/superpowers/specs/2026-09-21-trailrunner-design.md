@@ -85,7 +85,9 @@ Rationale:
 
 ```python
 class Model:
-    produces: list[str]                  # product IRIs this model can make
+    produces: Sequence[str] = ()         # product IRIs this model can make
+                                         # empty *tuple*: a mutable class-level
+                                         # default is shared by every subclass
     coverage: Coverage | None = None     # optional location/time validity
     params: ParameterSet | None = None
     settings: Settings

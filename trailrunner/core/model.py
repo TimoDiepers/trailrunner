@@ -1,5 +1,6 @@
 """The Model base class: Python code for one process."""
 
+from collections.abc import Sequence
 from typing import Any
 
 from trailrunner.core.flow import Demand
@@ -22,7 +23,11 @@ class Model:
     times the plant.
     """
 
-    produces: list[str] = []
+    # An empty tuple, not an empty list: a class-level mutable default is
+    # shared by every subclass, so one model appending instead of assigning
+    # would quietly add its product to every other model in the run.
+    # Subclasses may still assign a list; only membership is ever tested.
+    produces: Sequence[str] = ()
     coverage: Coverage | None = None
     params: Any = None
 
