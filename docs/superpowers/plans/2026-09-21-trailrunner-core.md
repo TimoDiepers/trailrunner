@@ -62,7 +62,7 @@
 - Consumes: nothing.
 - Produces: `Flow(iri: str, location: str | None = None, time: int | None = None)`;
   `Exchange(flow: Flow, amount: float, unit: str)`; `Demand = Exchange`;
-  exceptions `TrailrunnerError`, `NoProducer`, `AmbiguousProducer`,
+  exceptions `TrailrunnerError`, `NoModelFound`, `AmbiguousModelMatch`,
   `ValidationError`, `ParameterNotFound`.
 
 - [ ] **Step 1: Write `pyproject.toml` by hand**
@@ -206,11 +206,11 @@ class TrailrunnerError(Exception):
     """Base class for every error trailrunner raises."""
 
 
-class NoProducer(TrailrunnerError):
+class NoModelFound(TrailrunnerError):
     """No registered model produces the requested flow."""
 
 
-class AmbiguousProducer(TrailrunnerError):
+class AmbiguousModelMatch(TrailrunnerError):
     """More than one registered model produces the requested flow."""
 
 
@@ -580,7 +580,7 @@ git commit -m "feat: add Result, Settings, Coverage and Model base class"
 - Create: `tests/test_glossary.py`
 
 **Interfaces:**
-- Consumes: `Flow`, `Model`, `Coverage`, `AmbiguousProducer`.
+- Consumes: `Flow`, `Model`, `Coverage`, `AmbiguousModelMatch`.
 - Produces: `Glossary(models: Iterable[Model] = ())` with
   `.register(model: Model) -> None` and `.resolve(flow: Flow) -> Model | None`.
 
@@ -591,7 +591,7 @@ Create `tests/test_glossary.py`:
 ```python
 import pytest
 
-from trailrunner.core.errors import AmbiguousProducer
+from trailrunner.core.errors import AmbiguousModelMatch
 from trailrunner.core.flow import Flow
 from trailrunner.core.model import Model
 from trailrunner.orchestration.glossary import Glossary
@@ -620,27 +620,27 @@ def test_resolve_returns_none_when_nothing_produces_the_flow():
     assert glossary.resolve(Flow(iri=HEAT)) is None
 
 
-def test_resolve_returns_the_single_producer():
+def test_resolve_returns_the_single_model():
     model = Capturer()
     glossary = Glossary([model])
     assert glossary.resolve(Flow(iri=CAPTURED)) is model
 
 
-def test_coverage_disambiguates_two_producers_of_the_same_product():
+def test_coverage_disambiguates_two_models_of_the_same_product():
     swiss, german = SwissCapturer(), GermanCapturer()
     glossary = Glossary([swiss, german])
     assert glossary.resolve(Flow(iri=CAPTURED, location="CH")) is swiss
     assert glossary.resolve(Flow(iri=CAPTURED, location="DE")) is german
 
 
-def test_out_of_coverage_flow_has_no_producer():
+def test_out_of_coverage_flow_has_no_model_found():
     glossary = Glossary([SwissCapturer()])
     assert glossary.resolve(Flow(iri=CAPTURED, location="FR")) is None
 
 
-def test_two_matching_producers_raise_and_name_the_candidates():
+def test_two_matching_models_raise_and_name_the_candidates():
     glossary = Glossary([Capturer(), Capturer()])
-    with pytest.raises(AmbiguousProducer) as excinfo:
+    with pytest.raises(AmbiguousModelMatch) as excinfo:
         glossary.resolve(Flow(iri=CAPTURED))
     assert "Capturer" in str(excinfo.value)
     assert CAPTURED in str(excinfo.value)
@@ -667,7 +667,7 @@ Create an empty `trailrunner/orchestration/__init__.py`, then:
 
 from collections.abc import Iterable
 
-from trailrunner.core.errors import AmbiguousProducer
+from trailrunner.core.errors import AmbiguousModelMatch
 from trailrunner.core.flow import Flow
 from trailrunner.core.model import Model
 
@@ -702,7 +702,7 @@ class Glossary:
             return None
         if len(candidates) > 1:
             names = ", ".join(type(model).__name__ for model in candidates)
-            raise AmbiguousProducer(
+            raise AmbiguousModelMatch(
                 f"{len(candidates)} models produce {flow.iri} "
                 f"at location={flow.location!r} time={flow.time!r}: {names}"
             )
@@ -1225,7 +1225,7 @@ git commit -m "feat: add ParameterSet reading trailpack parquet with fallback pr
 - Create: `tests/test_runner.py`
 
 **Interfaces:**
-- Consumes: `Glossary`, `Demand`, `Result`, `NoProducer`, `ValidationError`.
+- Consumes: `Glossary`, `Demand`, `Result`, `NoModelFound`, `ValidationError`.
 - Produces: `Runner(glossary: Glossary)` with
   `.apply(demand: Demand, model: Model | None = None) -> Result` and
   static `.validate(demand: Demand, result: Result, model: Model | None = None) -> None`
@@ -1242,7 +1242,7 @@ Create `tests/test_runner.py`:
 ```python
 import pytest
 
-from trailrunner.core.errors import NoProducer, ValidationError
+from trailrunner.core.errors import NoModelFound, ValidationError
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
@@ -1283,7 +1283,7 @@ def test_apply_resolves_the_model_and_returns_its_result():
 
 def test_apply_raises_when_nothing_produces_the_demand():
     runner = Runner(Glossary())
-    with pytest.raises(NoProducer):
+    with pytest.raises(NoModelFound):
         runner.apply(DEMAND)
 
 
@@ -1354,7 +1354,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'trailrunner.orchestrat
 ```python
 """Calls a model and checks that it honoured its contract."""
 
-from trailrunner.core.errors import NoProducer, ValidationError
+from trailrunner.core.errors import NoModelFound, ValidationError
 from trailrunner.core.flow import Demand
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
@@ -1375,7 +1375,7 @@ class Runner:
         if model is None:
             model = self.glossary.resolve(demand.flow)
         if model is None:
-            raise NoProducer(
+            raise NoModelFound(
                 f"no model produces {demand.flow.iri} at "
                 f"location={demand.flow.location!r} time={demand.flow.time!r}"
             )
@@ -1678,9 +1678,9 @@ def test_root_node_creates_no_edge():
 
 def test_unresolved_demands_are_recorded_with_a_reason():
     log = Log()
-    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_producer", depth=1, parent=0)
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_model_found", depth=1, parent=0)
     record = log.unresolved_records[0]
-    assert record.reason == "no_producer"
+    assert record.reason == "no_model_found"
     assert record.demand.flow.iri == HEAT
     assert record.parent == 0
 
@@ -1921,11 +1921,11 @@ def test_inventory_keeps_different_flows_and_units_apart():
 def test_report_carries_unresolved_demands():
     log = Log()
     log.unresolved(
-        Demand(flow=Flow(iri=HEAT), amount=5.0, unit="MJ"), reason="no_producer", depth=1
+        Demand(flow=Flow(iri=HEAT), amount=5.0, unit="MJ"), reason="no_model_found", depth=1
     )
     report = Report.from_log(log)
     assert len(report.unresolved) == 1
-    assert report.unresolved[0].reason == "no_producer"
+    assert report.unresolved[0].reason == "no_model_found"
 
 
 def test_provenance_is_keyed_by_node_id():
@@ -2119,7 +2119,7 @@ def test_single_node_traversal_records_one_node_and_one_cutoff():
     report = Orchestrator(Glossary([Capturer()])).calculate(ROOT)
     assert len(report.nodes) == 1
     assert report.inventory == {(Flow(iri=CO2, location="CH", time=2030), "kg"): 10.0}
-    assert [r.reason for r in report.unresolved] == ["no_producer"]
+    assert [r.reason for r in report.unresolved] == ["no_model_found"]
     assert report.unresolved[0].demand.flow.iri == HEAT
 
 
@@ -2254,7 +2254,7 @@ class Orchestrator:
             model = self.glossary.resolve(item.demand.flow)
             if model is None:
                 log.unresolved(
-                    item.demand, reason="no_producer", depth=item.depth, parent=item.parent
+                    item.demand, reason="no_model_found", depth=item.depth, parent=item.parent
                 )
                 continue
 

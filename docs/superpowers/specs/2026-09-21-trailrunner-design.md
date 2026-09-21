@@ -159,7 +159,7 @@ glossary.resolve(flow) -> Model | None
 - 0 hits → `None`; the Orchestrator records the demand as an unresolved cutoff
   leaf.
 - 1 hit → that model.
-- 2+ hits → `AmbiguousProducer`, naming the candidates. Ambiguity is a data
+- 2+ hits → `AmbiguousModelMatch`, naming the candidates. Ambiguity is a data
   error, not something to resolve by silent precedence.
 
 ## Runner
@@ -204,7 +204,7 @@ while queue and nodes < max_nodes:
         continue
     model = glossary.resolve(demand.flow)
     if model is None:
-        log.unresolved(demand, reason="no_producer")
+        log.unresolved(demand, reason="no_model_found")
         continue
     result = runner.apply(demand)
     log.write(node, parent_edge, demand, result)
@@ -227,7 +227,7 @@ structure is read back out of it to build the report.
 
 ```python
 report.inventory     # biosphere aggregated by (iri, location, time), per unit
-report.unresolved    # dangling demands with reason (no_producer, max_depth)
+report.unresolved    # dangling demands with reason (no_model_found, max_depth)
 report.provenance    # per node: parameter rows and fallbacks used
 report.graph         # nodes and edges, for later tree/Sankey rendering
 ```
@@ -239,8 +239,8 @@ and it makes results diffable between runs.
 
 | Situation | Behavior |
 |---|---|
-| No model produces a flow | Unresolved leaf, reason `no_producer`. Traversal continues. |
-| Several models produce a flow | `AmbiguousProducer` raised, candidates named. |
+| No model produces a flow | Unresolved leaf, reason `no_model_found`. Traversal continues. |
+| Several models produce a flow | `AmbiguousModelMatch` raised, candidates named. |
 | Production does not cover the demand | `ValidationError` from the Runner, node identified. |
 | Unit mismatch on any exchange | `ValidationError` from the Runner. |
 | No parameter row resolvable | `ParameterNotFound` from ParameterSet. |
@@ -256,7 +256,7 @@ Test-driven throughout, pytest.
 - ParameterSet: exact hit, location fallback, time interpolation, provenance
   contents, `ParameterNotFound`. Fixtures are small hand-written parquet files
   with trailpack-style embedded metadata.
-- Glossary: zero, one, and ambiguous producers; coverage filtering.
+- Glossary: zero, one, and ambiguous models; coverage filtering.
 - Runner: valid result passes; uncovered demand, unit mismatch, and negative
   production each raise.
 - Queue: FIFO order by default; priority callable respected.
