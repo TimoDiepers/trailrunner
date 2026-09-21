@@ -1,0 +1,66 @@
+:root > * {
+  --md-code-fg-color: var(--md-default-fg-color);
+}
+
+/* Buttons: quieter than the theme default, primary variant keeps the accent. */
+.md-content .md-typeset .md-button {
+  background-color: transparent;
+  border-color: transparent;
+  border-radius: 0.4rem;
+  color: var(--md-default-fg-color);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.8rem;
+}
+
+.md-content .md-typeset .md-button:hover,
+.md-content .md-typeset .md-button:focus {
+  background-color: var(--md-default-fg-color--lightest);
+  border-color: transparent;
+  color: var(--md-default-fg-color);
+  opacity: 1;
+}
+
+.md-content .md-typeset .md-button--primary {
+  background-color: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.md-content .md-typeset .md-button--primary:hover,
+.md-content .md-typeset .md-button--primary:focus {
+  background-color: var(--md-primary-fg-color--light);
+  border-color: var(--md-primary-fg-color--light);
+  color: var(--md-primary-bg-color);
+  opacity: 1;
+}
+
+/* Title: the package name is code, so set it in the mono face. */
+.md-header__topic:first-child {
+  font-family: "Consolas", "Roboto Mono", monospace !important;
+  text-transform: lowercase;
+  font-weight: 700;
+}
+
+.md-header__topic:not(:first-child) {
+  font-family: var(--md-text-font-family, "Inter", sans-serif);
+  text-transform: none;
+  font-weight: normal;
+}
+
+.md-content .md-typeset img {
+  border-radius: 0.4rem;
+}
+
+/* Round the outer corners of the table, matching the code block radius. */
+.md-content .md-typeset .md-typeset__table table {
+  border-radius: 0.4rem;
+}
+
+/* The theme adds an extra margin-bottom on .md-typeset__table on top of its
+   .md-typeset__scrollwrap parent's own 1em, so tables get ~1.5em below but
+   only 1em above - drop that extra bit for a symmetric margin. */
+.md-content .md-typeset .md-typeset__table {
+  margin-bottom: 0;
+}
