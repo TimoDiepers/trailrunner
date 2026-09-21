@@ -1,6 +1,6 @@
 import pytest
 
-from trailrunner.core.errors import ParameterNotFound
+from trailrunner.core.errors import MissingUnit, ParameterNotFound
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
@@ -26,7 +26,38 @@ def test_units_and_iris_come_from_the_embedded_datapackage(dac_parameter_file):
     row = params.at(location="CH", time=2030)
     assert row.unit_of("heat_demand") == "MJ"
     assert row.iri_of("heat_demand") == HEAT_DEMAND_IRI
-    assert row.unit_of("location") is None
+    assert row.iri_of("location") is None
+
+
+def test_a_column_with_no_declared_unit_raises_naming_the_column_and_the_file(
+    dac_parameter_file,
+):
+    """``unit_of`` feeds ``Exchange.unit``, which is ``str``, not ``str | None``.
+
+    Returning None here would type-check, travel into a model's Result and
+    surface much later as a Runner error blaming the model for what is really
+    missing parquet metadata.
+    """
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="CH", time=2030)
+    with pytest.raises(MissingUnit) as excinfo:
+        row.unit_of("location")
+    assert "location" in str(excinfo.value)
+    assert str(dac_parameter_file) in str(excinfo.value)
+
+
+def test_a_missing_unit_can_still_be_queried_without_raising(dac_parameter_file):
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="CH", time=2030)
+    assert row.unit_of("location", default=None) is None
+    assert row.unit_of("heat_demand", default=None) == "MJ"
+
+
+def test_a_parameter_set_built_in_memory_says_so_when_a_unit_is_missing():
+    params = ParameterSet([{"location": "CH", "time": 2030, "heat_demand": 5.0}])
+    with pytest.raises(MissingUnit) as excinfo:
+        params.at(location="CH", time=2030).unit_of("heat_demand")
+    assert "heat_demand" in str(excinfo.value)
 
 
 def test_location_falls_back_up_the_hierarchy_and_says_so(dac_parameter_file):
@@ -70,7 +101,45 @@ def test_omitting_location_ignores_the_location_column(dac_parameter_file):
     params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
     row = params.at(time=2030)
     assert row["heat_demand"] == 5.0
-    assert row.provenance["location_used"] is None
+    assert row.provenance["location_requested"] is None
+
+
+def test_omitting_location_still_says_which_row_was_used(dac_parameter_file):
+    """Taking the first of several locations is a choice; the provenance says so.
+
+    Nothing was substituted, so it is not a fallback -- but reporting
+    ``location_used: None`` while returning the CH row is the silent precedence
+    the design forbids.
+    """
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(time=2030)
+    assert row["location"] == "CH"
+    assert row.provenance["location_used"] == "CH"
+    assert row.provenance["location_fallback"] is False
+
+
+def test_interpolated_row_reports_the_location_it_interpolated_within(dac_parameter_file):
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="FR", time=2025)
+    assert row.provenance["location_used"] == "RER"
+    assert row.provenance["location_fallback"] is True
+
+
+def test_a_returned_row_cannot_be_used_to_corrupt_the_parameter_set(dac_parameter_file):
+    """ParameterRow is frozen; its mappings must not alias the set's own state."""
+    params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
+    row = params.at(location="CH", time=2030)
+
+    row.values["heat_demand"] = 999.0
+    with pytest.raises(TypeError):
+        row.units["heat_demand"] = "kJ"
+    with pytest.raises(TypeError):
+        row.iris["heat_demand"] = "urn:nonsense"
+
+    later = params.at(location="CH", time=2030)
+    assert later["heat_demand"] == 5.0
+    assert later.unit_of("heat_demand") == "MJ"
+    assert later.iri_of("heat_demand") == HEAT_DEMAND_IRI
 
 
 def test_omitting_time_returns_the_first_matching_row(dac_parameter_file):

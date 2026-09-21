@@ -17,6 +17,11 @@ class Orchestrator:
     bounded by ``max_depth`` and ``max_nodes`` and flagged as a warning, rather
     than solved. A truncated tree with an honest unresolved list beats a
     converged number that would be wrong.
+
+    The defaults ``max_depth=10`` and ``max_nodes=1000`` are arbitrary starting
+    points, not tuned figures: they are large enough for the supply chains v1
+    is exercised on and small enough that a runaway loop stops quickly. Raise
+    them freely; ``report.truncated`` says when they bit.
     """
 
     def __init__(
@@ -54,9 +59,29 @@ class Orchestrator:
 
             model = self.glossary.resolve(item.demand.flow)
             if model is None:
-                log.unresolved(
-                    item.demand, reason="no_model_found", depth=item.depth, parent=item.parent
-                )
+                # "Nobody models this" and "a model does, but its coverage
+                # rejected this flow" are different problems with different
+                # fixes — widen the coverage, or fill in the year the flow is
+                # missing. Reporting the second as the first sends the reader
+                # looking for a model that is already registered.
+                near_misses = self.glossary.declared_models(item.demand.flow)
+                if near_misses:
+                    names = ", ".join(type(m).__name__ for m in near_misses)
+                    log.unresolved(
+                        item.demand,
+                        reason="coverage_excluded",
+                        depth=item.depth,
+                        parent=item.parent,
+                        detail=(
+                            f"{names} declares this product but its coverage does not "
+                            f"cover location={item.demand.flow.location!r} "
+                            f"time={item.demand.flow.time!r}"
+                        ),
+                    )
+                else:
+                    log.unresolved(
+                        item.demand, reason="no_model_found", depth=item.depth, parent=item.parent
+                    )
                 continue
 
             result = self.runner.apply(item.demand, model=model)

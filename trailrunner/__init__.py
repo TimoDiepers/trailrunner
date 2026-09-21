@@ -1,5 +1,13 @@
 """Model-based supply chain traversal for life cycle inventories."""
 
+from trailrunner.core.errors import (
+    AmbiguousModelMatch,
+    MissingUnit,
+    NoModelFound,
+    ParameterNotFound,
+    TrailrunnerError,
+    ValidationError,
+)
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
@@ -15,6 +23,16 @@ from trailrunner.params.parameter_set import ParameterSet
 __version__ = "0.1.0"
 
 __all__ = [
+    # Errors. Orchestrator.calculate propagates AmbiguousModelMatch,
+    # ValidationError and ParameterNotFound straight to the caller, so they
+    # belong here rather than behind trailrunner.core.errors.
+    "AmbiguousModelMatch",
+    "MissingUnit",
+    "NoModelFound",
+    "ParameterNotFound",
+    "TrailrunnerError",
+    "ValidationError",
+    # Types and components.
     "Coverage",
     "Demand",
     "Exchange",

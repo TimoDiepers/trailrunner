@@ -85,7 +85,9 @@ Rationale:
 
 ```python
 class Model:
-    produces: list[str]                  # product IRIs this model can make
+    produces: Sequence[str] = ()         # product IRIs this model can make
+                                         # empty *tuple*: a mutable class-level
+                                         # default is shared by every subclass
     coverage: Coverage | None = None     # optional location/time validity
     params: ParameterSet | None = None
     settings: Settings
@@ -162,6 +164,12 @@ glossary.resolve(flow) -> Model | None
 - 2+ hits → `AmbiguousModelMatch`, naming the candidates. Ambiguity is a data
   error, not something to resolve by silent precedence.
 
+`resolve` returns `None` both when no model declares the product and when one
+does but its coverage rejected the flow, so `declared_models(flow)` answers
+the second question separately, ignoring coverage. The Orchestrator uses it to
+tell the two cases apart in the unresolved list; `resolve`'s three-way contract
+is left alone.
+
 ## Runner
 
 Synchronous. The single place where validation happens.
@@ -175,8 +183,17 @@ class Runner:
         return result
 ```
 
-`validate` checks that production covers the demand (matching IRI, compatible
-unit, positive amount) and that every exchange carries a known unit.
+`validate` checks that production covers the demand — matching IRI, compatible
+unit, positive amount, and a summed amount of the demanded product that is at
+least the demanded amount (within a small relative tolerance, since models
+built on interpolated parameters do not round-trip to the last bit) — and that
+every exchange carries a known unit.
+
+The amount check is load-bearing rather than cosmetic: `apply` receives the
+*full* demand amount and nothing downstream rescales the Result, so a model
+that answers a 1000 kg demand with 1 kg of production would otherwise shrink
+the whole inventory by three orders of magnitude, silently. Over-production is
+permitted: a process may legitimately make more than was asked of it.
 
 The Runner is a separate object precisely so a concurrent implementation can
 replace it behind the same interface without touching the Orchestrator.
@@ -227,23 +244,34 @@ structure is read back out of it to build the report.
 
 ```python
 report.inventory     # biosphere aggregated by (iri, location, time), per unit
-report.unresolved    # dangling demands with reason (no_model_found, max_depth)
+report.unresolved    # dangling demands with reason (no_model_found,
+                     # coverage_excluded, max_depth, max_nodes) and, where
+                     # there is one, a detail naming the near-miss model
 report.provenance    # per node: parameter rows and fallbacks used
 report.graph         # nodes and edges, for later tree/Sankey rendering
 ```
 
 `log.to_parquet()` writes the same records to disk — symmetry with trailpack,
-and it makes results diffable between runs.
+and it makes results diffable between runs. *All* of the records: one flat
+table under a single explicit schema, with a `kind` column distinguishing a
+biosphere exchange, a node that emitted none, an unresolved leaf and one row
+per provenance key. Writing only the biosphere exchanges would make two runs
+that differ solely in their cutoffs or their parameter fallbacks serialize
+identically, which is the opposite of diffable. The schema is declared rather
+than inferred so that an empty log and a populated one share a type and can be
+concatenated.
 
 ## Error handling
 
 | Situation | Behavior |
 |---|---|
 | No model produces a flow | Unresolved leaf, reason `no_model_found`. Traversal continues. |
+| A model produces the flow but its `coverage` excludes it | Unresolved leaf, reason `coverage_excluded`, with the near-miss models named in `detail`. Traversal continues. |
 | Several models produce a flow | `AmbiguousModelMatch` raised, candidates named. |
 | Production does not cover the demand | `ValidationError` from the Runner, node identified. |
 | Unit mismatch on any exchange | `ValidationError` from the Runner. |
 | No parameter row resolvable | `ParameterNotFound` from ParameterSet. |
+| A parameter column asked for a unit declares none | `MissingUnit` from the ParameterRow, naming the column and the file. Raised where the unit is read, not carried onward as `None`. |
 | Depth or node budget exhausted | Unresolved leaf, reason `max_depth` / `max_nodes`. Report says the traversal was truncated. |
 
 Unresolvable *data* produces a recorded leaf; unresolvable *contracts* raise.
