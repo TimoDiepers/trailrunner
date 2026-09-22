@@ -1,0 +1,15 @@
+# Exploration venv - large, regenerable, machine-specific
+.venv/
+
+# BAFU-2026 files export from sentier-brightway - large, regenerable via `sentier-brightway files`
+input-data/
+
+# Derived from data/raw/ - large, regenerable via parse_processinformation.ipynb
+*.parquet
+processInformation_by_category.json
+processInformation_by_category_by_name.json
+colliding_name_slugs.csv
+offshore_pipeline_exchanges.csv
+
+# Scratch PDF text dumps used to locate tables while writing build_pipeline_trailpack.py
+pdf_text/
