@@ -4,16 +4,17 @@
 
 ## 🧱 The problem
 
-A demand rarely matches an observation perfectly. In practice, inventory models
-have to either:
+Conventional LCA workflows still depend on static inventory models: fixed
+coefficient sets that get duplicated into separate versions for different
+locations, times, or other context dimensions.
 
-- build a proxy process from relationships and assumptions, or
-- generalize the demand across one or more dimensions (like place or time) so
-  it can be matched.
+That means one physical activity is often represented by many near-duplicate
+datasets. `trailrunner` replaces that with one model per activity. The model is
+parameterized by context, performs the needed calculations, and returns:
 
-Those choices are not value-free, and they are hard to keep explicit in static
-coefficient tables. `trailrunner` puts this logic in code, where the model can
-use the full demand context and where fallbacks are reported explicitly.
+- what it produced,
+- what else it needs from the technosphere, and
+- how it interacts with the biosphere.
 
 ## ✨ What `trailrunner` does
 
