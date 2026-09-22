@@ -73,15 +73,15 @@ There can be all kinds of complications to realising this translation. For examp
   + Aspects of quality or technical performance (e.g., use of a colour tv vs. use of a black-and-white tv).
   + Whether it is provided at the producer or at the consumer.
   + Whether it is provided using an object of a particular vintage or of a certain age.
+  + Distinguishing whether the flow represents a material flow or a service (e.g., the use of a building or of a t-shirt).
+  + Descriptors to steer for narrative consistency in the quantification of future activities (e.g., preference for a particular shared social pathway or a more narrow definition of some imagined future).
   + etc.
 
-These flows can have attributes which are not expected to be of use to any inventory model, but may be used for data quality purposes, interpretation, or to quantify an economic area of concern in the LCIA phase (and should thereby effectively lead to the quantification of some biosphere flow(s)). For example:
-+ Distinguishing whether the flow represents a material flow or a service (e.g., the use of a building or of a t-shirt).
-+ etc.
+Some of these flow attributes may not be of use to any inventory model. However, it is good practise to comprehensively describe any flow, as this is valuable for data quality purposes, interpretation, or to quantify an economic area of concern in the LCIA phase (and would thereby effectively lead to the quantification of some biosphere flow(s)).
 
 ### Definition of biosphere flows
 
-+ Substance (or other type of intervention) which the flow represents (and what particular unit is user to quantify this intervention).
++ Substance (or other type of intervention) which the flow represents (and what particular unit is used to quantify this intervention).
 + Quantity.
 + Time at which the flow occurs in the biosphere.
 + Geographic location at which the flow occurs in the biosphere.
