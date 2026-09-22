@@ -19,7 +19,8 @@ from trailrunner.params.parameter_set import ParameterSet
 from .conftest import write_parameter_parquet
 
 # A high-tier and a low-tier row, values taken directly from the source report
-# (Bussa et al. 2025, Tab. 4.4/4.6/4.7) -- see database/build_pipeline_trailpack.py.
+# (Bussa et al. 2025, Tab. 4.4/4.6/4.7) -- see
+# "dev/reverse-engineering of BAFU pipeline transport datasets/build_pipeline_trailpack.py".
 HIGH = {
     "location": "DZ", "time": 2025, "tier": "high",
     "gas_density_kg_per_nm3": 0.735,
