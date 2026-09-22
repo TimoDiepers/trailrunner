@@ -11,7 +11,7 @@ from trailrunner.core.errors import (
 from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
-from trailrunner.core.settings import Settings
+from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.orchestration.report import Report
@@ -34,6 +34,7 @@ __all__ = [
     "TrailrunnerError",
     "ValidationError",
     # Types and components.
+    "AttributionSettings",
     "Coverage",
     "Demand",
     "Exchange",
@@ -46,6 +47,7 @@ __all__ = [
     "Orchestrator",
     "ParameterSet",
     "Property",
+    "ProxySettings",
     "Report",
     "Result",
     "Runner",
