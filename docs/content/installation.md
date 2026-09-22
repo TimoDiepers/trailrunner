@@ -41,13 +41,13 @@ uv sync --extra dev --extra examples
 uv run jupyter lab examples/dac.ipynb
 ```
 
-trailpack needs Python 3.12 or newer, which is why the extra is marked accordingly. The
-release on PyPI is currently missing its subpackages, so `[tool.uv.sources]` points the
-extra at the git repository; without `uv`, install it the same way:
+trailpack needs Python 3.12 or newer, which is why the extra is marked accordingly — on
+3.11 the rest of the extra installs and the notebook is the only thing you cannot run.
+
+Without `uv`:
 
 ```bash
-python -m pip install -e ".[dev]" pandas jupyterlab \
-    "trailpack @ git+https://github.com/TimoDiepers/trailpack"
+python -m pip install -e ".[dev,examples]"
 ```
 
 ## Running the tests
