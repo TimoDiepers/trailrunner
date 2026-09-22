@@ -157,3 +157,48 @@ def test_an_empty_log_table_concatenates_with_a_populated_one(tmp_path):
 
     combined = pa.concat_tables([pq.read_table(empty_path), pq.read_table(populated_path)])
     assert combined.num_rows == 3
+
+
+def test_write_records_the_model_name():
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(demand, a_result(demand), model="DirectAirCapture")
+    assert log.nodes[node_id].model == "DirectAirCapture"
+
+
+def test_model_and_resolution_default_to_none_and_empty():
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(demand, a_result(demand))
+    assert log.nodes[node_id].model is None
+    assert log.nodes[node_id].resolution == {}
+
+
+def test_write_records_how_the_demand_was_resolved():
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(
+        demand,
+        a_result(demand),
+        model="GridElectricity",
+        resolution={"tier": "generalising", "relaxations": ["location: CH -> RER"]},
+    )
+    assert log.nodes[node_id].resolution["tier"] == "generalising"
+
+
+def test_parquet_carries_the_model_and_one_row_per_resolution_key(tmp_path):
+    log = Log()
+    demand = a_demand()
+    log.write(
+        demand,
+        a_result(demand),
+        model="GridElectricity",
+        resolution={"tier": "generalising", "relaxations": ["location: CH -> RER"]},
+    )
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+
+    rows = pq.read_table(path).to_pylist()
+    resolution_rows = [row for row in rows if row["kind"] == "resolution"]
+    assert {row["key"] for row in resolution_rows} == {"tier", "relaxations"}
+    assert all(row["model"] == "GridElectricity" for row in rows)

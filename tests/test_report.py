@@ -91,3 +91,37 @@ def test_empty_log_gives_an_empty_report():
     assert report.inventory == {}
     assert report.unresolved == []
     assert report.nodes == []
+
+
+def test_report_carries_resolutions_by_node():
+    log = Log()
+    demand = a_demand()
+    result = Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")])
+    node_id = log.write(demand, result, model="DirectAirCapture", resolution={"tier": "model"})
+    report = Report.from_log(log)
+    assert report.resolutions[node_id] == {"tier": "model"}
+
+
+def test_proxies_hold_only_the_nodes_that_were_not_exact_matches():
+    log = Log()
+    demand = a_demand()
+    result = Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")])
+    exact = log.write(demand, result, model="DirectAirCapture", resolution={"tier": "model"})
+    relaxed = log.write(
+        demand,
+        result,
+        model="GridElectricity",
+        resolution={"tier": "generalising", "relaxations": ["location: CH -> RER"]},
+    )
+    borrowed = log.write(demand, result, resolution={"tier": "background"})
+
+    report = Report.from_log(log)
+    assert set(report.proxies) == {relaxed, borrowed}
+    assert exact not in report.proxies
+
+
+def test_nodes_without_a_resolution_are_not_proxies():
+    log = Log()
+    demand = a_demand()
+    log.write(demand, Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]))
+    assert Report.from_log(log).proxies == {}
