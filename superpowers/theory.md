@@ -1,4 +1,4 @@
-# `TrailRunner`
+# `sentier-trailrunner`
 
 ## Overview
 
@@ -64,19 +64,15 @@ There can be all kinds of complications to realising this translation. For examp
 
 ### Definition of technosphere flows (incl. production flows)
 
-+ Product that should be provided (in the case of a waste: this 'product' is the waste that should be treated).
-+ Time at which it should be provided.
-+ Place at which it should be provided.
-+ Other qualities:
-  + Aspects which further specify some attribute of the product. For example:
-    + Its material composition.
-    + Other physical properties, such as temperature or pressure.
-    + Aspects of quality or technical performance (e.g., use of a colour tv vs. use of a black-and-white tv).
-    + etc.
-  + Aspects of the context or technology with which the product should be provided. For example:
-    + Whether it is provided at the producer or at the consumer.
-    + Whether it is provided using an object of a particular vintage or of a certain age.
-    + etc.
++ Product that should be provided (in the case of a waste: this 'product' is the waste that should be treated), on the level that is described by a single IRI.
++ Time at which the flow should be provided.
++ Place at which the flow should be provided.
++ Other qualities, which specify, for example, some attribute of the product or some aspect of its context or the technology with which it is provided. For example:
+  + The material composition of the flow.
+  + Other physical properties of the flow, such as temperature or pressure.
+  + Aspects of quality or technical performance (e.g., use of a colour tv vs. use of a black-and-white tv).
+  + Whether it is provided at the producer or at the consumer.
+  + Whether it is provided using an object of a particular vintage or of a certain age.
   + etc.
 
 These flows can have attributes which are not expected to be of use to any inventory model, but may be used for data quality purposes, interpretation, or to quantify an economic area of concern in the LCIA phase (and should thereby effectively lead to the quantification of some biosphere flow(s)). For example:
@@ -104,7 +100,7 @@ Ideally, any product demand can be matched to an identical observation. In pract
 
 There are two courses of action:
 + To quantify an artificial observation, typically based on purpose-defined relationships (e.g., mass balance, technology descriptors, ...).
-+ To generalise the demand in some way so that it can be matched (e.g., generalise a demand for electricity at 11 AM to a demand for electricity during the daytime).
++ To generalise the demand in some way so that it can be matched (e.g., generalise a demand for electricity at 11 AM to a demand for electricity during the daytime) or to allow for less rigid matching (e.g., match a demand for a green truck to a model describing the provision of red trucks).
 
 It may be the case that the model cannot accommodate the first strategy without first having to execute the second strategy. E.g., a model may be able to quantify steel produced in any country (even countries for which it has no data on steel production), but it may not be able to quantify steel production in any particular city: it must first generalise this city to the country it's located in.
 
