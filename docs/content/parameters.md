@@ -26,6 +26,14 @@ metadata under the key `datapackage.json`. `trailrunner` reads each field's `uni
 its `rdfType` (or `taxonomyUrl`) out of it, which is how `row.unit_of()` and `row.iri_of()`
 can answer without the model hardcoding anything.
 
+The field list is read from `resources[].schema.fields`, where Frictionless puts it and
+where trailpack writes it. The flatter `resources[].fields` is also accepted, for descriptors
+assembled by hand.
+
+`examples/dac.ipynb` writes its parameter files with trailpack itself — `Field`, `Unit` and
+`MetaDataBuilder` for the descriptor, `Packing.write_parquet` for the file — and is the place
+to look for a worked example of the producing side.
+
 Column names default to `location` and `time` and can be overridden:
 
 ```python

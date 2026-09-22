@@ -179,3 +179,24 @@ def test_boolean_column_is_not_interpolated(tmp_path):
     row = params.at(location="CH", time=2025)
     assert row["is_pilot_plant"] is True
     assert row["heat_demand"] == pytest.approx(5.5)
+
+
+@pytest.mark.parametrize("nested", [True, False])
+def test_units_and_iris_are_read_from_either_descriptor_shape(tmp_path, nested):
+    # Frictionless — and so trailpack's Packing.write_parquet — nests the field
+    # list under resources[].schema.fields. Reading only the flat
+    # resources[].fields fails silently: every unit comes back missing and a
+    # model that asks for one raises MissingUnit far from the cause.
+    path = write_parameter_parquet(
+        tmp_path / f"shape_{nested}.parquet",
+        rows=[{"location": "CH", "time": 2020, "heat_demand": 6.0}],
+        fields=[
+            {"name": "location", "type": "string", "unit": None, "iri": None},
+            {"name": "time", "type": "integer", "unit": "year", "iri": None},
+            {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": HEAT_DEMAND_IRI},
+        ],
+        nested=nested,
+    )
+    row = ParameterSet.from_parquet(path, hierarchy=HIERARCHY).at(location="CH", time=2020)
+    assert row.unit_of("heat_demand") == "MJ"
+    assert row.iri_of("heat_demand") == HEAT_DEMAND_IRI
