@@ -95,3 +95,35 @@ def test_summary_says_when_the_traversal_was_truncated():
 
 def test_summary_of_an_empty_report_does_not_crash():
     assert "0 nodes" in Report.from_log(Log()).summary()
+
+
+def test_an_unrecognised_tier_is_never_labelled_an_exact_match():
+    """tree() and proxies must agree: whatever summary() counts as a proxy,
+    tree() must not print as a model."""
+    log = Log()
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=1.0, unit="MJ")
+    log.write(
+        demand,
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="MJ")]),
+        model="Mystery",
+        resolution={"tier": "linear_background"},
+    )
+    report = Report.from_log(log)
+    assert "[model" not in report.tree()
+    assert "linear_background" in report.tree()
+    assert len(report.proxies) == 1
+
+
+def test_a_resolution_without_a_tier_is_treated_as_an_exact_match():
+    """The absent-tier default is 'model' in both views, not just one."""
+    log = Log()
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=1.0, unit="MJ")
+    log.write(
+        demand,
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="MJ")]),
+        model="Boiler",
+        resolution={"model": "Boiler"},
+    )
+    report = Report.from_log(log)
+    assert "[model: Boiler]" in report.tree()
+    assert report.proxies == {}

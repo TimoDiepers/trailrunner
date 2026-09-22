@@ -16,7 +16,7 @@ LOG_SCHEMA = pa.schema(
         # exchange), "node" (a node that emitted none, so it does not vanish),
         # "unresolved" (a cutoff leaf), "provenance" (one per key a node
         # recorded) or "resolution" (one per key of how a node's demand was
-        # matched). One flat table rather than four files, because the point
+        # matched). One flat table rather than five files, because the point
         # is to diff two runs with a single read.
         ("kind", pa.string()),
         ("model", pa.string()),
@@ -60,10 +60,12 @@ class NodeRecord:
     resolution: dict[str, Any] = field(default_factory=dict)
     """How this demand was matched: which tier answered and what was relaxed.
 
-    Empty in phase 0 — the Orchestrator fills ``tier`` and ``model`` once the
-    resolution chain exists. Kept here rather than in ``Result.provenance``
-    because provenance is the *model's* record of the parameters it used, and
-    resolution is the *orchestrator's* record of how that model was chosen.
+    Every node carries at least ``{"tier": "model"}`` today. A later phase's
+    provider chain widens this to ``"generalising"`` or ``"background"``,
+    along with the ``relaxations`` that got there. Kept here rather than in
+    ``Result.provenance`` because provenance is the *model's* record of the
+    parameters it used, and resolution is the *orchestrator's* record of how
+    that model was chosen.
     """
 
 

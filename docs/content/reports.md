@@ -79,8 +79,9 @@ print()
 print(report.summary())
 ```
 
-Running the DAC example (`examples/dac.ipynb`, with a `Boiler` model answering the heat demand
-and nothing registered for electricity) prints:
+Running the DAC traversal with a `Boiler` model answering the heat demand and nothing
+registered for electricity (`tests/test_dac.py::test_end_to_end_traversal_with_a_heat_model`)
+prints:
 
 ```text
 1000 kg co2-captured @CH/2030  [model: DirectAirCapture]
