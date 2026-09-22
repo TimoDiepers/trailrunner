@@ -1,6 +1,8 @@
 import pytest
 
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
+
+HEAT = "https://vocab.sentier.dev/products/heat"
 
 
 def test_flow_is_hashable_and_value_equal():
@@ -39,3 +41,37 @@ def test_exchange_is_immutable():
 
 def test_demand_is_an_alias_for_exchange():
     assert Demand is Exchange
+
+
+def test_exchange_defaults_to_no_properties():
+    exchange = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ")
+    assert exchange.properties == ()
+
+
+def test_exchange_carries_properties_and_stays_hashable():
+    mass = Property(name="mass", value=2.5, unit="kg")
+    price = Property(name="price", value=18.0, unit="EUR")
+    exchange = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ", properties=(mass, price))
+    # Hashability is the whole reason properties is a tuple: Flow is an
+    # aggregation key and QueueItem is a frozen dataclass holding a Demand.
+    assert hash(exchange) == hash(
+        Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ", properties=(mass, price))
+    )
+
+
+def test_get_property_finds_by_name():
+    mass = Property(name="mass", value=2.5, unit="kg")
+    exchange = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ", properties=(mass,))
+    assert exchange.get_property("mass") is mass
+
+
+def test_get_property_returns_none_when_absent():
+    exchange = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ")
+    assert exchange.get_property("mass") is None
+
+
+def test_properties_do_not_affect_the_flow_aggregation_key():
+    mass = Property(name="mass", value=2.5, unit="kg")
+    with_property = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ", properties=(mass,))
+    without = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ")
+    assert with_property.flow == without.flow
