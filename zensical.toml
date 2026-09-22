@@ -35,6 +35,7 @@ nav = [
     { Log = "api/log.md" },
     { Report = "api/report.md" },
     { "Parameter Set" = "api/parameter_set.md" },
+    { Fleet = "api/fleet.md" },
     { "Location Hierarchy" = "api/location.md" },
     { Coverage = "api/coverage.md" },
     { Errors = "api/errors.md" },
