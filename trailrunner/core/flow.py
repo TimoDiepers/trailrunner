@@ -25,12 +25,47 @@ class Flow:
 
 
 @dataclass(frozen=True)
+class Property:
+    """A quantified attribute of an exchange, used to partition co-production.
+
+    Mass, price, energy content: whatever the allocation rule divides by. The
+    unit travels with the value because a partition over ``price`` in EUR and
+    one in USD are not the same partition.
+    """
+
+    name: str
+    value: float
+    unit: str
+
+
+@dataclass(frozen=True)
 class Exchange:
     """A quantified flow. The unit lives here, not on the Flow."""
 
     flow: Flow
     amount: float
     unit: str
+
+    properties: tuple[Property, ...] = ()
+    """Attributes an allocation rule may partition on.
+
+    A tuple rather than a mapping so that ``Exchange`` stays hashable: ``Flow``
+    is an aggregation key and ``QueueItem`` is a frozen dataclass holding a
+    ``Demand``, so a dict here would make the hashability of both depend on
+    which fields happen to be populated.
+    """
+
+    def get_property(self, name: str) -> Property | None:
+        """The property called ``name``, or ``None``.
+
+        Deliberately lenient: the caller that *requires* a property is the
+        allocation rule in the Runner, and it raises a message naming the model
+        and the co-product, which is far more useful than a KeyError here.
+        """
+        for candidate in self.properties:
+            if candidate.name == name:
+                return candidate
+        return None
 
 
 Demand = Exchange

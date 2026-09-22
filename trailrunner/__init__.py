@@ -8,7 +8,7 @@ from trailrunner.core.errors import (
     TrailrunnerError,
     ValidationError,
 )
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import Settings
@@ -45,6 +45,7 @@ __all__ = [
     "Model",
     "Orchestrator",
     "ParameterSet",
+    "Property",
     "Report",
     "Result",
     "Runner",
