@@ -222,8 +222,8 @@ mapping:
 @dataclass(frozen=True)
 class Settings:
     values: dict[str, Any] = field(default_factory=dict)
-    attribution: AttributionSettings = AttributionSettings()
-    proxy: ProxySettings = ProxySettings()
+    attribution: AttributionSettings = field(default_factory=AttributionSettings)
+    proxy: ProxySettings = field(default_factory=ProxySettings)
 ```
 
 `values` stays what it is — the open namespace a model may read keys from. The

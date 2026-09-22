@@ -10,6 +10,23 @@
 
 **Spec:** `dev/.agents/specs/2026-09-22-trailrunner-v2-design.md` §2
 
+## Naming: `resolution`, not `provenance`
+
+The field an `Offer` carries is called **`resolution`**, matching
+`NodeRecord.resolution`, which is where the Orchestrator stores it. It is
+deliberately *not* called `provenance`: `Result.provenance` is the **model's**
+record of which parameter rows and fallbacks it used, and `resolution` is the
+**orchestrator's** record of how that model was chosen. One word for both
+would collapse a distinction phase 0 established and this phase depends on.
+
+That distinction is about to be tested by a coincidence: `ParameterSet`
+already records a `CH -> RER` location fallback (the model widening its
+*parameter* lookup, in `provenance`), and `GeneralisingProvider` will record a
+`CH -> RER` relaxation (the orchestrator widening the *demand*, in
+`resolution`). Same words, two different concessions, both true at once. The
+report must make clear which is which — say so in the relaxation strings and
+in `docs/content/resolution.md`, rather than leaving a reader to infer it.
+
 ## Global Constraints
 
 - Python `>= 3.11`. Runtime dependency stays **pyarrow only**; `pyst-client`
@@ -41,7 +58,7 @@
 | `trailrunner/resolution/generalising.py` | `GeneralisingProvider`, `Taxonomy`, `StaticTaxonomy` |
 | `trailrunner/resolution/pyst.py` | `PystTaxonomy` — `skos:broader` with an on-disk cache |
 | `trailrunner/resolution/background.py` | `BackgroundProvider`, `BackgroundDataset` |
-| `trailrunner/orchestration/orchestrator.py` | ask the chain; record the offer's provenance |
+| `trailrunner/orchestration/orchestrator.py` | ask the chain; record the offer's resolution |
 | `tests/test_resolution_chain.py` | tiers, order, explain |
 | `tests/test_generalising.py` | time, location, product, budgets |
 | `tests/test_pyst_taxonomy.py` | stubbed client, cache hit |
@@ -59,7 +76,7 @@
 **Interfaces:**
 - Consumes: `Glossary.resolve`, `Glossary.declared_models`, `Model`, `Demand`.
 - Produces:
-  `Offer(model: Model, demand: Demand, tier: str, provenance: dict[str, Any])`;
+  `Offer(model: Model, demand: Demand, tier: str, resolution: dict[str, Any])`;
   `Provider` protocol with `offer(demand) -> Offer | None` and
   `explain(demand) -> tuple[str, str] | None`;
   `ResolutionChain(providers: Sequence[Provider])` with `.offer`, `.explain`,
@@ -107,7 +124,7 @@ class AlwaysOffers:
 
     def offer(self, demand):
         return Offer(model=self.model, demand=demand, tier=self.tier,
-                     provenance={"tier": self.tier})
+                     resolution={"tier": self.tier})
 
     def explain(self, demand):
         return None
@@ -205,7 +222,7 @@ Create `trailrunner/resolution/chain.py`:
 """An ordered chain of ways to answer a demand.
 
 Tier 1 is the models. Later tiers are concessions — a generalised demand, a
-borrowed background dataset — and each one says so in its provenance. The
+borrowed background dataset — and each one says so in its resolution. The
 order is the practitioner's, which is why precedence across tiers is not
 silent the way a hidden default would be.
 """
@@ -231,7 +248,7 @@ class Offer:
     model: Model
     demand: Demand
     tier: str
-    provenance: dict[str, Any] = field(default_factory=dict)
+    resolution: dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable
@@ -314,7 +331,7 @@ class ModelProvider:
             model=model,
             demand=demand,
             tier="model",
-            provenance={"tier": "model", "model": type(model).__name__},
+            resolution={"tier": "model", "model": type(model).__name__},
         )
 
     def explain(self, demand: Demand) -> tuple[str, str] | None:
@@ -392,7 +409,7 @@ Replace the resolve-and-report block in `calculate` with:
                 depth=item.depth,
                 parent=item.parent,
                 model=type(offer.model).__name__,
-                resolution=dict(offer.provenance),
+                resolution=dict(offer.resolution),
             )
 ```
 
@@ -519,7 +536,7 @@ def test_the_relaxation_is_recorded_in_the_offer():
     demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
     offer = provider([RegionalBoiler()]).offer(demand)
     assert offer.tier == "generalising"
-    assert offer.provenance["relaxations"] == ["location: CH -> RER"]
+    assert offer.resolution["relaxations"] == ["location: CH -> RER"]
 
 
 def test_the_amount_and_unit_survive_the_relaxation():
@@ -539,7 +556,7 @@ def test_time_is_snapped_to_a_covered_year_within_tolerance():
     demand = Demand(flow=Flow(iri=HEAT, time=2032), amount=10.0, unit="MJ")
     offer = provider([DatedBoiler()]).offer(demand)
     assert offer.demand.flow.time == 2035
-    assert offer.provenance["relaxations"] == ["time: 2032 -> 2035"]
+    assert offer.resolution["relaxations"] == ["time: 2032 -> 2035"]
 
 
 def test_time_outside_the_tolerance_is_not_snapped():
@@ -552,7 +569,7 @@ def test_product_is_widened_through_the_taxonomy():
     demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
     offer = provider([GenericTruck()], taxonomy=taxonomy).offer(demand)
     assert isinstance(offer.model, GenericTruck)
-    assert offer.provenance["relaxations"] == [f"product: {GREEN_TRUCK} -> {TRUCK}"]
+    assert offer.resolution["relaxations"] == [f"product: {GREEN_TRUCK} -> {TRUCK}"]
 
 
 def test_product_relaxation_needs_a_taxonomy():
@@ -684,7 +701,7 @@ class GeneralisingProvider:
                     model=inner_offer.model,
                     demand=candidate,
                     tier="generalising",
-                    provenance={
+                    resolution={
                         "tier": "generalising",
                         "model": type(inner_offer.model).__name__,
                         "relaxations": [note],
@@ -1170,9 +1187,9 @@ def test_the_result_produces_the_demanded_flow_and_terminates(pack_file):
 def test_the_borrowed_subtree_says_it_is_matrix_lca(pack_file):
     demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
     offer = provider(pack_file).offer(demand)
-    assert offer.provenance["tier"] == "background"
-    assert offer.provenance["kind"] == "linear_background"
-    assert offer.provenance["dataset"] == "natural gas, at consumer"
+    assert offer.resolution["tier"] == "background"
+    assert offer.resolution["kind"] == "linear_background"
+    assert offer.resolution["dataset"] == "natural gas, at consumer"
 
 
 def test_the_biosphere_flows_carry_the_demands_time(pack_file):
@@ -1184,7 +1201,7 @@ def test_the_biosphere_flows_carry_the_demands_time(pack_file):
 def test_location_falls_back_up_the_hierarchy(pack_file):
     demand = Demand(flow=Flow(iri=STEEL, location="CH"), amount=1.0, unit="kg")
     offer = provider(pack_file, LocationHierarchy({"CH": "RER", "RER": "GLO"})).offer(demand)
-    assert offer.provenance["location_used"] == "RER"
+    assert offer.resolution["location_used"] == "RER"
 
 
 def test_a_product_not_in_the_pack_is_declined(pack_file):
@@ -1216,7 +1233,7 @@ Create `trailrunner/resolution/background.py`:
 """Tier 3: borrow a cumulative dataset, and say so.
 
 The last resort is a row of coefficients — exactly the thing trailrunner
-exists to avoid — so it is labelled ``linear_background`` in the provenance of
+exists to avoid — so it is labelled ``linear_background`` in the resolution of
 every node it answers. A reader can then see precisely where the modelled
 foreground stops and the borrowed matrix starts, which is a more honest
 picture than either a cutoff or a seamless number.
@@ -1325,7 +1342,7 @@ class BackgroundDataset(Model):
                 )
                 for iri, unit, amount in self.entry.exchanges
             ],
-            provenance={"background_dataset": self.entry.dataset, "kind": "linear_background"},
+            resolution={"background_dataset": self.entry.dataset, "kind": "linear_background"},
         )
 
 
@@ -1344,7 +1361,7 @@ class BackgroundProvider:
             model=BackgroundDataset(entry),
             demand=demand,
             tier="background",
-            provenance={
+            resolution={
                 "tier": "background",
                 "kind": "linear_background",
                 "dataset": entry.dataset,
@@ -1393,13 +1410,25 @@ print('loaded')
 "
 ```
 
-- [ ] **Step 6: Document and commit**
+- [ ] **Step 6: One parquet row per relaxation**
+
+`Log.to_parquet` stringifies each resolution value, so a `relaxations` list
+lands as one row holding `"['location: CH -> RER']"` — a Python repr a reader
+has to parse. With one relaxation that is ugly; in this phase, where a node can
+carry several, it is unusable.
+
+Write `kind="resolution"` rows one per relaxation instead, keyed
+`relaxation.0`, `relaxation.1`, … while non-list values keep their single row.
+Add a test asserting that a node with two relaxations produces two rows and
+that neither value contains a bracket.
+
+- [ ] **Step 7: Document and commit**
 
 Create `docs/content/resolution.md` covering: the tier order and why it is the
 practitioner's to declare; the three relaxation dimensions with a worked
 example of each; why relaxations do not compose; the PyST cache and offline
 runs; the background pack's format and what `linear_background` in a node's
-provenance means; and how to read `report.proxies`.
+resolution means; and how to read `report.proxies`.
 
 Add `{ Resolution = "content/resolution.md" }` to the `"User Guide"` nav in
 `zensical.toml` after `{ Parameters = "content/parameters.md" }`, and an
