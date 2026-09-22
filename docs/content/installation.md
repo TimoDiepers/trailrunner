@@ -7,6 +7,8 @@ tags:
 
 `trailrunner` needs Python 3.11 or newer. Its only runtime dependency is
 [`pyarrow`](https://arrow.apache.org/docs/python/), used to read trailpack parquet files.
+Writing those files is [trailpack](https://github.com/TimoDiepers/trailpack)'s job, not
+trailrunner's, so trailpack is an extra rather than a dependency.
 
 The distribution is named `sentier-trailrunner`; the import name stays `trailrunner`.
 
@@ -27,6 +29,25 @@ Without `uv`:
 
 ```bash
 python -m pip install -e ".[dev]"
+```
+
+## Running the example notebook
+
+`examples/dac.ipynb` writes its own parameter files with trailpack, so it needs the
+`examples` extra as well:
+
+```bash
+uv sync --extra dev --extra examples
+uv run jupyter lab examples/dac.ipynb
+```
+
+trailpack needs Python 3.12 or newer, which is why the extra is marked accordingly. The
+release on PyPI is currently missing its subpackages, so `[tool.uv.sources]` points the
+extra at the git repository; without `uv`, install it the same way:
+
+```bash
+python -m pip install -e ".[dev]" pandas jupyterlab \
+    "trailpack @ git+https://github.com/TimoDiepers/trailpack"
 ```
 
 ## Running the tests
