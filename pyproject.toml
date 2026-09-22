@@ -31,7 +31,7 @@ dev = ["pytest>=8"]
 # dependencies: trailrunner reads the parquet files it writes with pyarrow
 # alone.
 examples = [
-  "trailpack; python_version >= '3.12'",
+  "trailpack>=0.3; python_version >= '3.12'",
   "pandas>=2",
   "jupyterlab",
 ]
@@ -45,13 +45,6 @@ docs = [
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
-
-# trailpack 0.2.0 on PyPI is missing its subpackages, so `trailpack.packing`
-# cannot be imported from a released wheel. Take it from git until that is
-# released. This table is uv-only and is stripped from the built distribution,
-# which is what keeps the direct URL out of the published metadata.
-[tool.uv.sources]
-trailpack = { git = "https://github.com/TimoDiepers/trailpack" }
 
 [tool.hatch.version]
 path = "trailrunner/__init__.py"
