@@ -320,6 +320,7 @@ def allocate(demand: Demand, result: Result, rule: str, model_name: str) -> Resu
 
     key = ALLOCATION_PROPERTY[rule]
     values = {}
+    units: set[str] = set()
     for exchange in result.production:
         prop = exchange.get_property(key)
         if prop is None:
@@ -327,7 +328,18 @@ def allocate(demand: Demand, result: Result, rule: str, model_name: str) -> Resu
                 f"{model_name} produced {exchange.flow.iri} without a {key!r} "
                 f"property, which the {rule!r} allocation rule partitions on"
             )
+        units.add(prop.unit)
         values[exchange.flow.iri] = values.get(exchange.flow.iri, 0.0) + prop.value
+
+    # Unit compatibility is string equality here as everywhere: a mass in kg and
+    # a mass in t are not summable, and a partition over their sum is a wrong
+    # number that looks right. This is the reason Property carries a unit at all.
+    if len(units) > 1:
+        raise MissingProperty(
+            f"{model_name}'s co-products declare {key!r} in more than one unit "
+            f"({', '.join(sorted(units))}); trailrunner does not convert units, so "
+            f"the {rule!r} rule cannot partition over them"
+        )
 
     total = sum(values.values())
     if total == 0:

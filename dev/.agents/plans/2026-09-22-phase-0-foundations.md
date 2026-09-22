@@ -360,8 +360,8 @@ class Settings:
     """
 
     values: dict[str, Any] = field(default_factory=dict)
-    attribution: AttributionSettings = AttributionSettings()
-    proxy: ProxySettings = ProxySettings()
+    attribution: AttributionSettings = field(default_factory=AttributionSettings)
+    proxy: ProxySettings = field(default_factory=ProxySettings)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.values.get(key, default)
