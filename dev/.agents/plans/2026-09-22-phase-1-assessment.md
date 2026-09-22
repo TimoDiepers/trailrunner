@@ -1164,6 +1164,13 @@ with a worked radiative-forcing example and its plot; the two horizon
 conventions and why both are exposed; and the `dev/convert_brightway_method.py`
 escape hatch with its flow-matching caveat stated plainly.
 
+While you are in `docs/content/`, fix a stale claim Phase 0 left behind: the
+"Writing the log to parquet" section of `docs/content/reports.md` still says
+"four files" and lists four row kinds, but the log has written five since
+Phase 0 added `kind="resolution"`. Correct the count and add the missing kind.
+(Found by Phase 0's final review; deliberately left out of that phase's fix
+wave to keep its scope closed.)
+
 Create `docs/api/assessment.md` following the pattern of the existing
 `docs/api/report.md`, with `mkdocstrings` directives for
 `trailrunner.assessment.method`, `trailrunner.assessment.static` and
