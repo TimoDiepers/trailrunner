@@ -83,8 +83,14 @@ class Report:
             return "[background]"
         if tier == "generalising":
             relaxations = node.resolution.get("relaxations") or []
-            return f"[proxy: {'; '.join(relaxations)}]" if relaxations else "[proxy]"
-        return f"[model: {node.model}]" if node.model else "[model]"
+            joined = "; ".join(str(relaxation) for relaxation in relaxations)
+            return f"[proxy: {joined}]" if relaxations else "[proxy]"
+        if tier == "model":
+            return f"[model: {node.model}]" if node.model else "[model]"
+        # An unrecognised tier must never read as an exact match: this is what
+        # keeps tree() and proxies (anything whose tier isn't "model") in
+        # agreement, even for a tier a later phase's provider chain invents.
+        return f"[{tier}]"
 
     def tree(self, indent: str = "  ") -> str:
         """The traversal as indented text: the supply chain, and how each node
@@ -129,16 +135,18 @@ class Report:
     def summary(self) -> str:
         """Everything needed to judge the numbers, in one block.
 
-        The cutoffs and the proxies come before the inventory size on purpose:
-        what the traversal could not answer is part of the answer.
+        Node and inventory counts come first, then the unresolved breakdown
+        and the proxy count, then the truncation and warning flags — the
+        numbers to check before trusting the inventory, in that order.
         """
         reasons: dict[str, int] = {}
         for record in self.unresolved:
             reasons[record.reason] = reasons.get(record.reason, 0) + 1
 
         entries = len(self.inventory)
+        node_count = len(self.nodes)
         lines = [
-            f"{len(self.nodes)} nodes, {entries} inventory "
+            f"{node_count} {'node' if node_count == 1 else 'nodes'}, {entries} inventory "
             f"{'entry' if entries == 1 else 'entries'}",
         ]
         if reasons:

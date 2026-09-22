@@ -63,6 +63,14 @@ class ProxySettings:
             _check(dimension, PROXY_DIMENSIONS, "proxy dimension")
         if len(set(self.order)) != len(self.order):
             raise ValueError(f"each proxy dimension may appear only once in {self.order}")
+        for dimension, budget in self.max_steps.items():
+            _check(dimension, PROXY_DIMENSIONS, "proxy dimension")
+            if budget < 0:
+                raise ValueError(f"{budget!r} is not a valid proxy budget; must be >= 0")
+        if self.time_tolerance < 0:
+            raise ValueError(
+                f"{self.time_tolerance!r} is not a valid time_tolerance; must be >= 0"
+            )
 
     def steps_allowed(self, dimension: str) -> int:
         """Budget for ``dimension``. Absent means zero: no accidental relaxation."""

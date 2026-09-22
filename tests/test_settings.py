@@ -64,3 +64,23 @@ def test_each_settings_gets_its_own_proxy_budget():
 
 def test_each_settings_gets_its_own_attribution():
     assert Settings().attribution is not Settings().attribution
+
+
+def test_unknown_max_steps_key_is_rejected():
+    with pytest.raises(ValueError, match="locaiton"):
+        ProxySettings(max_steps={"locaiton": 3})
+
+
+def test_negative_proxy_budget_is_rejected():
+    with pytest.raises(ValueError, match="-1"):
+        ProxySettings(max_steps={"location": -1})
+
+
+def test_negative_time_tolerance_is_rejected():
+    with pytest.raises(ValueError, match="-1"):
+        ProxySettings(time_tolerance=-1)
+
+
+def test_valid_partial_max_steps_is_accepted():
+    settings = ProxySettings(max_steps={"location": 2})
+    assert settings.steps_allowed("location") == 2
