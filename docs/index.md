@@ -4,9 +4,17 @@
 
 ## 🧱 The problem
 
-A classic life cycle inventory is a matrix of fixed coefficients. Every process is linear and scale-free: ten times the demand is exactly ten times the inputs, and the numbers never depend on where or when the process runs.
+Conventional LCA workflows still depend on static inventory models: fixed
+coefficient sets that get duplicated into separate versions for different
+locations, times, or other context dimensions.
 
-Real processes do not behave like that. A direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient — it has to live in code.
+That means one physical activity is often represented by many near-duplicate
+datasets. `trailrunner` replaces that with one model per activity. The model is
+parameterized by context, performs the needed calculations, and returns:
+
+- what it produced,
+- what else it needs from the technosphere, and
+- how it interacts with the biosphere.
 
 ## ✨ What `trailrunner` does
 
