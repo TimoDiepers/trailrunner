@@ -14,11 +14,11 @@ tier's rate and the generic gas composition rather than stored as one
 number per country. That derivation is the reason this is a model and not
 a lookup table.
 
-See `database/build_pipeline_trailpack.py` for the full source trail
-(including the one formula -- gas-turbine combustion energy -- that
-couldn't be independently re-derived from primitives and is taken from the
-source report's worked example instead) and
-`database/validate_pipeline_model.py` for the cross-check against the
+See `dev/reverse-engineering of BAFU pipeline transport datasets/build_pipeline_trailpack.py`
+for the full source trail (including the one formula -- gas-turbine
+combustion energy -- that couldn't be independently re-derived from
+primitives and is taken from the source report's worked example instead)
+and `.../validate_pipeline_model.py` for the cross-check against the
 parsed ecoinvent corpus.
 """
 
