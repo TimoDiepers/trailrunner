@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -13,10 +14,12 @@ LOG_SCHEMA = pa.schema(
     [
         # Which kind of record this row is: "biosphere" (one per biosphere
         # exchange), "node" (a node that emitted none, so it does not vanish),
-        # "unresolved" (a cutoff leaf) or "provenance" (one per key a node
-        # recorded). One flat table rather than four files, because the point
+        # "unresolved" (a cutoff leaf), "provenance" (one per key a node
+        # recorded) or "resolution" (one per key of how a node's demand was
+        # matched). One flat table rather than four files, because the point
         # is to diff two runs with a single read.
         ("kind", pa.string()),
+        ("model", pa.string()),
         ("node", pa.int64()),
         ("parent", pa.int64()),
         ("depth", pa.int64()),
@@ -52,6 +55,16 @@ class NodeRecord:
     result: Result
     depth: int
     parent: int | None
+    model: str | None = None
+    """Class name of the model that answered, for the tree and the report."""
+    resolution: dict[str, Any] = field(default_factory=dict)
+    """How this demand was matched: which tier answered and what was relaxed.
+
+    Empty in phase 0 — the Orchestrator fills ``tier`` and ``model`` once the
+    resolution chain exists. Kept here rather than in ``Result.provenance``
+    because provenance is the *model's* record of the parameters it used, and
+    resolution is the *orchestrator's* record of how that model was chosen.
+    """
 
 
 @dataclass
@@ -84,11 +97,25 @@ class Log:
     warnings: list[tuple[str, int | None]] = field(default_factory=list)
 
     def write(
-        self, demand: Demand, result: Result, depth: int = 0, parent: int | None = None
+        self,
+        demand: Demand,
+        result: Result,
+        depth: int = 0,
+        parent: int | None = None,
+        model: str | None = None,
+        resolution: dict[str, Any] | None = None,
     ) -> int:
         node_id = len(self.nodes)
         self.nodes.append(
-            NodeRecord(id=node_id, demand=demand, result=result, depth=depth, parent=parent)
+            NodeRecord(
+                id=node_id,
+                demand=demand,
+                result=result,
+                depth=depth,
+                parent=parent,
+                model=model,
+                resolution=dict(resolution or {}),
+            )
         )
         if parent is not None:
             self.edges.append(EdgeRecord(parent=parent, child=node_id))
@@ -132,6 +159,7 @@ class Log:
                 "demand_time": node.demand.flow.time,
                 "demand_amount": node.demand.amount,
                 "demand_unit": node.demand.unit,
+                "model": node.model,
             }
             for exchange in node.result.biosphere:
                 rows.append(
@@ -154,6 +182,15 @@ class Log:
                     {
                         **base,
                         "kind": "provenance",
+                        "key": str(key),
+                        "value": None if value is None else str(value),
+                    }
+                )
+            for key, value in node.resolution.items():
+                rows.append(
+                    {
+                        **base,
+                        "kind": "resolution",
                         "key": str(key),
                         "value": None if value is None else str(value),
                     }
