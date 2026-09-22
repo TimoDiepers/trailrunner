@@ -13,7 +13,8 @@ modelled.
 
 A model reads its numbers from a [`ParameterSet`](../../api/parameter_set.md). In production
 those come from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file, which
-carries the units and concept IRIs of every column in its embedded datapackage metadata:
+carries the units and concept IRIs of every column in its embedded datapackage metadata
+(`examples/dac.ipynb` writes one with trailpack, end to end):
 
 ```python
 from trailrunner import LocationHierarchy, ParameterSet

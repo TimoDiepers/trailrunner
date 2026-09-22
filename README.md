@@ -89,6 +89,11 @@ zero. Every parameter fallback used along the way shows up in
 `report.provenance`.
 
 [`examples/dac.ipynb`](examples/dac.ipynb) walks through this end to end with
-explanation: writing the parameter parquet, location fallback and year
-interpolation, why the regeneration heat has to be code, the cutoff leaves, and
-the coverage boundary.
+explanation: writing the parameter parquet with trailpack, location fallback
+and year interpolation, why the regeneration heat has to be code, the cutoff
+leaves, and the coverage boundary. It needs the `examples` extra:
+
+```bash
+uv sync --extra dev --extra examples
+uv run jupyter lab examples/dac.ipynb
+```

@@ -80,7 +80,13 @@ def _read_field_metadata(schema) -> tuple[dict[str, str], dict[str, str]]:
         return units, iris
     datapackage = json.loads(raw.decode("utf-8"))
     for resource in datapackage.get("resources", []):
-        for field in resource.get("fields", []):
+        # Frictionless — and so trailpack — nests the field list under
+        # ``schema``. Tables written by hand often put it straight on the
+        # resource instead; read both, because getting this wrong is silent:
+        # every unit comes back missing and the failure surfaces much later,
+        # in a model asking for a unit it has every right to expect.
+        field_container = resource.get("schema") or resource
+        for field in field_container.get("fields", []):
             name = field.get("name")
             if not name:
                 continue

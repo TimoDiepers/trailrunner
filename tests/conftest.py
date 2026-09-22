@@ -9,31 +9,33 @@ TEMPERATURE_IRI = "https://vocab.sentier.dev/parameters/air-temperature"
 HUMIDITY_IRI = "https://vocab.sentier.dev/parameters/relative-humidity"
 
 
-def write_parameter_parquet(path, rows, fields):
+def write_parameter_parquet(path, rows, fields, nested=True):
     """Write a trailpack-compatible parquet file.
 
     ``rows`` is a list of dicts. ``fields`` is a list of
     ``{"name", "type", "unit", "iri"}`` dicts; ``unit`` and ``iri`` may be None.
+
+    ``nested`` picks where the field list goes: under ``resource["schema"]``,
+    which is what Frictionless specifies and what trailpack writes, or straight
+    on the resource, which is the flatter shape hand-written tables often use.
+    Both are read; the default is the one real files have.
     """
     table = pa.Table.from_pylist(rows)
-    datapackage = {
-        "name": "test-parameters",
-        "resources": [
-            {
-                "name": "parameters",
-                "path": str(path),
-                "fields": [
-                    {
-                        "name": field["name"],
-                        "type": field["type"],
-                        **({"unit": {"name": field["unit"]}} if field.get("unit") else {}),
-                        **({"rdfType": field["iri"]} if field.get("iri") else {}),
-                    }
-                    for field in fields
-                ],
-            }
-        ],
-    }
+    field_descriptors = [
+        {
+            "name": field["name"],
+            "type": field["type"],
+            **({"unit": {"name": field["unit"]}} if field.get("unit") else {}),
+            **({"rdfType": field["iri"]} if field.get("iri") else {}),
+        }
+        for field in fields
+    ]
+    resource = {"name": "parameters", "path": str(path)}
+    if nested:
+        resource["schema"] = {"fields": field_descriptors}
+    else:
+        resource["fields"] = field_descriptors
+    datapackage = {"name": "test-parameters", "resources": [resource]}
     schema = table.schema.with_metadata(
         {"datapackage.json": json.dumps(datapackage).encode("utf-8")}
     )
