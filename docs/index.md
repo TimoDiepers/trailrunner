@@ -4,9 +4,16 @@
 
 ## 🧱 The problem
 
-A classic life cycle inventory is a matrix of fixed coefficients. Every process is linear and scale-free: ten times the demand is exactly ten times the inputs, and the numbers never depend on where or when the process runs.
+A demand rarely matches an observation perfectly. In practice, inventory models
+have to either:
 
-Real processes do not behave like that. A direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient — it has to live in code.
+- build a proxy process from relationships and assumptions, or
+- generalize the demand across one or more dimensions (like place or time) so
+  it can be matched.
+
+Those choices are not value-free, and they are hard to keep explicit in static
+coefficient tables. `trailrunner` puts this logic in code, where the model can
+use the full demand context and where fallbacks are reported explicitly.
 
 ## ✨ What `trailrunner` does
 

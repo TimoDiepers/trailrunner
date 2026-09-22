@@ -4,7 +4,10 @@ Model-based supply chain traversal for life cycle inventories.
 
 Installs as `sentier-trailrunner`, imports as `trailrunner`.
 
-A *model* is Python code for one process. It reads its parameters from a
+Most demands are not exact matches to an observation. You either build a proxy
+or generalize the demand across attributes like place and time, and those
+choices are part of the assessment logic. In `trailrunner`, that logic lives in
+code. A *model* reads its parameters from a
 [trailpack](https://github.com/TimoDiepers/trailpack) parquet file and answers
 one question: *given this demand, what did I produce, what do I need, and what
 did I emit?* The orchestrator walks the resulting demands outward through the
