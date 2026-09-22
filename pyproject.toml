@@ -31,7 +31,9 @@ dev = ["pytest>=8"]
 # dependencies: trailrunner reads the parquet files it writes with pyarrow
 # alone.
 examples = [
-  "trailpack>=0.3; python_version >= '3.12'",
+  # trailpack itself requires >=3.12,<3.14, so the marker has to match it:
+  # an open-ended one makes the extra unresolvable on 3.14.
+  "trailpack>=0.3; python_version >= '3.12' and python_version < '3.14'",
   "pandas>=2",
   "jupyterlab",
 ]
