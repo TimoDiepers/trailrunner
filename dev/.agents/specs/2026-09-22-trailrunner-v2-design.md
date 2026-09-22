@@ -478,4 +478,9 @@ Test-driven throughout, pytest, matching v1's discipline.
   uses it.
 - A live Brightway background provider.
 - Concurrent Runner; linear-model result caching; cycle convergence.
+- A consumer for `AttributionSettings.reuse`, which arrives with the first
+  model that has a second life to attribute.
+- Composed generalisation: relaxing two dimensions at once. The cross-product's
+  preference order is a second normative choice, and inventing one silently is
+  what the generalising tier exists to prevent.
 - Uncertainty and Monte Carlo.
