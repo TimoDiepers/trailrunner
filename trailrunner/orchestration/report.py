@@ -7,6 +7,21 @@ from trailrunner.core.flow import Flow
 from trailrunner.orchestration.log import Log, NodeRecord, UnresolvedRecord
 
 
+def _short(iri: str) -> str:
+    """The last path segment of an IRI, for a tree a human reads.
+
+    The full IRI is in the records; a tree whose every line is 60 characters
+    of vocabulary URL is a tree nobody reads.
+    """
+    return iri.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _where(flow: Flow) -> str:
+    if flow.location is None and flow.time is None:
+        return ""
+    return f" @{flow.location or '-'}/{flow.time if flow.time is not None else '-'}"
+
+
 @dataclass
 class Report:
     """Aggregated inventory plus everything needed to judge it.
@@ -60,3 +75,81 @@ class Report:
             warnings=list(log.warnings),
             truncated=truncated,
         )
+
+    def _tag(self, node: NodeRecord) -> str:
+        """How honestly this node was answered, in one bracket."""
+        tier = node.resolution.get("tier", "model")
+        if tier == "background":
+            return "[background]"
+        if tier == "generalising":
+            relaxations = node.resolution.get("relaxations") or []
+            return f"[proxy: {'; '.join(relaxations)}]" if relaxations else "[proxy]"
+        return f"[model: {node.model}]" if node.model else "[model]"
+
+    def tree(self, indent: str = "  ") -> str:
+        """The traversal as indented text: the supply chain, and how each node
+        was answered, in one screenful.
+
+        Unresolved demands hang under the node that asked for them, because a
+        cutoff is a property of the place in the chain where it happened.
+        """
+        children: dict[int | None, list[NodeRecord]] = {}
+        for node in self.nodes:
+            children.setdefault(node.parent, []).append(node)
+
+        cutoffs: dict[int | None, list[UnresolvedRecord]] = {}
+        for record in self.unresolved:
+            cutoffs.setdefault(record.parent, []).append(record)
+
+        lines: list[str] = []
+
+        def line(depth: int, amount: float, unit: str, flow: Flow, tag: str) -> None:
+            lines.append(f"{indent * depth}{amount:g} {unit} {_short(flow.iri)}{_where(flow)}  {tag}")
+
+        def walk(node: NodeRecord, depth: int) -> None:
+            line(depth, node.demand.amount, node.demand.unit, node.demand.flow, self._tag(node))
+            for child in children.get(node.id, []):
+                walk(child, depth + 1)
+            for record in cutoffs.get(node.id, []):
+                line(
+                    depth + 1,
+                    record.demand.amount,
+                    record.demand.unit,
+                    record.demand.flow,
+                    f"[cutoff: {record.reason}]",
+                )
+
+        for root in children.get(None, []):
+            walk(root, 0)
+        for record in cutoffs.get(None, []):
+            line(0, record.demand.amount, record.demand.unit, record.demand.flow,
+                 f"[cutoff: {record.reason}]")
+        return "\n".join(lines)
+
+    def summary(self) -> str:
+        """Everything needed to judge the numbers, in one block.
+
+        The cutoffs and the proxies come before the inventory size on purpose:
+        what the traversal could not answer is part of the answer.
+        """
+        reasons: dict[str, int] = {}
+        for record in self.unresolved:
+            reasons[record.reason] = reasons.get(record.reason, 0) + 1
+
+        entries = len(self.inventory)
+        lines = [
+            f"{len(self.nodes)} nodes, {entries} inventory "
+            f"{'entry' if entries == 1 else 'entries'}",
+        ]
+        if reasons:
+            breakdown = ", ".join(f"{reason}: {count}" for reason, count in sorted(reasons.items()))
+            lines.append(f"{len(self.unresolved)} unresolved ({breakdown})")
+        else:
+            lines.append("0 unresolved")
+        count = len(self.proxies)
+        lines.append(f"{count} {'proxy' if count == 1 else 'proxies'}")
+        if self.truncated:
+            lines.append("traversal was truncated: max_depth or max_nodes was reached")
+        if self.warnings:
+            lines.append(f"{len(self.warnings)} warnings")
+        return "\n".join(lines)
