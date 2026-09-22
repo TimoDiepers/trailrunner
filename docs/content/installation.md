@@ -41,8 +41,9 @@ uv sync --extra dev --extra examples
 uv run jupyter lab examples/dac.ipynb
 ```
 
-trailpack needs Python 3.12 or newer, which is why the extra is marked accordingly — on
-3.11 the rest of the extra installs and the notebook is the only thing you cannot run.
+trailpack supports Python 3.12 and 3.13, and the extra is marked accordingly — outside
+that range the rest of the extra installs and the notebook is the only thing you cannot
+run.
 
 Without `uv`:
 
