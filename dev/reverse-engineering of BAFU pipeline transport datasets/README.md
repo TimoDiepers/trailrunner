@@ -1,4 +1,5 @@
-aa# Natural gas pipeline transport: from raw EcoSpold data to a trailrunner `Model`
+
+# Natural gas pipeline transport: from raw EcoSpold data to a trailrunner `Model`
 
 How `trailrunner.models.natural_gas_pipeline_transport.NaturalGasOffshorePipelineTransport`
 was reverse-engineered from the raw BAFU-2026 ecoinvent export, end to end.
