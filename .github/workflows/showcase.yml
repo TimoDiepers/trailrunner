@@ -40,3 +40,10 @@ jobs:
         run: >
           uv run jupyter nbconvert --execute --to notebook --stdout
           examples/showcase.ipynb > /dev/null
+      - name: Execute the co-production notebook
+        # It is the showcase's other half -- the normative choices the tour
+        # points at rather than makes -- and it reads the same committed cache,
+        # so it has to keep running from it too.
+        run: >
+          uv run jupyter nbconvert --execute --to notebook --stdout
+          examples/coproduction.ipynb > /dev/null
