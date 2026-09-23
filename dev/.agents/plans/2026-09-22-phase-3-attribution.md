@@ -384,7 +384,12 @@ __all__ = ["ALLOCATION_PROPERTY", "allocate"]
 In `trailrunner/orchestration/runner.py`:
 
 ```python
-    def __init__(self, glossary: Glossary, settings: Settings | None = None) -> None:
+    def __init__(self, glossary: Glossary | None = None, settings: Settings | None = None) -> None:
+        # `None` is a real case since phase 2: a ResolutionChain with no
+        # ModelProvider has no Glossary to expose, and the Orchestrator always
+        # passes `model=offer.model` into apply(), so the Runner never consults
+        # it. The annotation now says so instead of leaving a type-checker
+        # mismatch for the next reader to trip over.
         self.glossary = glossary
         self.settings = settings if settings is not None else Settings()
 ```
