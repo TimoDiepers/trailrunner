@@ -4048,6 +4048,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+brightway = [
+    { name = "bw2data", marker = "python_full_version >= '3.12'" },
+]
 dev = [
     { name = "pytest" },
 ]
@@ -4069,6 +4072,7 @@ examples = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bw2data", marker = "python_full_version >= '3.12' and extra == 'brightway'", specifier = ">=4.0" },
     { name = "dynamic-characterization", marker = "python_full_version >= '3.12' and extra == 'dynamic'", specifier = ">=1.4" },
     { name = "jupyterlab", marker = "extra == 'examples'" },
     { name = "mkdocs-autorefs", marker = "extra == 'docs'" },
@@ -4081,7 +4085,7 @@ requires-dist = [
     { name = "trailpack", marker = "python_full_version >= '3.12' and python_full_version < '3.14' and extra == 'examples'", specifier = ">=0.3" },
     { name = "zensical", marker = "extra == 'docs'" },
 ]
-provides-extras = ["dev", "docs", "dynamic", "examples"]
+provides-extras = ["brightway", "dev", "docs", "dynamic", "examples"]
 
 [[package]]
 name = "shellingham"
