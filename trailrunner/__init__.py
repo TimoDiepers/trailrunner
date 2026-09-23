@@ -22,6 +22,7 @@ from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet, FleetSelection
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
+from trailrunner.resolution import ModelProvider, Offer, ResolutionChain
 
 __version__ = "0.1.0"
 
@@ -48,11 +49,14 @@ __all__ = [
     "Glossary",
     "LocationHierarchy",
     "Model",
+    "ModelProvider",
+    "Offer",
     "Orchestrator",
     "ParameterSet",
     "Property",
     "ProxySettings",
     "Report",
+    "ResolutionChain",
     "Result",
     "Runner",
     "Settings",

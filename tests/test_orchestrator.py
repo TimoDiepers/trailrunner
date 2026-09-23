@@ -164,3 +164,17 @@ def test_priority_callable_is_passed_through_to_the_queue():
 
     Orchestrator(Glossary([Capturer(), Boiler()]), priority=priority).calculate(ROOT)
     assert HEAT in seen
+
+
+def test_orchestrator_accepts_a_resolution_chain():
+    from trailrunner.resolution import ModelProvider, ResolutionChain
+
+    chain = ResolutionChain([ModelProvider(Glossary([Capturer()]))])
+    report = Orchestrator(chain).calculate(ROOT)
+    assert len(report.nodes) == 1
+
+
+def test_node_resolution_records_the_tier_that_answered():
+    report = Orchestrator(Glossary([Capturer()])).calculate(ROOT)
+    assert report.resolutions[0]["tier"] == "model"
+    assert report.proxies == {}
