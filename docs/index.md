@@ -1,16 +1,10 @@
 # Supply chains as code with `trailrunner`
 
-`trailrunner` computes a life cycle inventory by orchestrating computational models instead of static unit-process datasets. Each model answers, for its own process, what it needs and what it emits — calculated from parameter or measurement data, for the demand actually asked of it.
-
-## 🧱 The problem
-
-A classic life cycle inventory is a matrix of fixed coefficients: one row of numbers per process, and a separate dataset for every location, year, or technology variant of the same physical activity, because a fixed coefficient can't adapt to context on its own. The catalog grows by duplication instead of by parameterization, and the links between datasets are frozen in at build time — nothing adapts when better data becomes available, or when a demand falls just outside what was modeled.
-
-A direct air capture plant, for instance, needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient; it has to live in the model — which means the calculation has to *run* the supply chain rather than invert it.
+A life cycle inventory computed by *running* the supply chain rather than inverting it — so every number can depend on where and when its process ran, and everything the run could not answer is reported rather than silently zero.
 
 ## ⚙️ How it works
 
-`trailrunner` replaces the static unit-process inventory with computational models that call each other. A *model* is a computational model (e.g., Python code) for one process: given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted — and reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. Not every model computes anything, either: it can just as well be a plain measurement, such as metered emissions for this process at this location and time, read straight from the same trailpack parquet file.
+`trailrunner` replaces the static unit-process inventory — one row of fixed coefficients per process, duplicated for every location, year and technology variant of the same physical activity — with computational models that call each other. A *model* is a computational model (e.g., Python code) for one process: given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted — and reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. A direct air capture plant, for instance, needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved: a dependency no coefficient can carry and a function carries easily. Not every model computes anything, either: it can just as well be a plain measurement, such as metered emissions for this process at this location and time, read straight from the same trailpack parquet file.
 
 Every flow that crosses a model's boundary is identified by an IRI from the hierarchical [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can look at a model's further demands, work out which other models produce those flows, and call them in turn — cascading outward through the whole supply chain until nothing is left open.
 
