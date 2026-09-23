@@ -3,8 +3,6 @@
 Computational models of processes, wired together by what they need and what
 they produce — not a static table of unit-process coefficients.
 
-Installs as `sentier-trailrunner`, imports as `trailrunner`.
-
 A *model* is a computational model (e.g., Python code) for one process,
 called whenever something demands one of its products. It reads its
 parameters from a [trailpack](https://github.com/TimoDiepers/trailpack)
