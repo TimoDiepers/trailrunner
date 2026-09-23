@@ -189,14 +189,32 @@ class Log:
                     }
                 )
             for key, value in node.resolution.items():
-                rows.append(
-                    {
-                        **base,
-                        "kind": "resolution",
-                        "key": str(key),
-                        "value": None if value is None else str(value),
-                    }
-                )
+                if isinstance(value, list):
+                    # One row per item, keyed "<singular>.0", "<singular>.1",
+                    # ... (e.g. "relaxations" -> "relaxation.0") -- a list
+                    # stringified whole lands as a Python repr a reader has to
+                    # parse back out. With one relaxation that is ugly; with
+                    # several (a node can carry more than one, in this
+                    # phase) it is unusable.
+                    singular = key[:-1] if key.endswith("s") else key
+                    for index, item in enumerate(value):
+                        rows.append(
+                            {
+                                **base,
+                                "kind": "resolution",
+                                "key": f"{singular}.{index}",
+                                "value": None if item is None else str(item),
+                            }
+                        )
+                else:
+                    rows.append(
+                        {
+                            **base,
+                            "kind": "resolution",
+                            "key": str(key),
+                            "value": None if value is None else str(value),
+                        }
+                    )
 
         for record in self.unresolved_records:
             rows.append(

@@ -66,9 +66,11 @@ a file.
 
 `tree()` is the traversal as indented text. Every line says how honestly that node was
 answered: `[model: ...]` for an exact match, `[proxy: ...]` for a node answered by relaxing the
-demand (naming what was relaxed), `[background]` for one borrowed from a cumulative dataset, or
-`[cutoff: ...]` for a demand nothing answered. A cutoff hangs under the node that asked for it,
-because that is where in the chain it happened, not under the root.
+demand (naming what was relaxed), `[background: cumulative]` or
+`[background: unit_process, incomplete]` for one borrowed from a background pack — see
+[Resolution](resolution.md) for what that distinction means — or `[cutoff: ...]` for a demand
+nothing answered. A cutoff hangs under the node that asked for it, because that is where in
+the chain it happened, not under the root.
 
 `summary()` is nodes, inventory size, unresolved counts broken down by reason, proxy count, and
 whether the traversal was truncated — the numbers to check before trusting the inventory.
@@ -94,8 +96,10 @@ prints:
 ```
 
 The electricity cutoff is indented under the DAC node, not the root, because the DAC node is
-what asked for it. Only the `model` tier exists today — `[proxy: ...]` and `[background]` start
-appearing once the proxy and background tiers land in a later phase.
+what asked for it. This particular run only ever asked the `model` tier — `[proxy: ...]` and
+`[background: ...]` appear once a [`ResolutionChain`](../api/resolution.md) with a
+generalising or background provider answers a node instead; see
+[Resolution](resolution.md).
 
 ## `warnings` and `truncated`
 
