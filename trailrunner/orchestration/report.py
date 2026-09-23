@@ -76,6 +76,13 @@ class Report:
     attribution_settings: Any = None
     """The run's AttributionSettings, so the report states the choices that
     produced it without the reader having to know how it was called."""
+    log: Any = None
+    """The Log this Report was built from.
+
+    Kept so a caller who only has the Report can still write the run out. The
+    Report is a reading of the Log, not a replacement for it, and the parquet
+    is the Log's job.
+    """
 
     @classmethod
     def from_log(
@@ -118,6 +125,7 @@ class Report:
             truncated=truncated,
             attribution=attribution,
             attribution_settings=attribution_settings,
+            log=log,
         )
 
     def _tag(self, node: NodeRecord) -> str:

@@ -185,3 +185,8 @@ def test_a_node_whose_only_record_is_its_attribution_has_no_provenance():
     report = Report.from_log(log)
     assert node_id not in report.provenance
     assert node_id in report.attribution
+
+
+def test_the_report_keeps_its_log():
+    log = Log()
+    assert Report.from_log(log).log is log
