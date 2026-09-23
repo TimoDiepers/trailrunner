@@ -74,6 +74,19 @@ demand (naming what was relaxed), `[background: cumulative]` or
 nothing answered. A cutoff hangs under the node that asked for it, because that is where in
 the chain it happened, not under the root.
 
+Each line names the flow by the last segment of its IRI, which keeps the tree readable
+without a lookup. Pass `labels=` — a dict, or any callable taking an IRI — to print the
+vocabulary's own name instead; [`PystLabels`](../api/resolution.md) supplies one from a
+committed cache, and anything the mapping has no name for falls back to the last segment,
+so a partial mapping is useful:
+
+```python
+from trailrunner.resolution import PystLabels
+
+print(report.tree(labels=PystLabels("examples/pyst_labels.json").label))
+# 5000 MJ heat from main producers of heat @CH/2030  [proxy: product: fi_1730_9 -> fi_1730]
+```
+
 `summary()` is nodes, inventory size, unresolved counts broken down by reason, proxy count, and
 whether the traversal was truncated — the numbers to check before trusting the inventory.
 

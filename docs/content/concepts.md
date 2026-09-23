@@ -30,6 +30,14 @@ A [`Flow`](../api/flow.md) is *identity*: what a thing is (`iri`), where it is (
 and when it is (`time`). It carries no amount and no unit, which keeps it hashable and lets
 it be used directly as an aggregation key in the inventory.
 
+The `iri` is a concept in the [sentier vocabulary](https://vocab.sentier.dev), not a
+free-text name: identity is what two independently written models have to agree on before
+anything can compose. Because that vocabulary is semantic and hierarchical, the same IRI
+also yields the concept's name (`skos:prefLabel`, which
+[`Report.tree(labels=...)`](../api/report.md) prints and
+[`PystLabels`](../api/resolution.md) caches offline) and its parents (`skos:broader`, which
+the [generalising tier](resolution.md) walks).
+
 An [`Exchange`](../api/flow.md) is a quantified flow — the `amount` and the `unit` live
 here, not on the `Flow`.
 

@@ -42,6 +42,8 @@ flowchart TB
 
 **You get** a [`Report`](api/report.md): an aggregated biosphere inventory, an explicit list of everything that stayed *unresolved*, which tier answered each node, and the provenance of every parameter fallback taken along the way.
 
+**Every flow is keyed on an IRI from the [sentier vocabulary](https://vocab.sentier.dev)**, not a free-text name: a `Demand` for a product IRI finds whoever declared that same IRI in `produces`, which is what lets two people's models meet at all. The vocabulary is semantic and hierarchical, so a concept also carries its own `skos:prefLabel` — the name [`Report.tree()`](api/report.md) prints when given one — and its `skos:broader` parent, which is the ladder the [generalising tier](content/resolution.md) climbs when nobody produces the exact concept asked for.
+
 The seams are deliberate. The traversal never learns how a process works, and a process never learns what else is in the supply chain: a model *returns* demands rather than looking anything up, so it cannot reach into the graph and does not know whether anyone will answer it. And because a [`Flow`](api/flow.md) carries its year the way it carries its location, the inventory comes out dated without any step of the walk knowing about time.
 
 [The 5-minute tour](showcase.md) carries one demand through all of that, with the real output at every step.

@@ -15,7 +15,9 @@ thing in Iceland as in Switzerland, in 2045 as in 2030.
 
 `trailrunner` answers it by *running* the supply chain instead. So this page is
 mostly about the machine — what the pieces are, which piece holds which
-decision, and what the run leaves behind. Every number and every block of output
+decision, and what the run leaves behind. The demand itself is not the words
+above but an IRI, `…/BONSAI2025.1/fi_2811_21`, which the
+[sentier vocabulary](https://vocab.sentier.dev) calls *Carbon dioxide*. Every number and every block of output
 came out of
 [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb),
 which runs offline, from committed files alone.
@@ -65,6 +67,25 @@ flowchart TB
 | [`Runner`](api/runner.md) | applies the model and validates the `Result` against the demand |
 | [`Log`](api/log.md) | append-only: every node, edge, cutoff, fallback and rule |
 
+**Every flow is keyed on an IRI from the
+[sentier vocabulary](https://vocab.sentier.dev)** — not a free-text name, and
+not a database row id. That is what lets two models written by two people meet
+at all: a `Demand` for `…/BONSAI2025.1/fi_1730_9` finds whoever declared that
+same IRI in `produces`, with no name matching and no unit guessing in between.
+
+And the vocabulary is *semantic and hierarchical*, which buys two more things
+this page then spends. A concept knows its own `skos:prefLabel` — so the output
+below reads in words rather than in identifiers, and those words come from the
+vocabulary, not from the notebook:
+
+```python
+VOCAB = PystLabels(EXAMPLES / "pyst_labels.json", client=None)  # cached: no network, no token
+VOCAB.label(DEMAND.flow.iri)  # -> 'Carbon dioxide'
+```
+
+And a concept knows its `skos:broader` parent, which is what beat 4 walks when
+nobody produces the exact concept that was asked for.
+
 The seams are the point. The traversal never learns how a process works, and a
 process never learns what else is in the supply chain: a model *returns*
 demands rather than looking anything up, so it cannot reach into the graph and
@@ -75,7 +96,10 @@ objects, one beat at a time.
     Say: there is no matrix in this picture, and no solver. There is a queue and
     a loop. Trace the cycle with a finger — pop, resolve, apply, the technosphere
     goes *back* on the queue — and say "that arrow is the supply chain". Then
-    say the seam sentence: a model returns demands, it never looks anything up.
+    the vocabulary, in one breath: every flow is an IRI from vocab.sentier.dev,
+    which is how two people's models meet, where the names in the output come
+    from, and — in beat 4 — what we climb when nobody matches. Then the seam
+    sentence: a model returns demands, it never looks anything up.
     Do not read the table aloud; it is there for the person who photographs the
     slide.
 
@@ -92,10 +116,10 @@ answer = plant.apply(DEMAND)  # no orchestrator involved: a model is callable on
 ```
 
 ```text
-   production    1000.0 kg   fi_2811_21    @CH/2030
- technosphere    5000.0 MJ   fi_1730_9     @CH/2030
- technosphere     400.0 kWh  fi_17100      @CH/2030
-    biosphere   -1000.0 kg   co2-from-air  @CH/2030
+   production    1000.0 kg   Carbon dioxide                   @CH/2030
+ technosphere    5000.0 MJ   heat from main producers of heat @CH/2030
+ technosphere     400.0 kWh  electricity                      @CH/2030
+    biosphere   -1000.0 kg   co2-from-air                     @CH/2030
    provenance  {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
 ```
 
@@ -109,6 +133,11 @@ about direct air capture:
 
 `provenance` is the model's own record of which parameter row it read and which
 fallbacks it took, and rides along to the report.
+
+Three of those four lines are printed with the vocabulary's own name for the
+concept. The fourth, `co2-from-air`, is an IRI `trailrunner` invented for itself
+and the vocabulary has never heard of — so there is no label to print and the
+identifier stands. Nothing marks it specially; it simply cannot be dressed up.
 
 Why the demand is an argument to a function rather than a multiplier on a
 column: the numbers inside `DirectAirCapture` depend on where and when it is
@@ -164,10 +193,7 @@ class Narrating(ResolutionChain):
     def offer(self, demand, exclude=()):
         offer = super().offer(demand, exclude=exclude)
         who = type(offer.model).__name__ if offer else "cutoff (nobody offered)"
-        print(
-            f"pop {demand.amount:>9.4g} {demand.unit:<4} "
-            f"{demand.flow.iri.rsplit('/', 1)[-1]:<24} -> {who}"
-        )
+        print(f"pop {demand.amount:>9.4g} {demand.unit:<4} {name(demand.flow.iri, 32):<32} -> {who}")
         return offer
 
 
@@ -176,20 +202,30 @@ first = Orchestrator(Narrating([tier1])).calculate(DEMAND)
 ```
 
 ```text
-pop      1000 kg   fi_2811_21               -> DirectAirCapture
-pop      5000 MJ   fi_1730_9                -> cutoff (nobody offered)
-pop       400 kWh  fi_17100                 -> GridElectricity
-pop     8.511 kWh  electricity-natural-gas  -> GasPower
-pop      76.6 kWh  electricity-wind         -> cutoff (nobody offered)
-pop     340.4 kWh  electricity-hydro        -> cutoff (nobody offered)
-pop     49.42 MJ   fi_12020                 -> cutoff (nobody offered)
+pop      1000 kg   Carbon dioxide                   -> DirectAirCapture
+pop      5000 MJ   heat from main producers of heat -> cutoff (nobody offered)
+pop       400 kWh  electricity                      -> GridElectricity
+pop     8.511 kWh  electricity-natural-gas          -> GasPower
+pop      76.6 kWh  electricity-wind                 -> cutoff (nobody offered)
+pop     340.4 kWh  electricity-hydro                -> cutoff (nobody offered)
+pop     49.42 MJ   Natural gas, liquefied or in th… -> cutoff (nobody offered)
 ```
 
 Seven pops, breadth-first, and every pop after the first is a demand some
-earlier model returned. Three found a model; four found nobody. Nothing was
-dropped and nothing was quietly zero — the misses are cutoff leaves in the
-report, each with a reason and a parent, and `tree()` is the log read back as
-the graph it recorded.
+earlier model returned. Three found a model; four found nobody.
+
+Two lines still read as identifiers — `electricity-wind`, `electricity-hydro` —
+because those IRIs are `trailrunner`'s own invention and the vocabulary has no
+concept, and so no label, for them. Worth noticing now: they are exactly the
+demands beat 4 will *not* be able to generalise either.
+
+Nothing was dropped and nothing was quietly zero — the misses are cutoff leaves
+in the report, each with a reason and a parent, and `tree()` is the log read
+back as the graph it recorded, named the same way:
+
+```python
+print(first.tree(labels=VOCAB.label))  # the vocabulary's names, where it has one
+```
 
 ```text
 3 nodes, 2 inventory entries
@@ -197,13 +233,13 @@ the graph it recorded.
 0 proxies
 attribution: allocation=none, capital=per_output
 
-1000 kg fi_2811_21 @CH/2030  [model: DirectAirCapture]
-  400 kWh fi_17100 @CH/2030  [model: GridElectricity]
+1000 kg Carbon dioxide @CH/2030  [model: DirectAirCapture]
+  400 kWh electricity @CH/2030  [model: GridElectricity]
     8.51064 kWh electricity-natural-gas @CH/2030  [model: GasPower]
-      49.4166 MJ fi_12020 @CH/2030  [cutoff: no_model_found]
+      49.4166 MJ Natural gas, liquefied or in the gaseous state @CH/2030  [cutoff: no_model_found]
     76.5957 kWh electricity-wind @CH/2030  [cutoff: no_model_found]
     340.426 kWh electricity-hydro @CH/2030  [cutoff: no_model_found]
-  5000 MJ fi_1730_9 @CH/2030  [cutoff: no_model_found]
+  5000 MJ heat from main producers of heat @CH/2030  [cutoff: no_model_found]
 ```
 
 A loop in the supply chain is bounded, not solved: every visit is its own node,
@@ -224,7 +260,10 @@ uv run trailrunner run \
 
 ??? note "Presenter note (0:50)"
     Say: this is the loop from beat 1, printing itself — the trace is the queue
-    order, not a summary written afterwards. Read one cutoff line out loud, then
+    order, not a summary written afterwards. If anyone is reading closely, the
+    two lines still showing identifiers are our own invented IRIs — the
+    vocabulary has no name for them because it has no concept for them. Read
+    one cutoff line out loud, then
     say: a matrix gives you a number here and no list of what was missing from
     it; this gives you both. The heat cutoff at 5000 MJ is the biggest of them,
     and it is the next beat.
@@ -244,11 +283,13 @@ CHAIN = ResolutionChain([tier1, tier2, BackgroundProvider(pack)])
 report = Orchestrator(CHAIN, settings=settings).calculate(DEMAND)
 ```
 
-**Tier 2 generalises the demand.** Nothing produces `fi_1730_9`, "heat from main
-producers of heat". One level up `skos:broader` sits `fi_1730`, "Steam and hot
-water" — a real BONSAI concept, read from the committed
-`examples/pyst_cache.json`: no network, no token. A gas CHP registered there
-answers the relaxed demand.
+**Tier 2 generalises the demand**, and this is what a *hierarchical*
+vocabulary buys. Nothing produces `fi_1730_9`, "heat from main producers of
+heat". One `skos:broader` step up sits `fi_1730`, "Steam and hot water" — a real
+BONSAI concept with a real parent link, read from the committed
+`examples/pyst_cache.json`: no network, no token. A gas CHP registered at the
+parent answers the relaxed demand. The concession is a walk up the vocabulary,
+not a guess at a similar-sounding name.
 
 **Tier 3 borrows a dataset.** Given its `Fleet`, `DirectAirCapture` demands each
 plant's construction **in the year that plant was built**. A construction model
@@ -269,12 +310,12 @@ are the library, and every block of output below is what it actually printed.
 5 proxies (4 incomplete)
 attribution: allocation=economic, capital=per_output
 
-1000 kg fi_2811_21 @CH/2030  [model: DirectAirCapture]
-  5000 MJ fi_1730_9 @CH/2030  [proxy: product: fi_1730_9 -> fi_1730]
-    5070.42 MJ fi_12020 @CH/2030  [cutoff: generalisation_exhausted]
-  400 kWh fi_17100 @CH/2030  [model: GridElectricity]
+1000 kg Carbon dioxide @CH/2030  [model: DirectAirCapture]
+  5000 MJ heat from main producers of heat @CH/2030  [proxy: product: fi_1730_9 -> fi_1730]
+    5070.42 MJ Natural gas, liquefied or in the gaseous state @CH/2030  [cutoff: generalisation_exhausted]
+  400 kWh electricity @CH/2030  [model: GridElectricity]
     8.51064 kWh electricity-natural-gas @CH/2030  [model: GasPower]
-      49.4166 MJ fi_12020 @CH/2030  [cutoff: generalisation_exhausted]
+      49.4166 MJ Natural gas, liquefied or in the gaseous state @CH/2030  [cutoff: generalisation_exhausted]
     76.5957 kWh electricity-wind @CH/2030  [cutoff: generalisation_exhausted]
     340.426 kWh electricity-hydro @CH/2030  [cutoff: generalisation_exhausted]
   11.5385 kg/year direct-air-capture-plant @CH/2026  [model: DacPlantConstruction]
@@ -295,7 +336,14 @@ every non-exact answer:
        asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9 @CH/2030
     answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730 @CH/2030
         tier: generalising
+
+   asked, in words: heat from main producers of heat
+answered, in words: Steam and hot water
 ```
+
+The record keeps the IRIs, because those are what was matched; the names are
+there so a reader can see, in one line, exactly how much was conceded — *heat
+from main producers of heat*, answered with *steam and hot water*.
 
 ![The traversal, coloured by the tier that answered each node](assets/showcase/sankey.svg)
 
@@ -308,7 +356,9 @@ The borrowed rows say `incomplete` because the pack holds each dataset's
 
     - `direct-air-capture-plant` is **not** a vocabulary concept — the service
       answers 404 for it — so the product dimension cannot generalise it, and
-      nothing here pretends otherwise.
+      nothing here pretends otherwise. It is also why that line, and the
+      borrowed `steel-low-alloyed` and `aluminium-primary` under it, print as
+      identifiers: no concept, no `skos:prefLabel`, no name.
     - `electricity-wind`, `electricity-hydro` and `electricity-natural-gas` are
       likewise `trailrunner`'s own invented IRIs. They stay cutoffs.
     - The background pack has **no electricity dataset, on purpose**: a grid-mix
@@ -318,9 +368,11 @@ The borrowed rows say `incomplete` because the pack holds each dataset's
 
 ??? note "Presenter note (1:45)"
     Say: the chain is a list, and you wrote the list — that is the whole tier
-    mechanism. Then the two concessions: we asked for less, one level up a
-    published vocabulary, from a file in the repo; and we borrowed a dataset
-    somebody else made. Read the proxy tag aloud. Point at the word `incomplete`
+    mechanism. Then the two concessions: we asked for less, one `skos:broader`
+    step up a published vocabulary, from a file in the repo; and we borrowed a
+    dataset somebody else made. Read the proxy tag aloud, then the two "in
+    words" lines — heat from main producers of heat, answered with steam and hot
+    water. That pair is the clearest thing on the page about what a proxy costs. Point at the word `incomplete`
     and say: that is a borrowed row whose own upstream we do not have, and it is
     labelled, not laundered. If asked about the electricity cutoffs, use the box
     above — it is the strongest thing on the page. Read the "written on this

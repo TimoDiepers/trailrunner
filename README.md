@@ -9,6 +9,11 @@ computes one by *traversing* a supply chain of models instead — Python code, o
 per process — so a process can depend on its demand, its location and its year,
 and every flow keeps the date and place it happened at.
 
+Every flow is keyed on an IRI from the semantic, hierarchical
+[sentier vocabulary](https://vocab.sentier.dev): that is how two people's models
+meet, where the names in a printed report come from (`skos:prefLabel`), and what
+a demand nobody matches exactly is generalised along (`skos:broader`).
+
 ```mermaid
 flowchart TB
     D([the demand]) --> Q[[Queue]]

@@ -287,3 +287,29 @@ cannot check, a network failure while checking — because "nobody asked" is not
 vocabulary says no". `dev/warm_pyst_cache.py` prints the unknown IRIs in a block nobody can
 miss, and caches nothing for them: an IRI that is not a concept must not end up in a
 committed cache file looking like one.
+
+### Names: the other half of a concept
+
+The same vocabulary that says what generalises to what also says what each concept is
+*called*. [`PystLabels`](../api/resolution.md) reads `skos:prefLabel` on the same bargain as
+the taxonomy — cache first, network only on a miss, committed beside the study — and
+[`Report.tree(labels=...)`](../api/report.md) prints those names instead of the IRI's last
+segment:
+
+```python
+from trailrunner.resolution import PystLabels
+
+vocab = PystLabels("examples/pyst_labels.json")  # offline: no client, no token
+vocab.label("https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9")
+# 'heat from main producers of heat'
+
+print(report.tree(labels=vocab.label))
+```
+
+A label is presentation, so every way of not having one — offline, a network failure, a
+concept with no English label, an IRI the vocabulary does not have — answers `None`, and
+the tree falls back to the IRI's last segment. That fallback is informative in its own
+right: a line that still reads as an identifier is a flow no vocabulary concept backs, which
+is the same reason the product dimension cannot relax it. Ask `known()` when you need the
+difference stated rather than inferred; `dev/warm_pyst_cache.py` warms both caches in one
+run.

@@ -22,7 +22,7 @@ themselves, a generalised demand, and a dataset borrowed from a curated pack. Se
 
 ::: trailrunner.resolution.generalising
 
-## The PyST-backed product taxonomy
+## The PyST-backed taxonomy and concept names
 
 ::: trailrunner.resolution.pyst
 
