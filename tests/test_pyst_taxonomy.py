@@ -86,7 +86,7 @@ class FakeHttpResponse:
     ``read()`` gives raw bytes.
     """
 
-    def __init__(self, payload: dict) -> None:
+    def __init__(self, payload: list | dict) -> None:
         self._body = json.dumps(payload).encode()
 
     def __enter__(self):
@@ -99,25 +99,43 @@ class FakeHttpResponse:
         return self._body
 
 
+# Real IRIs from the live ``/api/v1/relationships/`` response, verified
+# verbatim against https://vocab.sentier.dev: fi_17100's broader concept is
+# fi_1710.
+BONSAI_CHILD = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100"
+BONSAI_PARENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1710"
+
+
 def test_the_real_clients_broader_key_is_a_full_uri(tmp_path, monkeypatch):
-    """The live service answers JSON-LD keyed by full predicate URIs, not
-    prefixed names -- ``skos:broader`` lives under
-    ``http://www.w3.org/2004/02/skos/core#broader``. No network call is made:
-    ``urlopen`` itself is stubbed."""
-    payload = {"@id": GREEN_TRUCK, SKOS_BROADER: [{"@id": TRUCK}, {"@id": VEHICLE}]}
+    """``/api/v1/relationships/`` answers a *list*, keyed by full predicate
+    URIs rather than prefixed names -- ``skos:broader`` lives under
+    ``http://www.w3.org/2004/02/skos/core#broader``. This is the verbatim
+    shape the live service returned. No network call is made: ``urlopen``
+    itself is stubbed."""
+    payload = [{"@id": BONSAI_CHILD, SKOS_BROADER: [{"@id": BONSAI_PARENT}]}]
     monkeypatch.setattr(
         urllib.request, "urlopen", lambda request, *a, **kw: FakeHttpResponse(payload)
     )
     taxonomy = PystTaxonomy(tmp_path / "cache.json", client=default_client())
-    assert taxonomy.broader(GREEN_TRUCK) == [TRUCK, VEHICLE]
+    assert taxonomy.broader(BONSAI_CHILD) == [BONSAI_PARENT]
 
 
-def test_a_concept_with_no_broader_key_has_no_parents(tmp_path, monkeypatch):
-    """A top concept's response simply omits the ``broader`` key entirely --
-    that is normal, not an error, and must not raise."""
-    payload = {"@id": VEHICLE, "@type": "skos:Concept"}
+def test_a_relationship_entry_with_no_broader_key_has_no_parents(tmp_path, monkeypatch):
+    """A top concept's relationship entry simply omits the ``broader`` key
+    entirely -- that is normal, not an error, and must not raise."""
+    payload = [{"@id": BONSAI_PARENT, "@type": "skos:Concept"}]
     monkeypatch.setattr(
         urllib.request, "urlopen", lambda request, *a, **kw: FakeHttpResponse(payload)
     )
     taxonomy = PystTaxonomy(tmp_path / "cache.json", client=default_client())
-    assert taxonomy.broader(VEHICLE) == []
+    assert taxonomy.broader(BONSAI_PARENT) == []
+
+
+def test_an_empty_relationships_list_has_no_parents(tmp_path, monkeypatch):
+    """The endpoint can answer an empty list outright, not just a list with
+    an entry that lacks the key -- that must read as no parents too."""
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda request, *a, **kw: FakeHttpResponse([])
+    )
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=default_client())
+    assert taxonomy.broader(BONSAI_PARENT) == []
