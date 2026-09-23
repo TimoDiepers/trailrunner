@@ -13,12 +13,19 @@ countries from the reverse-engineered BAFU/ESU-services tier constants (see
 using plain pyarrow with a hand-built ``datapackage.json`` -- the same
 flatter shape ``tests/conftest.py``'s ``write_parameter_parquet`` writes, and
 the shape ``ParameterSet.from_parquet`` reads without needing trailpack at
-all. Nothing here invents a number: every row is copied from the notebook or
-the pipeline model's own module docstring.
+all.
+
+The DAC, grid and gas-plant rows are copied from ``examples/dac.ipynb``, and
+the pipeline rows from the reverse-engineered BAFU/ESU-services tier
+constants. The two cement tables are illustrative: plausible figures for a
+European works, chosen so that the showcase's reference row lands exactly on
+the model's reference conditions. What they demonstrate is the shape of the
+data a model reads, not the performance of any real plant.
 
 Run: ``uv run python dev/build_showcase_params.py``
 Writes: ``examples/dac_params.parquet``, ``examples/grid_electricity_params.parquet``,
-``examples/gas_power_params.parquet``, ``examples/pipeline_transport_params.parquet``.
+``examples/gas_power_params.parquet``, ``examples/pipeline_transport_params.parquet``,
+``examples/cement_params.parquet``, ``examples/cement_metered_params.parquet``.
 """
 
 import json
@@ -166,11 +173,81 @@ PIPELINE_FIELDS = [
 ]
 
 
+# --- Cement: the showcase's computed years. ---------------------------------
+# CH/2030 sits exactly at the model's reference moisture and temperature, so
+# its penalty is 1.0 and the numbers the showcase page quotes are the numbers
+# in this table. That is deliberate: a reader checking the arithmetic should
+# not have to apply a correction factor in their head on beat 1. RER and the
+# 2040 rows are off reference, which is what makes the beat-1 sensitivity
+# table show anything at all.
+CEMENT_ROWS = [
+    {"location": "CH", "time": 2030, "clinker_factor": 0.75, "fuel_demand": 3.3,
+     "steam_demand": 0.34, "electricity_demand": 0.10,
+     "moisture": 0.04, "temperature": 10.0},
+    {"location": "CH", "time": 2040, "clinker_factor": 0.68, "fuel_demand": 3.1,
+     "steam_demand": 0.31, "electricity_demand": 0.10,
+     "moisture": 0.04, "temperature": 11.0},
+    {"location": "RER", "time": 2030, "clinker_factor": 0.80, "fuel_demand": 3.5,
+     "steam_demand": 0.40, "electricity_demand": 0.11,
+     "moisture": 0.06, "temperature": 9.0},
+    {"location": "RER", "time": 2040, "clinker_factor": 0.72, "fuel_demand": 3.3,
+     "steam_demand": 0.36, "electricity_demand": 0.11,
+     "moisture": 0.055, "temperature": 10.0},
+]
+CEMENT_FIELDS = [
+    LOCATION_FIELD,
+    TIME_FIELD,
+    {"name": "clinker_factor", "type": "number", "unit": "dimensionless", "iri": None},
+    {"name": "fuel_demand", "type": "number", "unit": "MJ", "iri": None},
+    {"name": "steam_demand", "type": "number", "unit": "MJ", "iri": None},
+    {"name": "electricity_demand", "type": "number", "unit": "kWh",
+     "iri": "https://vocab.sentier.dev/parameters/electricity-demand"},
+    {"name": "moisture", "type": "number", "unit": "dimensionless", "iri": None},
+    {"name": "temperature", "type": "number", "unit": "degC",
+     "iri": "https://vocab.sentier.dev/parameters/air-temperature"},
+]
+
+# --- Cement: the years a meter covered. -------------------------------------
+# Eight years of stack CEMS and utility meters, normalised per 1000 kg of
+# cement. The measured CO2 sits a little above what the model computes for a
+# comparable year, which is the beat: a stack meter sees calcination and
+# combustion as one plume and cannot separate them, and real kilns run above
+# stoichiometry.
+CEMENT_METERED_ROWS = [
+    {"location": "CH", "time": 2018, "metered_fuel": 2810.0, "metered_steam": 410.0,
+     "metered_electricity": 116.0, "metered_co2": 601.0},
+    {"location": "CH", "time": 2019, "metered_fuel": 2775.0, "metered_steam": 404.0,
+     "metered_electricity": 115.0, "metered_co2": 594.0},
+    {"location": "CH", "time": 2020, "metered_fuel": 2740.0, "metered_steam": 399.0,
+     "metered_electricity": 113.0, "metered_co2": 587.0},
+    {"location": "CH", "time": 2021, "metered_fuel": 2702.0, "metered_steam": 396.0,
+     "metered_electricity": 112.0, "metered_co2": 580.0},
+    {"location": "CH", "time": 2022, "metered_fuel": 2661.0, "metered_steam": 391.0,
+     "metered_electricity": 110.0, "metered_co2": 571.0},
+    {"location": "CH", "time": 2023, "metered_fuel": 2610.0, "metered_steam": 385.0,
+     "metered_electricity": 108.0, "metered_co2": 562.0},
+    {"location": "CH", "time": 2024, "metered_fuel": 2560.0, "metered_steam": 372.0,
+     "metered_electricity": 106.0, "metered_co2": 551.0},
+    {"location": "CH", "time": 2025, "metered_fuel": 2518.0, "metered_steam": 364.0,
+     "metered_electricity": 104.0, "metered_co2": 543.0},
+]
+CEMENT_METERED_FIELDS = [
+    LOCATION_FIELD,
+    TIME_FIELD,
+    {"name": "metered_fuel", "type": "number", "unit": "MJ", "iri": None},
+    {"name": "metered_steam", "type": "number", "unit": "MJ", "iri": None},
+    {"name": "metered_electricity", "type": "number", "unit": "kWh", "iri": None},
+    {"name": "metered_co2", "type": "number", "unit": "kg", "iri": None},
+]
+
+
 def main() -> None:
     _write("dac_params", DAC_ROWS, DAC_FIELDS)
     _write("grid_electricity_params", GRID_ROWS, GRID_FIELDS)
     _write("gas_power_params", GAS_ROWS, GAS_FIELDS)
     _write("pipeline_transport_params", PIPELINE_ROWS, PIPELINE_FIELDS)
+    _write("cement_params", CEMENT_ROWS, CEMENT_FIELDS)
+    _write("cement_metered_params", CEMENT_METERED_ROWS, CEMENT_METERED_FIELDS)
 
 
 if __name__ == "__main__":
