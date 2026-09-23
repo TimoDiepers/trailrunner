@@ -113,8 +113,10 @@ The [`Report`](../api/report.md) reads the graph back out of the log and present
 aggregated `inventory`, the `unresolved` list, the `provenance` per node, the `nodes` and
 `edges` of the traversal, the `warnings`, and the `truncated` flag.
 
-v1 stops at the inventory: no characterization, so no single score. The unresolved list and
-the provenance table are as much a part of the answer as the numbers.
+The inventory is the traversal's output, complete and valid on its own. Characterization —
+turning it into a static score or a time-explicit curve — is a separate reading of it, done by
+[`trailrunner.assessment`](assessment.md), not a step the traversal performs. The unresolved
+list and the provenance table are as much a part of the inventory's answer as the numbers.
 
 ## Errors vs. recorded data
 

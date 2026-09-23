@@ -37,4 +37,4 @@ Real processes do not behave like that. A direct air capture plant needs more re
 
 ## 🚧 Status
 
-Early development. Inventory only — no impact characterization yet, and therefore no single score.
+Early development. The traversal produces an inventory; [`trailrunner.assessment`](content/assessment.md) is a separate reading of it that turns the inventory into a static score or a time-explicit curve.
