@@ -24,9 +24,8 @@
 - Repo root is `/Users/timodiepers/Documents/Coding/trailrunner`. Paths are
   relative to it.
 - Work on branch `feat/phase-0-foundations`, branched from `design/trailrunner-v2`.
-- Commit after every task. End each commit message with
-  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`, matching this repo's
-  existing history.
+- Commit after every task. **Commit messages carry no attribution trailer**
+  and no tooling or assistant references, per the repo owner's instruction.
 - Backwards compatibility is required: every existing test in `tests/` must
   still pass untouched after each task. New fields are added with defaults.
 
@@ -186,9 +185,7 @@ git commit -m "feat(core): give Exchange hashable co-product properties
 
 Allocation rules need something to partition on. A tuple of frozen
 Property records rather than a mapping, because Flow is an aggregation
-key and QueueItem is a frozen dataclass holding a Demand.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+key and QueueItem is a frozen dataclass holding a Demand."
 ```
 
 ---
@@ -392,9 +389,7 @@ keys in the values mapping. ProxySettings carries the practitioner's
 generalisation preference order and its budgets.
 
 Nothing reads them yet; the Runner enforces attribution in phase 3 and
-the resolution chain reads proxy in phase 2.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+the resolution chain reads proxy in phase 2."
 ```
 
 ---
@@ -643,9 +638,7 @@ A node now carries the model's name and a resolution mapping saying
 which tier matched it and what was relaxed to get there. The Report
 surfaces it as resolutions, and as proxies for the nodes that were not
 exact matches. Phase 2's provider chain fills it; today every node is
-tier 'model'.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+tier 'model'."
 ```
 
 ---
@@ -909,9 +902,7 @@ git commit -m "feat(report): add summary() and tree()
 One screenful showing the supply chain and how honestly each node was
 answered: exact model, proxy with what was relaxed, borrowed background,
 or cutoff with its reason. Both return strings rather than printing, so
-they are testable and can be written to a file.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+they are testable and can be written to a file."
 ```
 
 ---

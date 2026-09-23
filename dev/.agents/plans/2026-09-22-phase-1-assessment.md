@@ -26,8 +26,7 @@
 - All tooling runs through `uv`. Never `pip`.
 - Repo root is `/Users/timodiepers/Documents/Coding/trailrunner`.
 - Work on branch `feat/phase-1-assessment`, branched from `feat/phase-0-foundations`.
-- Commit after every task, ending each message with
-  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Commit after every task, with no attribution trailer and no tooling references.
 - Phase 0 must be merged or present: this plan assumes `Report.resolutions`
   and `Report.proxies` exist, though only Task 2 touches them.
 
@@ -363,9 +362,7 @@ git commit -m "feat(assessment): read characterization factors from parquet
 Same shape as ParameterSet: embedded datapackage metadata, the same
 location hierarchy, the same rule that a fallback is recorded rather
 than assumed. A missing CF returns None, never zero -- the caller
-reports it as uncharacterized.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+reports it as uncharacterized."
 ```
 
 ---
@@ -604,9 +601,7 @@ cumulative-by-subtree walk over the report's edges. Flows the method
 does not cover are listed, not zeroed.
 
 The dependency arrow points one way: assessment reads orchestration,
-never the reverse, so the Queue stays free of scores.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+never the reverse, so the Queue stays free of scores."
 ```
 
 ---
@@ -1012,9 +1007,7 @@ no Brightway.
 
 Flows with no function, and exchanges with no year, are reported rather
 than dropped. Behind the [dynamic] extra, lazily imported, so the static
-path still installs with pyarrow alone.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+path still installs with pyarrow alone."
 ```
 
 ---
@@ -1216,9 +1209,7 @@ git commit -m "docs(assessment): document the module, add the Brightway converte
 A hand-run script turns a bw2data method into the parquet format, with
 its flow-matching caveat stated rather than buried: a CF attached to an
 IRI nothing emits is no CF at all, and the Assessment says so in
-uncharacterized.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+uncharacterized."
 ```
 
 ---

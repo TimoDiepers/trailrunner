@@ -24,8 +24,7 @@
 - All tooling runs through `uv`. Repo root is
   `/Users/timodiepers/Documents/Coding/trailrunner`.
 - Work on branch `feat/phase-4-surfaces`, branched from `feat/phase-3-attribution`.
-- Commit after every task, ending each message with
-  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Commit after every task, with no attribution trailer and no tooling references.
 
 ## File Structure
 
@@ -572,9 +571,7 @@ Three figures, no arithmetic: everything drawn comes from a Report or an
 Assessment that already computed it. Sankey nodes are coloured by tier,
 so a reader sees which parts of the chain were modelled and which were
 borrowed before looking at any number. Transparent canvases, because the
-docs render in both themes.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+docs render in both themes."
 ```
 
 ---
@@ -880,9 +877,7 @@ Stdlib argparse only: a convenience that adds a dependency to every
 install is not one.
 
 The Report now keeps a reference to its Log, so a caller can write the
-run out without having built the Log itself.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+run out without having built the Log itself."
 ```
 
 ---
@@ -1006,9 +1001,7 @@ Seven beats on one demand -- 1000 kg CO2 captured, CH, 2030 -- from a
 fixed coefficient to a time-resolved forcing curve. Figures are
 pre-rendered and committed, PyST comes from the committed cache, and CI
 executes the notebook with no token, so the page is exactly as
-reproducible as it claims to be.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+reproducible as it claims to be."
 ```
 
 ---
