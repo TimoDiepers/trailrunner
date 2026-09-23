@@ -51,3 +51,17 @@ class MissingColumns(TrailrunnerError):
     bare ``KeyError('flow_iri')`` names neither the file nor the layout that
     was expected, which leaves the reader guessing at both.
     """
+
+
+class DuplicateBackgroundEntry(TrailrunnerError):
+    """A background pack states two datasets for one product, unit and location.
+
+    ``(product_iri, product_unit, location)`` is what
+    ``BackgroundPack.lookup`` searches on, so two datasets sharing one key is
+    a data error in exactly the way two models producing one product is (see
+    ``AmbiguousModelMatch``) and two characterization factors for one flow is
+    (see ``DuplicateFactor``): there is no rule that picks between them, so
+    silently keeping whichever came last would put an unexplained number in
+    the inventory -- and, worse here, label it with the wrong dataset name in
+    the very resolution a reader checks a borrowed number against.
+    """

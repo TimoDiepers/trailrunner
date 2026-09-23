@@ -2,6 +2,7 @@
 
 from trailrunner.core.errors import (
     AmbiguousModelMatch,
+    DuplicateBackgroundEntry,
     DuplicateFactor,
     MissingColumns,
     MissingUnit,
@@ -31,6 +32,7 @@ __all__ = [
     # ValidationError and ParameterNotFound straight to the caller, so they
     # belong here rather than behind trailrunner.core.errors.
     "AmbiguousModelMatch",
+    "DuplicateBackgroundEntry",
     "DuplicateFactor",
     "MissingColumns",
     "MissingUnit",

@@ -82,15 +82,23 @@ class Report:
         )
 
     def _tag(self, node: NodeRecord) -> str:
-        """How honestly this node was answered, in one bracket."""
+        """How honestly this node was answered, in one bracket.
+
+        A borrow's incompleteness is read from the resolution's ``complete``
+        key, not re-derived from ``basis``. ``summary()`` counts incomplete
+        proxies from ``complete``; deriving the tag from ``basis`` instead
+        meant a ``basis`` neither view recognised printed a bare
+        ``[background]`` here while ``summary()`` said "1 incomplete" — two
+        views of one node disagreeing, which is precisely what this tag
+        exists to prevent.
+        """
         tier = node.resolution.get("tier", "model")
         if tier == "background":
             basis = node.resolution.get("basis")
-            if basis == "unit_process":
-                return "[background: unit_process, incomplete]"
-            if basis == "cumulative":
-                return "[background: cumulative]"
-            return "[background]"
+            label = f"background: {basis}" if basis else "background"
+            if node.resolution.get("complete") is False:
+                label += ", incomplete"
+            return f"[{label}]"
         if tier == "generalising":
             relaxations = node.resolution.get("relaxations") or []
             joined = "; ".join(str(relaxation) for relaxation in relaxations)

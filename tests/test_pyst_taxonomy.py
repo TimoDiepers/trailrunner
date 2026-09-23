@@ -1,5 +1,9 @@
 import json
+import socket
+import urllib.error
 import urllib.request
+
+import pytest
 
 from trailrunner.resolution import PystTaxonomy, default_client
 from trailrunner.resolution.pyst import SKOS_BROADER
@@ -191,3 +195,143 @@ def test_an_empty_relationships_list_has_no_parents(tmp_path, monkeypatch):
     )
     taxonomy = PystTaxonomy(tmp_path / "cache.json", client=default_client())
     assert taxonomy.broader(BONSAI_PARENT) == []
+
+
+class UnreachableClient:
+    """Fails the way the network does: ``URLError``, or a socket timeout.
+
+    Both are ``OSError`` subclasses, which is the whole point -- the taxonomy
+    catches the family, not a list of spellings it has to keep current.
+    """
+
+    def __init__(self, error):
+        self.error = error
+        self.calls = 0
+
+    def concept_get(self, iri):
+        self.calls += 1
+        raise self.error
+
+
+class UndecodableClient:
+    """Answers with a body that is not JSON -- an error page, say."""
+
+    def concept_get(self, iri):
+        return json.loads("<html>not json</html>")
+
+
+class ShapeChangedClient:
+    """Answers something that is not a list at all."""
+
+    def concept_get(self, iri):
+        return {"@id": iri}
+
+
+class ExistenceAwareClient:
+    """A client that can also say whether a concept exists at all.
+
+    ``concept_get`` answers the way the live relationships endpoint does for
+    an IRI with no parents *and* for an IRI that is not a concept: 200 with an
+    empty list. ``concept_exists`` is the only thing that tells them apart.
+    """
+
+    def __init__(self, existing):
+        self.existing = set(existing)
+
+    def concept_get(self, iri):
+        return []
+
+    def concept_exists(self, iri):
+        return iri in self.existing
+
+
+@pytest.mark.parametrize(
+    "error",
+    [urllib.error.URLError("no route to host"), socket.timeout("timed out")],
+    ids=["urlerror", "timeout"],
+)
+def test_a_network_failure_degrades_the_dimension_rather_than_the_run(tmp_path, error):
+    """The timeout turns a hang into a failure; this turns that failure into
+    the same ``[]`` an offline run gets. A traversal must not die because one
+    of three relaxation dimensions could not be reached."""
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=UnreachableClient(error))
+    assert taxonomy.broader(GREEN_TRUCK) == []
+
+
+def test_a_network_failure_is_not_written_to_the_cache(tmp_path):
+    """Caching it would record this run's outage as a fact about the
+    vocabulary, in a file committed beside a study."""
+    path = tmp_path / "cache.json"
+    client = UnreachableClient(urllib.error.URLError("no route to host"))
+    taxonomy = PystTaxonomy(path, client=client)
+    taxonomy.broader(GREEN_TRUCK)
+    assert not path.exists()
+    taxonomy.broader(GREEN_TRUCK)
+    assert client.calls == 2
+
+
+def test_an_undecodable_body_degrades_the_dimension_too(tmp_path):
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=UndecodableClient())
+    assert taxonomy.broader(GREEN_TRUCK) == []
+
+
+def test_a_changed_response_shape_still_raises(tmp_path):
+    """Deliberately not degraded: a response that is not a list means the API
+    changed under this client, which is a bug to fix, not a dimension to do
+    without."""
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=ShapeChangedClient())
+    with pytest.raises(TypeError):
+        taxonomy.broader(GREEN_TRUCK)
+
+
+def test_an_iri_the_vocabulary_does_not_have_is_recorded_as_unknown(tmp_path):
+    """``https://vocab.sentier.dev/products/electricity`` is not a concept:
+    the concepts endpoint answers 404 while the relationships endpoint answers
+    200 with ``[]``, exactly as it does for a real top concept. ``broader()``
+    still answers ``[]`` -- a traversal must not die over it -- but the
+    taxonomy knows, and says."""
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=ExistenceAwareClient([]))
+    assert taxonomy.broader(GREEN_TRUCK) == []
+    assert taxonomy.known(GREEN_TRUCK) is False
+    assert GREEN_TRUCK in taxonomy.unknown_iris
+
+
+def test_an_unknown_iri_is_not_written_to_the_cache(tmp_path):
+    path = tmp_path / "cache.json"
+    PystTaxonomy(path, client=ExistenceAwareClient([])).broader(GREEN_TRUCK)
+    assert not path.exists()
+
+
+def test_a_real_concept_with_no_parents_is_known_not_unknown(tmp_path):
+    """The other half of the distinction: a top concept exists, has nothing
+    above it, and is cached as such."""
+    path = tmp_path / "cache.json"
+    taxonomy = PystTaxonomy(path, client=ExistenceAwareClient([TRUCK]))
+    assert taxonomy.broader(TRUCK) == []
+    assert taxonomy.known(TRUCK) is True
+    assert taxonomy.unknown_iris == frozenset()
+    assert json.loads(path.read_text())[TRUCK] == []
+
+
+def test_a_concept_with_parents_needs_no_existence_check(tmp_path):
+    """An answer that names the concept is proof enough that it exists; the
+    second endpoint is only asked when the first was ambiguous."""
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=StubClient({GREEN_TRUCK: [TRUCK]}))
+    assert taxonomy.broader(GREEN_TRUCK) == [TRUCK]
+    assert taxonomy.known(GREEN_TRUCK) is True
+
+
+def test_a_client_that_cannot_say_leaves_existence_undetermined(tmp_path):
+    """Three states, not two: nobody asked is not the same as "the vocabulary
+    says no", and calling it ``False`` would brand a concept invented on the
+    strength of a run that never checked."""
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=StubClient({}))
+    assert taxonomy.broader(GREEN_TRUCK) == []
+    assert taxonomy.known(GREEN_TRUCK) is None
+    assert taxonomy.unknown_iris == frozenset()
+
+
+def test_an_offline_run_determines_nothing(tmp_path):
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=None)
+    assert taxonomy.broader(GREEN_TRUCK) == []
+    assert taxonomy.known(GREEN_TRUCK) is None
