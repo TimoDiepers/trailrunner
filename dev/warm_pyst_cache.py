@@ -44,6 +44,14 @@ IRIS = [
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9",  # heat: "heat from main producers of heat"
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100",  # electricity: "electricity"
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020",  # natural-gas: "Natural gas, liquefied or in the gaseous state"
+    # The cement showcase -- trailrunner/models/cement.py's CEMENT, LIMESTONE
+    # and STEAM. fi_1730_6 is the specific technology the plant asks for and
+    # fi_1730 is the generic concept one skos:broader step above it; the
+    # relaxation beat in examples/showcase.ipynb walks exactly that edge, so
+    # this entry is what lets the beat resolve with no network.
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440",  # cement: "Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_15200",  # limestone: "Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_6",  # steam: "heat from electric boilers"
 ]
 
 
