@@ -17,7 +17,7 @@ def amortize(
     demanded_output: float,
     annual_output: float,
     lifetime_output: float,
-    lifetime_years: int,
+    lifetime_years: int | float,
     demand_year: int,
     build_year: int,
 ) -> float:
@@ -33,6 +33,11 @@ def amortize(
     the whole life's. They are separate arguments rather than one derived from
     the other because their difference is exactly what makes the first two
     rules give different answers.
+
+    ``lifetime_years`` may be fractional — nothing about the arithmetic
+    requires a whole number, and truncating it would make ``per_year``
+    disagree with ``per_output`` on flat output purely from rounding the
+    lifetime, not from any modelling difference between the two rules.
     """
     if rule not in CAPITAL_RULES:
         raise ValueError(

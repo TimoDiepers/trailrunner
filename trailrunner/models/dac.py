@@ -141,7 +141,7 @@ class DirectAirCapture(Model):
                 demanded_output=capacity * demand.amount / selection.total_capacity,
                 annual_output=capacity,
                 lifetime_output=capacity * lifetime,
-                lifetime_years=int(lifetime),
+                lifetime_years=lifetime,
                 demand_year=demand.flow.time,
                 build_year=build_year,
             )

@@ -60,3 +60,21 @@ def test_an_unknown_rule_is_rejected():
 def test_zero_output_is_an_error_not_a_division():
     with pytest.raises(ValueError, match="output"):
         amortize(rule="per_output", demanded_output=1.0, **dict(FLAT, annual_output=0.0))
+
+
+# A plant with a fractional lifetime. Flat output still means
+# lifetime_output == annual_output * lifetime_years, so per_year and
+# per_output must agree exactly, the same as they do for FLAT above. A
+# lifetime_years that gets truncated to an int (20.5 -> 20) breaks this
+# agreement purely from rounding, not from any real difference between the
+# two rules.
+FRACTIONAL_LIFETIME = dict(
+    capital=2_000_000.0, annual_output=1000.0, lifetime_output=20_500.0,
+    lifetime_years=20.5, build_year=2027, demand_year=2030,
+)
+
+
+def test_per_year_and_per_output_agree_on_flat_output_with_a_fractional_lifetime():
+    assert amortize(rule="per_year", demanded_output=1000.0, **FRACTIONAL_LIFETIME) == pytest.approx(
+        amortize(rule="per_output", demanded_output=1000.0, **FRACTIONAL_LIFETIME)
+    )
