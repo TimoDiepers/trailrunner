@@ -41,18 +41,20 @@ which runs offline, from committed files alone.
 
 ## 1. The shape of the run
 
-One demand goes in. Six objects pass it around until the queue is empty.
+One demand goes in. A handful of objects pass it around until the queue is empty.
 
 ```mermaid
 flowchart TB
-    D([the demand]) --> Q[[Queue]]
-    Q -->|pop| C{{ResolutionChain}}
+    D([initial demand]) --> Q[[Queue]]
+    Q -->|pop demand| C{{ResolutionChain}}
+    C -->|ask model tier: who can offer?| G[(Glossary: available models)]
+    G -->|Offer: model + demand| C
     C -->|nobody offers| X[cutoff, with a reason]
-    C -->|Offer: model + demand| R[Runner]
-    R -->|apply| M[Model: your code]
+    C -->|selected offer| R[Runner]
+    R -->|apply demand| M[Model: your code]
     M -->|Result| R
-    R -->|technosphere: what it needs| Q
-    R -->|biosphere: what it emitted| I[(inventory)]
+    R -->|Result - technosphere demands| Q
+    R -->|Result - biosphere flows| I[(inventory)]
     X --> L[(Log)]
     R --> L
     L --> P([Report])
@@ -62,7 +64,7 @@ flowchart TB
 | --- | --- |
 | [`Demand`](api/flow.md) | an amount and a unit of a `Flow` — *what*, *where*, *when* |
 | [`Queue`](api/queue.md) | the demands still waiting; FIFO unless you hand it a priority |
-| [`ResolutionChain`](api/resolution.md) | who can answer this demand? The first tier that offers wins |
+| [`ResolutionChain`](api/resolution.md) | asks each tier in order; the model tier asks the [`Glossary`](api/glossary.md) for a `(model, demand)` offer, and the first offer wins |
 | [`Model`](api/model.md) | one process, as code: `apply(demand) -> Result` |
 | [`Runner`](api/runner.md) | applies the model and validates the `Result` against the demand |
 | [`Log`](api/log.md) | append-only: every node, edge, cutoff, fallback and rule |
@@ -89,7 +91,7 @@ nobody produces the exact concept that was asked for.
 The seams are the point. The traversal never learns how a process works, and a
 process never learns what else is in the supply chain: a model *returns*
 demands rather than looking anything up, so it cannot reach into the graph and
-does not know whether anyone will answer it. The rest of this page is those six
+does not know whether anyone will answer it. The rest of this page is those
 objects, one beat at a time.
 
 ??? note "Presenter note (0:50)"
