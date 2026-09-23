@@ -45,8 +45,7 @@ in `docs/content/resolution.md`, rather than leaving a reader to infer it.
 - All tooling runs through `uv`. Repo root is
   `/Users/timodiepers/Documents/Coding/trailrunner`.
 - Work on branch `feat/phase-2-resolution`, branched from `feat/phase-1-assessment`.
-- Commit after every task, ending each message with
-  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Commit after every task, with no attribution trailer and no tooling references.
 
 ## File Structure
 
@@ -443,9 +442,7 @@ explain() produces the reason the Log records -- coverage_excluded still
 comes from tier 1, which is the more useful thing to tell the reader.
 
 Orchestrator(glossary) still works: a bare Glossary is the one-tier
-chain.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+chain."
 ```
 
 ---
@@ -831,9 +828,7 @@ indistinguishable from a wrong number.
 
 Relaxations do not compose in v2: the composed search is a cross-product
 whose preference order is a second normative choice, and inventing one
-silently is what this tier exists to prevent.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+silently is what this tier exists to prevent."
 ```
 
 ---
@@ -1114,9 +1109,7 @@ reproduced on a plane or in two years, and the generalisation a study
 took is part of its result. Plain JSON, committable beside the study.
 
 A cache miss with no client generalises less and says so through the
-report's proxies, rather than refusing to run.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+report's proxies, rather than refusing to run."
 ```
 
 ---
@@ -1534,9 +1527,7 @@ matrix starts.
 
 This is the shape a Brightway-backed provider would take -- lca.inventory
 returns the same cumulative per-unit exchanges -- so nothing above this
-tier changes when one arrives.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+tier changes when one arrives."
 ```
 
 ---
