@@ -5,11 +5,11 @@ they produce — not a static table of unit-process coefficients.
 
 Installs as `sentier-trailrunner`, imports as `trailrunner`.
 
-A *model* is Python code for one process, called whenever something demands
-one of its products. It reads its parameters from a
-[trailpack](https://github.com/TimoDiepers/trailpack) parquet file and
-answers one question: *given this demand, what did I produce, what do I still
-need, and what did I emit?* Every flow crossing that boundary — products,
+A *model* is a computational model (e.g., Python code) for one process,
+called whenever something demands one of its products. It reads its
+parameters from a [trailpack](https://github.com/TimoDiepers/trailpack)
+parquet file and answers one question: *to produce this, what other inputs do
+I need, and what did I emit?* Every flow crossing that boundary — products,
 further demands, elementary flows — is identified by an IRI from the
 hierarchical [sentier vocabulary](https://vocab.sentier.dev), not a
 free-text name. Those IRIs are what let the orchestrator work out which
