@@ -108,7 +108,9 @@ class Orchestrator:
                     QueueItem(demand=child, depth=item.depth + 1, parent=node_id, path=path)
                 )
 
-        return Report.from_log(log, truncated=truncated)
+        return Report.from_log(
+            log, truncated=truncated, attribution_settings=self.settings.attribution
+        )
 
     @staticmethod
     def _drain(queue: Queue, log: Log, reason: str) -> None:

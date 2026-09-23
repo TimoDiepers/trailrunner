@@ -13,6 +13,7 @@ plant was actually built** — so the construction inputs land in their own year
 and, once a model answers them, meet whatever background those years carry.
 """
 
+from trailrunner.attribution import amortize
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
@@ -106,13 +107,17 @@ class DirectAirCapture(Model):
 
         The demanded capture is what decides how much of the fleet is claimed:
         ``share_of_fleet = amount / total_capacity``. Each plant carries that
-        share in proportion to its own capacity, spread over its own lifetime,
-        which is what keeps a plant from being built once per year it runs::
+        share of its own capacity — ``capacity_i * share_of_fleet`` — as the
+        ``demanded_output`` handed to :func:`amortize`, which spreads the
+        plant's capital (its own capacity, standing in for what it took to
+        build) over that plant's own annual and lifetime output according to
+        ``self.settings.attribution.capital``. Under the default rule,
+        ``per_output``, this reduces to::
 
             construction_i = amount * capacity_i / (total_capacity * lifetime_i)
 
-        With one lifetime across the fleet this sums to ``amount / lifetime`` —
-        one lifetime's worth of capture buys one fleet.
+        which, with one lifetime across the fleet, sums to ``amount /
+        lifetime`` — one lifetime's worth of capture buys one fleet.
         """
         if self.fleet is None:
             return [], {}
@@ -123,29 +128,41 @@ class DirectAirCapture(Model):
         capacity_column = self.fleet.capacity_column
         lifetime_column = self.fleet.lifetime_column
         unit = selection.unit_of(capacity_column)
+        rule = self.settings.attribution.capital
 
-        construction = [
-            Demand(
-                # The plant's own location and build year, not the demand's:
-                # that displacement in time is the whole point, and a fleet
-                # resolved through the hierarchy may sit somewhere else too.
-                flow=Flow(
-                    iri=DAC_PLANT,
-                    location=plant.get("location", demand.flow.location),
-                    time=int(plant["build_year"]),
-                ),
-                amount=(
-                    demand.amount
-                    * float(plant[capacity_column])
-                    / (selection.total_capacity * float(plant[lifetime_column]))
-                ),
-                unit=unit,
+        construction = []
+        for plant in selection.plants:
+            capacity = float(plant[capacity_column])
+            lifetime = float(plant[lifetime_column])
+            build_year = int(plant["build_year"])
+            amount = amortize(
+                capacity,
+                rule=rule,
+                demanded_output=capacity * demand.amount / selection.total_capacity,
+                annual_output=capacity,
+                lifetime_output=capacity * lifetime,
+                lifetime_years=int(lifetime),
+                demand_year=demand.flow.time,
+                build_year=build_year,
             )
-            for plant in selection.plants
-        ]
+            construction.append(
+                Demand(
+                    # The plant's own location and build year, not the demand's:
+                    # that displacement in time is the whole point, and a fleet
+                    # resolved through the hierarchy may sit somewhere else too.
+                    flow=Flow(
+                        iri=DAC_PLANT,
+                        location=plant.get("location", demand.flow.location),
+                        time=build_year,
+                    ),
+                    amount=amount,
+                    unit=unit,
+                )
+            )
 
         provenance = {
             **selection.provenance,
             "share_of_fleet": demand.amount / selection.total_capacity,
+            "capital_rule": rule,
         }
         return construction, provenance
