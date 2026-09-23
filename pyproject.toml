@@ -43,6 +43,17 @@ docs = [
   "mkdocs-autorefs",
   "pymdown-extensions>=10.0",
 ]
+dynamic = [
+  # dynamic_characterization requires >=3.12, so the marker has to match it,
+  # the same way the examples extra matches trailpack's floor.
+  "dynamic_characterization>=1.4; python_version >= '3.12'",
+  "pandas>=2",
+]
+brightway = [
+  # Offline only: dev/convert_brightway_method.py writes a method parquet from
+  # an existing Brightway project. trailrunner itself never imports bw2data.
+  "bw2data>=4.0; python_version >= '3.12'",
+]
 
 [build-system]
 requires = ["hatchling>=1.27"]

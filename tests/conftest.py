@@ -43,6 +43,34 @@ def write_parameter_parquet(path, rows, fields, nested=True):
     return path
 
 
+CO2_IRI = "https://vocab.sentier.dev/flows/co2-fossil"
+CH4_IRI = "https://vocab.sentier.dev/flows/ch4-fossil"
+
+
+def write_method_parquet(path, rows, fields):
+    """Write a method parquet with the same embedded metadata trailpack writes."""
+    return write_parameter_parquet(path, rows, fields)
+
+
+@pytest.fixture
+def method_parquet_file(tmp_path):
+    """GWP100-shaped: a global CO2 factor, a regional CH4 one, both per kg."""
+    path = tmp_path / "gwp100.parquet"
+    rows = [
+        {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0},
+        {"flow_iri": CH4_IRI, "flow_unit": "kg", "location": "GLO", "cf": 29.8},
+        {"flow_iri": CH4_IRI, "flow_unit": "kg", "location": "RER", "cf": 27.0},
+    ]
+    fields = [
+        {"name": "flow_iri", "type": "string", "unit": None, "iri": None},
+        {"name": "flow_unit", "type": "string", "unit": None, "iri": None},
+        {"name": "location", "type": "string", "unit": None, "iri": None},
+        {"name": "cf", "type": "number", "unit": "kg CO2eq", "iri": None},
+    ]
+    write_method_parquet(path, rows, fields)
+    return path
+
+
 @pytest.fixture
 def dac_parameter_file(tmp_path):
     """Two locations, two years each, so fallback and interpolation can be tested."""

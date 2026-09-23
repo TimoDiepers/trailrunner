@@ -164,7 +164,10 @@ def test_a_factor_for_a_different_unit_does_not_match(method_parquet_file):
 
 def test_a_flow_without_a_location_matches_the_root_row(method_parquet_file):
     method = Method.from_parquet(method_parquet_file)
-    assert method.factor(Flow(iri=CO2_IRI), "kg").value == 1.0
+    factor = method.factor(Flow(iri=CO2_IRI), "kg")
+    assert factor.value == 1.0
+    # Nothing was asked for, so nothing was substituted.
+    assert factor.provenance["location_fallback"] is False
 
 
 def test_a_cf_column_without_a_declared_unit_raises(tmp_path):
@@ -200,6 +203,7 @@ metadata, same location hierarchy, same rule that a fallback is recorded
 rather than assumed. A method file is parameters that happen to be CFs.
 """
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -262,8 +266,6 @@ class Method:
         raw = (table.schema.metadata or {}).get(DATAPACKAGE_KEY)
         name = "method"
         if raw is not None:
-            import json
-
             name = json.loads(raw).get("name", name)
         return cls(
             rows=table.to_pylist(),
@@ -293,7 +295,7 @@ class Method:
         is the whole point: a flow nobody characterized is a gap in the method,
         not an absence of impact.
         """
-        for index, location in enumerate(self._locations(flow)):
+        for location in self._locations(flow):
             for time in (flow.time, None):
                 value = self._rows.get((flow.iri, unit, location, time))
                 if value is not None:
@@ -302,7 +304,13 @@ class Method:
                         unit=self.unit,
                         provenance={
                             "location_used": location,
-                            "location_fallback": index > 0,
+                            # Nothing was substituted if nothing was asked for: a
+                            # flow that named no location is answered by the
+                            # method's global row, which is the right answer
+                            # rather than a concession. Same rule, same wording,
+                            # as ParameterSet.at().
+                            "location_fallback": flow.location is not None
+                            and location != flow.location,
                             "time_used": time,
                             "method": self.name,
                         },
@@ -617,7 +625,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `DynamicAssessment.series` (a DataFrame with `date`, `amount`, `flow`, `activity`),
   `.curve` (a DataFrame with `date`, `amount` — the cumulative integral),
   `.total: float`, `.metric: str`, `.unit: str`, `.uncharacterized: list[str]`;
-  `DEFAULT_FUNCTIONS: dict[str, Callable]` — IRI → characterization function;
+  `default_functions() -> dict[str, Callable]` — IRI → characterization function.
+  A function rather than a module-level dict: building the table imports
+  `dynamic_characterization.ipcc_ar6`, and doing that at module scope would
+  break this module's own lazy-import rule and the pyarrow-only static path;
   `inventory_dataframe(report) -> pd.DataFrame`.
 
 `dynamic_characterization.characterize()` takes a DataFrame with exactly the

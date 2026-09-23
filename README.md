@@ -14,7 +14,8 @@ Design: `docs/superpowers/specs/2026-09-21-trailrunner-design.md`
 
 ## Status
 
-Early development. Inventory only — no impact characterization yet.
+Early development. Computes an inventory, plus static and time-explicit (dynamic)
+impact characterization of it.
 
 ## Development
 
@@ -89,6 +90,24 @@ print(report.tree())
 A demand nobody models is reported as unresolved, never silently treated as
 zero. Every parameter fallback used along the way shows up in
 `report.provenance`.
+
+## Scoring the inventory
+
+Characterization is a separate reading of the inventory above, not a step the traversal
+performs — see [`docs/content/assessment.md`](docs/content/assessment.md) for why:
+
+```python
+from trailrunner.assessment import Method, assess
+
+assessment = assess(report, Method.from_parquet("gwp100.parquet"))
+assessment.score            # total, in the method's declared unit
+assessment.uncharacterized  # flows the method has no factor for — never silently zero
+print(assessment.summary())  # the score, the method, and every reason to distrust it
+```
+
+`trailrunner` never writes a method parquet itself; convert one from an existing Brightway
+LCIA method with `dev/convert_brightway_method.py` (behind the `brightway` extra), or write one
+by hand in the layout `docs/content/assessment.md` describes.
 
 [`examples/dac.ipynb`](examples/dac.ipynb) walks through this end to end with
 explanation: writing the parameter parquet with trailpack, location fallback
