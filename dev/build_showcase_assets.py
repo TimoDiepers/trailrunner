@@ -32,6 +32,7 @@ Writes: ``docs/assets/showcase/{sankey,curve,contributions}.svg``
 
 import json
 import os
+import re
 from pathlib import Path
 
 import nbformat
@@ -60,7 +61,7 @@ FIGURES = {
             "width": 1150,
             "height": 760,
             "margin": {"l": 30, "r": 40, "t": 60, "b": 30},
-            "font": {"size": 16},
+            "font": {"size": 18},
         },
     ),
     "figure:curve": (
@@ -80,13 +81,22 @@ FIGURES = {
     ),
 }
 
-# Mid grey: ~4.5:1 against the docs' light background and against its slate
-# one, so every axis title, tick and node label is legible on both.
+# Mid grey: 4.66:1 against the docs' light background and 3.5:1 against its
+# slate one. No colour passes 4.5:1 against both -- white needs a luminance
+# below 0.183 and slate needs one above 0.236 -- so the type size carries the
+# rest of the way; see BASE_LAYOUT.
 INK = "#6c757d"
 GRID = "rgba(134,142,150,0.35)"
 
 BASE_LAYOUT = {
-    "font": {"color": INK},
+    # 14px rather than plotly's 12px default. INK is 4.66:1 against the docs'
+    # light background and 3.5:1 against its slate one, and no single colour
+    # can pass 4.5:1 against both -- the luminance windows do not overlap. At
+    # 14px and up that 3.5:1 clears the large-text threshold on the dark theme
+    # while staying comfortably above 4.5:1 on the light one, which a
+    # media-query inside the SVG could not guarantee: the docs also offer a
+    # manual theme toggle that a prefers-color-scheme rule cannot see.
+    "font": {"color": INK, "size": 14},
     "xaxis": {"gridcolor": GRID, "zerolinecolor": GRID},
     "yaxis": {"gridcolor": GRID, "zerolinecolor": GRID},
 }
@@ -118,6 +128,33 @@ _fig = {variable}.update_layout(**_json.loads(r'''{layout}'''))
 _save(_fig, r"{path}")
 print("wrote {path}")
 """
+
+
+TEXT_SHADOW = re.compile(r"text-shadow: [^;\"]*;?\s*")
+
+
+def strip_text_shadow(path: Path) -> int:
+    """Remove plotly's white halo from a saved SVG's text.
+
+    Plotly draws Sankey node labels with a hardcoded four-way white
+    ``text-shadow``, so that a label sitting on top of a coloured node bar
+    stays readable. It is not reachable from ``update_layout``: it is written
+    straight into the element's style.
+
+    Here it does only harm. These labels sit *beside* their nodes, on the
+    canvas, never on top of them -- and the canvas is transparent, because one
+    committed file has to sit on both docs themes. So the halo is a white blur
+    around grey text on the light theme, and a white glow around grey text on
+    the dark one. Both read as badly rendered rather than as emphasis.
+
+    Returns how many declarations were removed, so a plotly version that stops
+    emitting them shows up as a zero rather than as silence.
+    """
+    svg = path.read_text()
+    cleaned, count = TEXT_SHADOW.subn("", svg)
+    if count:
+        path.write_text(cleaned)
+    return count
 
 
 def tagged_cells(notebook) -> dict[str, int]:
@@ -168,7 +205,9 @@ def main() -> int:
                 client.execute_cell(saver, len(notebook.cells) - 1)
             finally:
                 notebook.cells.pop()
-            print(f"{tag:>22} -> {ASSETS / filename}")
+            removed = strip_text_shadow(ASSETS / filename)
+            halo = f"  (stripped {removed} text-shadow)" if removed else ""
+            print(f"{tag:>22} -> {ASSETS / filename}{halo}")
     return 0
 
 
