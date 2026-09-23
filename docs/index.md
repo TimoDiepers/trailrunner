@@ -1,4 +1,4 @@
-# Supply chains as code with `trailrunner`
+# Supply chains as models calling models
 
 `trailrunner` computes a life cycle inventory by orchestrating computational models instead of static unit-process datasets.
 
