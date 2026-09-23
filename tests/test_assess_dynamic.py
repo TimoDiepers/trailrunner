@@ -461,20 +461,36 @@ def test_the_showcase_chain_characterizes_its_capture_as_cooling():
     Pairing either flow with the other's function inverts the curve silently --
     a removal would read as a century of warming, and nothing would complain.
 
-    So this pins the showcase's own demand end to end, through the committed
-    example parameters and ``default_functions()`` with nothing passed: the
-    total is cooling, and the capture is not sitting in ``uncharacterized``.
+    So this pins a capture demand end to end, through the committed example
+    parameters and ``default_functions()`` with nothing passed: the total is
+    cooling, and the capture is not sitting in ``uncharacterized``.
+
+    The models are assembled here rather than loaded from
+    ``examples/showcase_models.py``. What is being guarded is a sign
+    convention in ``DirectAirCapture``, which is a library model; the showcase
+    stages whichever example is currently most useful to a reader, and the two
+    should not be able to break each other.
     """
     from pathlib import Path
 
-    from trailrunner.cli import load_models
-    from trailrunner.models.dac import CO2_AIR, CO2_CAPTURED
+    from trailrunner.models.dac import CO2_AIR, CO2_CAPTURED, DirectAirCapture
+    from trailrunner.models.electricity import GasPower, GridElectricity
     from trailrunner.orchestration.glossary import Glossary
     from trailrunner.orchestration.orchestrator import Orchestrator
+    from trailrunner.params.location import LocationHierarchy
+    from trailrunner.params.parameter_set import ParameterSet
 
-    models = load_models(
-        Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
-    )
+    examples = Path(__file__).resolve().parent.parent / "examples"
+    hierarchy = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
+
+    def params(name):
+        return ParameterSet.from_parquet(examples / name, hierarchy=hierarchy)
+
+    models = [
+        DirectAirCapture(params=params("dac_params.parquet")),
+        GridElectricity(params=params("grid_electricity_params.parquet")),
+        GasPower(params=params("gas_power_params.parquet")),
+    ]
     report = Orchestrator(Glossary(models)).calculate(
         Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg")
     )
@@ -483,3 +499,70 @@ def test_the_showcase_chain_characterizes_its_capture_as_cooling():
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
     assert dynamic.uncharacterized == []
     assert dynamic.total < 0.0
+
+
+def test_the_showcase_chain_characterizes_its_cement_as_warming():
+    """The mirror of the capture guard, for the example the showcase stages.
+
+    ``CementPlant`` writes calcination and combustion CO2 on ``co2-fossil``
+    with **positive** amounts, which is the ordinary convention. Getting that
+    backwards would be as silent as getting the removal convention backwards
+    and twice as embarrassing, since a cement works that came back cooling
+    would be quoted at us forever.
+
+    Runs the showcase's own model list, so it also fails if
+    ``examples/showcase_models.py`` stops resolving the chain at all.
+    """
+    from pathlib import Path
+
+    from trailrunner.cli import load_models
+    from trailrunner.models.cement import CEMENT, CO2_FOSSIL
+    from trailrunner.orchestration.glossary import Glossary
+    from trailrunner.orchestration.orchestrator import Orchestrator
+
+    models = load_models(
+        Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
+    )
+    report = Orchestrator(Glossary(models)).calculate(
+        Demand(flow=Flow(iri=CEMENT, location="CH", time=2030), amount=1000.0, unit="kg")
+    )
+    direct = report.inventory[(Flow(iri=CO2_FOSSIL, location="CH", time=2030), "kg")]
+    # The plant's own two exchanges are 397.5 kg of calcination and 138.6 kg
+    # of combustion. The inventory key aggregates every co2-fossil exchange at
+    # this place and year, so the grid's gas share lands here too and the
+    # total only ever exceeds the plant's own 536.1.
+    assert direct > 536.1
+
+    dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
+    assert dynamic.uncharacterized == []
+    assert dynamic.total > 0.0
+
+
+def test_the_metered_year_reaches_the_meter_and_still_characterizes():
+    """A past year is answered by the meter, and its stack figure scores.
+
+    The measured beat is only worth a beat if the measurement lands in the
+    inventory like any other exchange. One merged stack number, characterized
+    by the same ``co2-fossil`` function the computed model's two exchanges
+    use.
+    """
+    from pathlib import Path
+
+    from trailrunner.cli import load_models
+    from trailrunner.models.cement import CEMENT, CO2_FOSSIL
+    from trailrunner.orchestration.glossary import Glossary
+    from trailrunner.orchestration.orchestrator import Orchestrator
+
+    models = load_models(
+        Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
+    )
+    report = Orchestrator(Glossary(models)).calculate(
+        Demand(flow=Flow(iri=CEMENT, location="CH", time=2023), amount=1000.0, unit="kg")
+    )
+    # Same aggregation as above: 562.0 kg off the meter, plus whatever the
+    # grid burns to supply the plant's metered electricity.
+    assert report.inventory[(Flow(iri=CO2_FOSSIL, location="CH", time=2023), "kg")] > 562.0
+
+    dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
+    assert dynamic.uncharacterized == []
+    assert dynamic.total > 0.0
