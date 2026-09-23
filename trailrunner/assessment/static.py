@@ -9,6 +9,17 @@ from trailrunner.core.flow import Flow
 from trailrunner.orchestration.report import Report
 
 
+def _require_pandas():
+    try:
+        import pandas
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        raise ImportError(
+            "pandas is needed for to_dataframe(); install it with "
+            "`uv sync --extra viz` or `--extra dynamic`. The parquet log needs nothing."
+        ) from exc
+    return pandas
+
+
 @dataclass
 class Assessment:
     """A characterized inventory, plus what could not be characterized.
@@ -77,6 +88,33 @@ class Assessment:
         if self.truncated:
             lines.append("traversal was truncated: max_depth or max_nodes was reached")
         return "\n".join(lines)
+
+    def to_dataframe(self):
+        """One row per characterized flow, score descending.
+
+        Carries the **score**, not the inventory amount: the amount belongs
+        to the ``Report``, and an ``Assessment`` is a reading of a Report
+        rather than a copy of one — widening ``by_flow`` to carry both would
+        put the same number in two places that can drift. A caller who wants
+        both joins this frame with ``Report.to_dataframe()`` on
+        ``(flow_iri, unit)``.
+        """
+        pandas = _require_pandas()
+        frame = pandas.DataFrame(
+            [
+                {
+                    "flow_iri": flow.iri,
+                    "location": flow.location,
+                    "time": flow.time,
+                    "unit": unit,
+                    "score": score,
+                }
+                for (flow, unit), score in self.by_flow.items()
+            ]
+        )
+        if frame.empty:
+            return frame
+        return frame.sort_values("score", ascending=False, key=abs).reset_index(drop=True)
 
 
 def assess(report: Report, method: Method) -> Assessment:
