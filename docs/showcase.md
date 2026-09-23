@@ -43,16 +43,16 @@ One demand goes in. Six objects pass it around until the queue is empty.
 
 ```mermaid
 flowchart TB
-    D([the demand]) --> Q[[Queue]]
-    Q -->|pop| C{{ResolutionChain}}
+    D([initial demand]) --> Q[[Queue]]
+    Q -->|pop demand| C{{ResolutionChain}}
     C -->|ask model tier: who can offer?| G[(Glossary: available models)]
     G -->|Offer: model + demand| C
     C -->|nobody offers| X[cutoff, with a reason]
     C -->|selected offer| R[Runner]
-    R -->|apply| M[Model: your code]
+    R -->|apply demand| M[Model: your code]
     M -->|Result| R
-    R -->|Result.technosphere: what it needs| Q
-    R -->|Result.biosphere: what it emitted| I[(inventory)]
+    R -->|Result - technosphere demands| Q
+    R -->|Result - biosphere flows| I[(inventory)]
     X --> L[(Log)]
     R --> L
     L --> P([Report])
