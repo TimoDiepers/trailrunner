@@ -91,6 +91,11 @@ DEFAULT_TIMEOUT = 10.0
 # ``http://www.w3.org/2004/02/skos/core#broader``, not ``skos:broader``.
 SKOS_BROADER = "http://www.w3.org/2004/02/skos/core#broader"
 
+# The same payload that carries no ``broader`` (see above) does carry the
+# concept's labels, which is what ``PystLabels`` reads.
+SKOS_PREF_LABEL = "http://www.w3.org/2004/02/skos/core#prefLabel"
+DEFAULT_LANGUAGE = "en"
+
 
 class PystHttpClient:
     """A minimal client for the one PyST endpoint this module needs.
@@ -156,6 +161,42 @@ class PystHttpClient:
             if error.code == 404:
                 return False
             raise
+
+
+    def concept_payload(self, iri: str) -> Any:
+        """The concept's own JSON-LD, which carries its labels.
+
+        The same ``GET /api/v1/concepts/<percent-encoded iri>`` that
+        ``concept_exists`` probes, read rather than discarded. Separate from
+        that method because the two answer different questions and one of
+        them must keep treating a 404 as an answer; here a 404 propagates as
+        an ``HTTPError`` like any other failure, and the caller decides.
+        """
+        url = f"{self.base_url}{CONCEPTS_PATH}{urllib.parse.quote(iri, safe='')}"
+        request = urllib.request.Request(url, headers=self._headers)
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310 -- fixed host, no user input in the URL beyond the IRI
+            return json.loads(response.read())
+
+
+def preferred_label(payload: Any, language: str = DEFAULT_LANGUAGE) -> str | None:
+    """The ``skos:prefLabel`` in ``language`` from a concept payload.
+
+    The service answers a concept as either the object or a one-item list of
+    it, and its labels as ``[{"@value": ..., "@language": ...}]``. A label in
+    another language is not returned: a tree that prints one node in Romanian
+    because English was missing is worse than one that prints the IRI's last
+    segment, which is what the caller falls back to.
+    """
+    if isinstance(payload, list):
+        payload = payload[0] if payload else None
+    if not isinstance(payload, dict):
+        return None
+    for entry in payload.get(SKOS_PREF_LABEL, ()):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("@language") == language and entry.get("@value"):
+            return str(entry["@value"])
+    return None
 
 
 def default_client(base_url: str = DEFAULT_BASE_URL, timeout: float = DEFAULT_TIMEOUT) -> Any:
@@ -350,3 +391,73 @@ class PystTaxonomy:
             return bool(check(iri))
         except (OSError, json.JSONDecodeError):
             return None
+
+
+class PystLabels:
+    """The vocabulary's own names for concept IRIs, cached to disk.
+
+    The same bargain as ``PystTaxonomy``, for the other half of what a
+    concept carries: the hierarchy says *what generalises to what*, the label
+    says *what the thing is called*. A traversal prints
+    ``fi_2811_21``-shaped identifiers because that is what a flow is keyed
+    on; a reader wants "Carbon dioxide". Asking the vocabulary is what keeps
+    those two in step -- a name typed into a notebook by hand is a name that
+    can drift from the concept it claims to label.
+
+    Offline-first, and offline-safe: a miss with no client is ``None``, and
+    the caller falls back to the IRI. Nothing here can fail a run, because
+    nothing here is part of one -- labels are presentation.
+
+    ``cache_path`` is its own file rather than a section inside the broader
+    cache, so a study that already committed one keeps reading it unchanged.
+    """
+
+    def __init__(self, cache_path: str | Path, client: Any | None = None) -> None:
+        self.cache_path = Path(cache_path)
+        self.client = client
+        self._cache: dict[str, str] = self._load()
+
+    def _load(self) -> dict[str, str]:
+        if not self.cache_path.exists():
+            return {}
+        try:
+            loaded = json.loads(self.cache_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            # A damaged cache costs names, never the run.
+            return {}
+        return {k: v for k, v in loaded.items() if isinstance(v, str)}
+
+    def save(self) -> None:
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cache_path.write_text(json.dumps(self._cache, indent=2, sort_keys=True))
+
+    def label(self, iri: str, language: str = DEFAULT_LANGUAGE) -> str | None:
+        """The concept's preferred label, or ``None`` if nothing knows one.
+
+        ``None`` covers every way of not knowing -- an offline run, a
+        network failure, an IRI the vocabulary does not have (every invented
+        one this project's own models use), a concept with no English label.
+        They are one answer here on purpose: the caller's fallback is the
+        same in all four cases, and a label lookup is not the place to learn
+        that an IRI is invented. ``PystTaxonomy.known()`` is.
+        """
+        if iri in self._cache:
+            return self._cache[iri]
+        if self.client is None:
+            return None
+        payload = getattr(self.client, "concept_payload", None)
+        if payload is None:
+            return None
+        try:
+            label = preferred_label(payload(iri), language=language)
+        except (OSError, json.JSONDecodeError):
+            return None
+        if label is None:
+            return None
+        self._cache[iri] = label
+        self.save()
+        return label
+
+    def as_mapping(self) -> dict[str, str]:
+        """Everything cached, for handing to ``Report.tree(labels=...)``."""
+        return dict(self._cache)

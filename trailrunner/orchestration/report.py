@@ -1,5 +1,6 @@
 """What the caller gets back."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -30,6 +31,27 @@ def _short(iri: str) -> str:
     of vocabulary URL is a tree nobody reads.
     """
     return iri.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _namer(labels: Any) -> "Callable[[str], str]":
+    """Resolve ``tree()``'s ``labels`` argument to one IRI -> text function.
+
+    A dict and a callable are both natural things to pass — the first is a
+    cache read off disk, the second a lookup that can still miss — so both
+    are accepted and neither is required to be total.
+    """
+    if labels is None:
+        return _short
+    lookup = labels.get if hasattr(labels, "get") else labels
+
+    def name(iri: str) -> str:
+        try:
+            found = lookup(iri)
+        except Exception:  # noqa: BLE001 — a label lookup must never break a tree
+            found = None
+        return found if found else _short(iri)
+
+    return name
 
 
 def _where(flow: Flow) -> str:
@@ -157,13 +179,22 @@ class Report:
         # agreement, even for a tier a later phase's provider chain invents.
         return f"[{tier}]"
 
-    def tree(self, indent: str = "  ") -> str:
+    def tree(self, indent: str = "  ", labels: Any = None) -> str:
         """The traversal as indented text: the supply chain, and how each node
         was answered, in one screenful.
 
         Unresolved demands hang under the node that asked for them, because a
         cutoff is a property of the place in the chain where it happened.
+
+        ``labels`` maps a flow's IRI to the name to print for it — a dict, or
+        any callable taking an IRI. A flow is *keyed* on its IRI, which is
+        what makes two models agree about a product at all; but an IRI is not
+        a name, and the vocabulary that issues it also knows what it is
+        called (``trailrunner.resolution.PystLabels``). Anything the mapping
+        has no name for falls back to the IRI's last segment, so a partial
+        mapping is useful and an empty one changes nothing.
         """
+        name = _namer(labels)
         children: dict[int | None, list[NodeRecord]] = {}
         for node in self.nodes:
             children.setdefault(node.parent, []).append(node)
@@ -175,7 +206,7 @@ class Report:
         lines: list[str] = []
 
         def line(depth: int, amount: float, unit: str, flow: Flow, tag: str) -> None:
-            lines.append(f"{indent * depth}{amount:g} {unit} {_short(flow.iri)}{_where(flow)}  {tag}")
+            lines.append(f"{indent * depth}{amount:g} {unit} {name(flow.iri)}{_where(flow)}  {tag}")
 
         def walk(node: NodeRecord, depth: int) -> None:
             line(depth, node.demand.amount, node.demand.unit, node.demand.flow, self._tag(node))

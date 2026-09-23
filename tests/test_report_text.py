@@ -232,3 +232,50 @@ def test_tree_and_summary_agree_on_an_unrecognised_basis():
     report = Report.from_log(log)
     assert "incomplete" in report.tree()
     assert "1 proxy (1 incomplete)" in report.summary()
+
+
+def test_tree_prints_a_name_when_one_is_given_for_the_iri():
+    """A flow is keyed on its IRI; a reader wants what the vocabulary calls it."""
+    tree = built_report().tree(labels={CAPTURED: "Carbon dioxide", HEAT: "Steam and hot water"})
+
+    assert "1000 kg Carbon dioxide @CH/2030" in tree
+    assert "5000 MJ Steam and hot water @CH/2030" in tree
+
+
+def test_tree_names_a_cutoff_as_readily_as_a_node():
+    """The cutoff list is part of the answer, so it reads like the rest of it."""
+    tree = built_report().tree(labels={GAS: "Natural gas, liquefied or in the gaseous state"})
+
+    assert "125 kg Natural gas, liquefied or in the gaseous state @CH/2030" in tree
+
+
+def test_an_iri_the_mapping_has_no_name_for_falls_back_to_the_last_segment():
+    """Every invented IRI lands here, which is what makes a partial map useful."""
+    tree = built_report().tree(labels={CAPTURED: "Carbon dioxide"})
+
+    assert "Carbon dioxide" in tree
+    assert "natural-gas" in tree
+
+
+def test_tree_takes_a_callable_as_readily_as_a_mapping():
+    """A cache read off disk is a dict; a live lookup is a function."""
+    tree = built_report().tree(labels=lambda iri: "Named" if iri == HEAT else None)
+
+    assert "5000 MJ Named @CH/2030" in tree
+    assert "co2-captured" in tree
+
+
+def test_a_label_lookup_that_raises_does_not_break_the_tree():
+    """Labels are presentation: nothing here may cost a reader their report."""
+
+    def explode(iri):
+        raise RuntimeError("the vocabulary is down")
+
+    tree = built_report().tree(labels=explode)
+
+    assert "co2-captured" in tree
+    assert "natural-gas" in tree
+
+
+def test_no_labels_prints_exactly_what_it_printed_before():
+    assert built_report().tree(labels=None) == built_report().tree()

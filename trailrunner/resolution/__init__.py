@@ -13,7 +13,12 @@ from trailrunner.resolution.generalising import (
     Taxonomy,
 )
 from trailrunner.resolution.models import ModelProvider
-from trailrunner.resolution.pyst import PystTaxonomy, default_client
+from trailrunner.resolution.pyst import (
+    PystLabels,
+    PystTaxonomy,
+    default_client,
+    preferred_label,
+)
 
 __all__ = [
     "BackgroundDataset",
@@ -24,9 +29,11 @@ __all__ = [
     "ModelProvider",
     "Offer",
     "Provider",
+    "PystLabels",
     "PystTaxonomy",
     "ResolutionChain",
     "StaticTaxonomy",
     "Taxonomy",
     "default_client",
+    "preferred_label",
 ]

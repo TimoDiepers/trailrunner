@@ -32,7 +32,7 @@ concept), and they are printed at the end, loudly, because that is the one
 moment someone is looking.
 """
 
-from trailrunner.resolution import PystTaxonomy, default_client
+from trailrunner.resolution import PystLabels, PystTaxonomy, default_client
 
 # The real BONSAI vocabulary concepts the shipped models now use --
 # trailrunner/models/dac.py's CO2_CAPTURED/HEAT/ELECTRICITY and
@@ -49,9 +49,23 @@ IRIS = [
 
 def main() -> None:
     taxonomy = PystTaxonomy("examples/pyst_cache.json", client=default_client())
+    reached: set[str] = set()
     for iri in IRIS:
-        print(iri, "->", taxonomy.broader(iri))
+        parents = taxonomy.broader(iri)
+        print(iri, "->", parents)
+        reached.add(iri)
+        reached.update(parents)
     taxonomy.save()
+
+    # The other half of what a concept carries. The examples print a
+    # traversal, and a traversal keyed on IRIs reads as `fi_2811_21` unless
+    # something supplies the vocabulary's own name for that concept. Warmed
+    # for the parents too, since a generalised demand is answered at one.
+    labels = PystLabels("examples/pyst_labels.json", client=default_client())
+    print()
+    for iri in sorted(reached):
+        print(f"{iri} -> {labels.label(iri)!r}")
+    labels.save()
 
     unknown = sorted(taxonomy.unknown_iris)
     if unknown:
