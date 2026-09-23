@@ -20,11 +20,20 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 
-ELECTRICITY = "https://vocab.sentier.dev/products/electricity"
+# Real BONSAI vocabulary concepts (verified live against
+# https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
+# .superpowers/sdd/2026-09-22-phase-4-surfaces-and-showcase/step-0-report.md).
+# The plain "electricity"/"natural-gas" IRIs these two constants used to hold
+# were invented, not vocabulary concepts -- the concepts endpoint answered
+# 404 for both.
+ELECTRICITY = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100"  # "electricity"
+NATURAL_GAS = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020"  # "Natural gas, liquefied or in the gaseous state"
+# ELECTRICITY_GAS/WIND/HYDRO are this model's own per-source split of the grid
+# mix, not products the vocabulary defines at this granularity -- out of
+# scope for this pass; left as the invented IRIs they always were.
 ELECTRICITY_GAS = "https://vocab.sentier.dev/products/electricity-natural-gas"
 ELECTRICITY_WIND = "https://vocab.sentier.dev/products/electricity-wind"
 ELECTRICITY_HYDRO = "https://vocab.sentier.dev/products/electricity-hydro"
-NATURAL_GAS = "https://vocab.sentier.dev/products/natural-gas"
 CO2_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
 
 SOURCES = {

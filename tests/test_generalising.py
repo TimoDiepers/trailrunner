@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from trailrunner.core.errors import AmbiguousModelMatch
@@ -5,10 +7,11 @@ from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ProxySettings
+from trailrunner.models.dac import HEAT as REAL_HEAT
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.location import LocationHierarchy
-from trailrunner.resolution import GeneralisingProvider, ModelProvider, StaticTaxonomy
+from trailrunner.resolution import GeneralisingProvider, ModelProvider, PystTaxonomy, StaticTaxonomy
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GREEN_TRUCK = "https://vocab.sentier.dev/products/truck-green"
@@ -323,3 +326,55 @@ def test_a_relaxed_demand_still_carries_the_exclusion():
     assert offer.model is boiler
 
     assert provider([boiler]).offer(swiss_heat, exclude=(boiler,)) is None
+
+
+PYST_CACHE = Path(__file__).resolve().parent.parent / "examples" / "pyst_cache.json"
+
+# The real BONSAI parent of trailrunner.models.dac.HEAT (fi_1730_9, "heat
+# from main producers of heat"): fi_1730, "Steam and hot water" -- verified
+# live against https://vocab.sentier.dev and cached by dev/warm_pyst_cache.py.
+# Before the models were repointed at real vocabulary concepts, HEAT was the
+# invented "https://vocab.sentier.dev/products/heat", which the concepts
+# endpoint answers 404 for; skos:broader had nothing to walk, so this exact
+# test -- unchanged apart from which HEAT it imports -- would find no offer.
+HEAT_PARENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730"
+
+
+def test_the_committed_offline_cache_lets_a_parent_model_answer_a_child_demand():
+    """The product dimension relaxes something real, not a fixture.
+
+    Reads only the cache committed at ``examples/pyst_cache.json`` -- no
+    client, so no network and a deterministic result. A model registered at
+    the *parent* BONSAI concept (steam and hot water) answers a demand for
+    the *child* (heat from main producers of heat) exactly the way the
+    showcase's generalisation beat needs it to.
+    """
+    class SteamAndHotWaterBoiler(Model):
+        produces = [HEAT_PARENT]
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    taxonomy = PystTaxonomy(PYST_CACHE, client=None)
+    demand = Demand(flow=Flow(iri=REAL_HEAT), amount=10.0, unit="MJ")
+
+    offer = provider([SteamAndHotWaterBoiler()], taxonomy=taxonomy).offer(demand)
+
+    assert offer is not None
+    assert isinstance(offer.model, SteamAndHotWaterBoiler)
+    assert offer.demand.flow.iri == HEAT_PARENT
+    assert offer.resolution["relaxations"] == ["product: fi_1730_9 -> fi_1730"]
+
+
+def test_offline_cache_has_nothing_for_the_old_invented_heat_iri():
+    """The other half of the proof: before the repointing, this demand had no
+    candidate at all. ``HEAT`` (the module-level constant this file already
+    uses for its own hand-rolled ``StaticTaxonomy`` fixtures) is the invented
+    IRI ``trailrunner.models.dac.HEAT`` used to hold; it is not a real
+    vocabulary concept, so the committed cache -- built only from real,
+    verified concepts -- was never asked about it and has nothing cached.
+    Reading it with no client therefore answers ``[]``, exactly as it did
+    before this IRI stopped being used anywhere in the shipped models.
+    """
+    taxonomy = PystTaxonomy(PYST_CACHE, client=None)
+    assert taxonomy.broader(HEAT) == []
