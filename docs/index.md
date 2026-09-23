@@ -4,11 +4,35 @@
 
 ## 🧱 The problem
 
-A classic life cycle inventory is a matrix of fixed coefficients. Every process is linear and scale-free: ten times the demand is exactly ten times the inputs, and the numbers never depend on where or when the process runs.
+A classic life cycle inventory is a matrix of fixed coefficients: every process linear and scale-free, and the numbers the same wherever and whenever it runs. Real processes are not. A direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient — it has to live in code, which means the calculation has to *run* the supply chain rather than invert it.
 
-Real processes do not behave like that. A direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient — it has to live in code.
+## ⚙️ How it works
 
-## ✨ What `trailrunner` does
+One demand goes in. Six objects pass it around until the queue is empty.
+
+```mermaid
+flowchart TB
+    D([the demand]) --> Q[[Queue]]
+    Q -->|pop| C{{ResolutionChain}}
+    C -->|nobody offers| X[cutoff, with a reason]
+    C -->|Offer: model + demand| R[Runner]
+    R -->|apply| M[Model: your code]
+    M -->|Result| R
+    R -->|technosphere: what it needs| Q
+    R -->|biosphere: what it emitted| I[(inventory)]
+    X --> L[(Log)]
+    R --> L
+    L --> P([Report])
+```
+
+| Part | Its one job |
+| --- | --- |
+| [`Demand`](api/flow.md) | an amount and a unit of a `Flow` — *what*, *where*, *when* |
+| [`Queue`](api/queue.md) | the demands still waiting; FIFO unless you hand it a priority |
+| [`ResolutionChain`](api/resolution.md) | who can answer this demand? The first tier that offers wins: a model from the [`Glossary`](api/glossary.md), a [generalised demand](content/resolution.md), a borrowed background dataset |
+| [`Model`](api/model.md) | one process, as code: `apply(demand) -> Result` |
+| [`Runner`](api/runner.md) | applies the model and validates the [`Result`](api/result.md) against the demand |
+| [`Log`](api/log.md) | append-only: every node, edge, cutoff, fallback and rule, out to one parquet file |
 
 **You bring** a [`Model`](api/model.md) per process:
 
@@ -16,20 +40,24 @@ Real processes do not behave like that. A direct air capture plant needs more re
 - its `apply(demand)` receives the **full** demand amount, never a unit demand, so nonlinear behaviour survives
 - it returns a [`Result`](api/result.md): what it produced, which upstream demands it needs, and what it emitted
 
-**`trailrunner` figures out** who produces each demand ([`Glossary`](api/glossary.md)), checks that every model honoured its contract ([`Runner`](api/runner.md)), and walks the open demands outward until nothing is left ([`Orchestrator`](api/orchestrator.md)).
+**You get** a [`Report`](api/report.md): an aggregated biosphere inventory, an explicit list of everything that stayed *unresolved*, which tier answered each node, and the provenance of every parameter fallback taken along the way.
 
-**You get** a [`Report`](api/report.md): an aggregated biosphere inventory, an explicit list of everything that stayed *unresolved*, and the provenance of every parameter fallback taken along the way.
+The seams are deliberate. The traversal never learns how a process works, and a process never learns what else is in the supply chain: a model *returns* demands rather than looking anything up, so it cannot reach into the graph and does not know whether anyone will answer it. And because a [`Flow`](api/flow.md) carries its year the way it carries its location, the inventory comes out dated without any step of the walk knowing about time.
+
+[The 5-minute tour](showcase.md) carries one demand through all of that, with the real output at every step.
 
 ## 🧭 Design commitments
 
 - **A demand nobody models is reported, never silently treated as zero.** Cutoffs are data in the report, not gaps in the number.
-- **Nothing is substituted silently.** A location fallback `CH → RER → GLO` or an interpolated year shows up in `report.provenance`.
+- **Nothing is substituted silently.** A location fallback `CH → RER → GLO`, an interpolated year or a generalised product shows up in `report.provenance` or `report.proxies`.
 - **Two models producing the same flow is an error**, not something to resolve by precedence.
 - **Loops are truncated, not converged.** Every visit is its own node; `max_depth` and `max_nodes` bound the walk and `report.truncated` says when they bit.
+- **Value judgements are the practitioner's.** A co-producing model will not run until the study states an allocation rule, and the rule it ran under is on the report.
 
 ## 👩‍💻 Getting started
 
 - [Installation](content/installation.md)
+- [The 5-minute tour](showcase.md)
 - [Quick Start](content/getting_started/quickstart.md)
 - [Core Concepts](content/concepts.md)
 - [Writing a Model](content/writing_a_model.md)
