@@ -9,8 +9,10 @@ from trailrunner.models.cement import (
     NATURAL_GAS,
     STEAM,
     CementPlant,
+    MeteredCementPlant,
     moisture_penalty,
 )
+from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
@@ -154,3 +156,90 @@ def test_cement_plant_answers_the_full_demanded_amount_without_rescaling(cement_
     one_gas = [d for d in one.technosphere if d.flow.iri == NATURAL_GAS][0]
     many_gas = [d for d in thousand.technosphere if d.flow.iri == NATURAL_GAS][0]
     assert many_gas.amount == pytest.approx(one_gas.amount * 1000.0)
+
+
+@pytest.fixture
+def metered_params(tmp_path):
+    path = tmp_path / "cement_metered.parquet"
+    rows = [
+        {"location": "CH", "time": 2023, "metered_fuel": 2610.0, "metered_steam": 385.0,
+         "metered_electricity": 108.0, "metered_co2": 562.0},
+        {"location": "CH", "time": 2024, "metered_fuel": 2560.0, "metered_steam": 372.0,
+         "metered_electricity": 106.0, "metered_co2": 551.0},
+    ]
+    fields = [
+        {"name": "location", "type": "string", "unit": None, "iri": None},
+        {"name": "time", "type": "integer", "unit": "year", "iri": None},
+        {"name": "metered_fuel", "type": "number", "unit": "MJ", "iri": None},
+        {"name": "metered_steam", "type": "number", "unit": "MJ", "iri": None},
+        {"name": "metered_electricity", "type": "number", "unit": "kWh", "iri": None},
+        {"name": "metered_co2", "type": "number", "unit": "kg", "iri": None},
+    ]
+    write_parameter_parquet(path, rows, fields)
+    return ParameterSet.from_parquet(path, hierarchy=HIERARCHY)
+
+
+def test_metered_plant_returns_the_row_untouched(metered_params):
+    result = MeteredCementPlant(params=metered_params).apply(cement_demand(time=2023))
+    by_iri = {d.flow.iri: d for d in result.technosphere}
+    assert by_iri[NATURAL_GAS].amount == pytest.approx(2610.0)
+    assert by_iri[STEAM].amount == pytest.approx(385.0)
+    assert by_iri[ELECTRICITY].amount == pytest.approx(108.0)
+
+
+def test_metered_plant_emits_one_merged_stack_figure(metered_params):
+    result = MeteredCementPlant(params=metered_params).apply(cement_demand(time=2023))
+    assert len(result.biosphere) == 1
+    assert result.biosphere[0].flow.iri == CO2_FOSSIL
+    assert result.biosphere[0].amount == pytest.approx(562.0)
+    assert result.biosphere[0].unit == "kg"
+
+
+def test_metered_plant_still_sends_its_purchased_energy_upstream(metered_params):
+    # The emissions behind metered gas, steam and electricity happen off site.
+    # A meter at the plant boundary says nothing about them, so they stay
+    # technosphere demands and get answered by whoever supplies them.
+    result = MeteredCementPlant(params=metered_params).apply(cement_demand(time=2023))
+    assert {d.flow.iri for d in result.technosphere} == {
+        NATURAL_GAS,
+        STEAM,
+        ELECTRICITY,
+    }
+
+
+def test_metered_plant_scales_its_row_to_the_demanded_amount(metered_params):
+    plant = MeteredCementPlant(params=metered_params)
+    half = plant.apply(cement_demand(time=2023, amount=500.0))
+    assert half.biosphere[0].amount == pytest.approx(281.0)
+
+
+def test_metered_plant_records_that_it_measured_rather_than_computed(metered_params):
+    result = MeteredCementPlant(params=metered_params).apply(cement_demand(time=2023))
+    assert result.provenance["source"] == "measured"
+
+
+def test_glossary_picks_the_meter_for_a_past_year(cement_params, metered_params):
+    glossary = Glossary(
+        [CementPlant(params=cement_params), MeteredCementPlant(params=metered_params)]
+    )
+    chosen = glossary.resolve(Flow(iri=CEMENT, location="CH", time=2023))
+    assert type(chosen) is MeteredCementPlant
+
+
+def test_glossary_picks_the_model_for_a_future_year(cement_params, metered_params):
+    glossary = Glossary(
+        [CementPlant(params=cement_params), MeteredCementPlant(params=metered_params)]
+    )
+    chosen = glossary.resolve(Flow(iri=CEMENT, location="CH", time=2030))
+    assert type(chosen) is CementPlant
+
+
+def test_the_two_coverages_never_overlap(cement_params, metered_params):
+    # Two models declaring one product IRI is only safe because their year
+    # ranges are disjoint; an overlap would raise AmbiguousModelMatch on a
+    # demand nobody thought to test.
+    glossary = Glossary(
+        [CementPlant(params=cement_params), MeteredCementPlant(params=metered_params)]
+    )
+    for year in range(2018, 2051):
+        glossary.resolve(Flow(iri=CEMENT, location="CH", time=year))

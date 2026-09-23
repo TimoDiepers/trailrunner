@@ -223,3 +223,69 @@ class CementPlant(Model):
             "capital_rule": rule,
         }
         return construction, provenance
+
+
+class MeteredCementPlant(Model):
+    """The same plant, in the years it was measured rather than modelled.
+
+    This computes nothing. It reads one row of metered data and returns it,
+    which is enough to make it a model: what makes something a model here is
+    that it answers a demand, not that it calculates one.
+
+    What a meter at the plant boundary can and cannot tell you is the whole
+    point of the class. It gives one stack figure, calcination and combustion
+    together and indistinguishable, so this returns a single biosphere
+    exchange where :class:`CementPlant` returns two. The gas, steam and
+    electricity it also meters are *inputs*: their emissions happen off site,
+    so they go out as technosphere demands and get answered by whoever
+    supplies them, exactly as the computed model's do.
+
+    The row is normalised per 1000 kg of cement, so it scales with the demand.
+    A meter reading is not a fixed quantity of anything.
+    """
+
+    produces = [CEMENT]
+    coverage = Coverage(time_range=(2018, 2025))
+
+    supports = ALLOCATION_RULES
+    """Monofunctional, like :class:`CementPlant`, and for the same reason."""
+
+    REFERENCE_OUTPUT = 1000.0  # kg of cement the metered row is normalised to
+
+    def apply(self, demand: Demand) -> Result:
+        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        scale = demand.amount / self.REFERENCE_OUTPUT
+
+        def here(iri: str) -> Flow:
+            return Flow(iri=iri, location=demand.flow.location, time=demand.flow.time)
+
+        return Result(
+            production=[
+                Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)
+            ],
+            technosphere=[
+                Demand(
+                    flow=here(NATURAL_GAS),
+                    amount=row["metered_fuel"] * scale,
+                    unit=row.unit_of("metered_fuel"),
+                ),
+                Demand(
+                    flow=here(STEAM),
+                    amount=row["metered_steam"] * scale,
+                    unit=row.unit_of("metered_steam"),
+                ),
+                Demand(
+                    flow=here(ELECTRICITY),
+                    amount=row["metered_electricity"] * scale,
+                    unit=row.unit_of("metered_electricity"),
+                ),
+            ],
+            biosphere=[
+                Exchange(
+                    flow=here(CO2_FOSSIL),
+                    amount=row["metered_co2"] * scale,
+                    unit=row.unit_of("metered_co2"),
+                )
+            ],
+            provenance={**row.provenance, "source": "measured"},
+        )
