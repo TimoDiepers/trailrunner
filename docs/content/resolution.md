@@ -148,6 +148,23 @@ would not be, which is exactly what `complete: False` prevents.
 1 kg clinker @GLO/-  [background: cumulative]
 ```
 
+### A borrowed dataset may not be the product you asked for
+
+Some products have no dataset under their own name that carries any of the tracked
+elementary flows directly — the literally-named dataset turns out to be a further
+blending or processing step with nothing but technosphere inputs one level up (see
+`dev/build_background_pack.py` for the full account). For those, the pack borrows the
+nearest upstream dataset that *does* emit directly instead: as of the current pack,
+**clinker** answers a demand for cement, **liquid aluminium at plant** answers primary
+aluminium, and **converter/electric steel** answers "steel, low-alloyed". These are near
+neighbours of the product demanded, not the product under its own name.
+
+`resolution["dataset"]` always names the dataset that actually answered the demand, so
+this is never hidden — but a reader trusting a number without checking that field would
+not know the row came from a different-sounding process. Before trusting a borrowed
+number, check `resolution["dataset"]` (or the corresponding line in `report.tree()`)
+against the product you actually demanded.
+
 ### Reading `report.proxies`
 
 Every node whose resolution's `tier` is not `"model"` — a generalised match or a borrowed
