@@ -48,10 +48,20 @@ FIGURES = {
     # wrong for this particular figure: a Sankey whose node labels run off the
     # right edge, or a legend sitting on top of the secondary axis. Nothing
     # here changes a number or a colour that carries meaning.
+    # A Sankey's node labels are the one place where the canvas size is a
+    # legibility decision rather than a clipping one. The docs render this SVG
+    # into a column around 800px wide, so a 1500px canvas scales every glyph
+    # down by nearly half: 12px text arrives at about 6px and cannot be read
+    # from a seat. A narrower canvas with larger text lands close to 1:1.
     "figure:sankey": (
         "sankey_figure",
         "sankey.svg",
-        {"width": 1500, "height": 700, "margin": {"l": 30, "r": 40, "t": 60, "b": 30}},
+        {
+            "width": 1150,
+            "height": 760,
+            "margin": {"l": 30, "r": 40, "t": 60, "b": 30},
+            "font": {"size": 16},
+        },
     ),
     "figure:curve": (
         "curve_figure",
@@ -75,17 +85,36 @@ FIGURES = {
 INK = "#6c757d"
 GRID = "rgba(134,142,150,0.35)"
 
+BASE_LAYOUT = {
+    "font": {"color": INK},
+    "xaxis": {"gridcolor": GRID, "zerolinecolor": GRID},
+    "yaxis": {"gridcolor": GRID, "zerolinecolor": GRID},
+}
+
+
+def layout_for(extra: dict) -> dict:
+    """``BASE_LAYOUT`` with one figure's overrides merged one level deep.
+
+    One level is the whole requirement and the reason this is not a plain
+    ``{**BASE_LAYOUT, **extra}``: a figure that sets its own font size would
+    otherwise replace the whole font dict and silently drop the INK colour
+    that makes the text legible on both docs themes.
+    """
+    merged = {key: dict(value) for key, value in BASE_LAYOUT.items()}
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
 SAVE = """
 import json as _json
 
 from trailrunner.viz import save as _save
 
-_fig = {variable}.update_layout(
-    font=dict(color="{ink}"),
-    xaxis=dict(gridcolor="{grid}", zerolinecolor="{grid}"),
-    yaxis=dict(gridcolor="{grid}", zerolinecolor="{grid}"),
-    **_json.loads(r'''{extra}'''),
-)
+_fig = {variable}.update_layout(**_json.loads(r'''{layout}'''))
 _save(_fig, r"{path}")
 print("wrote {path}")
 """
@@ -127,9 +156,7 @@ def main() -> int:
         for tag, (variable, filename, extra) in FIGURES.items():
             source = SAVE.format(
                 variable=variable,
-                ink=INK,
-                grid=GRID,
-                extra=json.dumps(extra),
+                layout=json.dumps(layout_for(extra)),
                 path=(ASSETS / filename).as_posix(),
             )
             saver = nbformat.v4.new_code_cell(source=source)
