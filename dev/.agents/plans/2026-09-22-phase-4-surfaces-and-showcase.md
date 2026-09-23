@@ -299,8 +299,15 @@ def _plotly():
 
 
 def _label(node) -> str:
+    """Name, model, and the tier that answered — in the text, not only the colour.
+
+    Colour must never be the sole carrier of meaning: a reader in a
+    colour-blind palette, a greyscale print or a dark theme still has to see
+    which nodes were borrowed or generalised.
+    """
     iri = node.demand.flow.iri.rstrip("/").rsplit("/", 1)[-1]
-    return f"{iri} ({node.model or 'unknown'})"
+    tier = node.resolution.get("tier", "model")
+    return f"{iri} ({node.model or 'unknown'}) [{tier}]"
 
 
 def _layout(figure, title: str, xaxis: str = "", yaxis: str = "") -> None:
@@ -378,8 +385,13 @@ def curve(dynamic):
     # Two axes, because the marginal and the cumulative are different
     # dimensions: W/m2 in a year against W*yr/m2 accumulated. One axis for both
     # is the mislabel this phase's predecessor had to fix.
-    figure.update_layout(yaxis2=dict(overlaying="y", side="right",
-                                     title=dynamic.cumulative_unit))
+    # Set each axis explicitly. `update_yaxes` with no selector touches EVERY
+    # y-axis, so a shared helper would clobber yaxis2's title back to yaxis's.
+    figure.update_layout(
+        xaxis=dict(title="year"),
+        yaxis=dict(title=dynamic.unit),
+        yaxis2=dict(overlaying="y", side="right", title=dynamic.cumulative_unit),
+    )
     _layout(
         figure,
         f"{dynamic.metric} over {dynamic.horizon} years",
@@ -389,8 +401,13 @@ def curve(dynamic):
     return figure
 
 
-def contributions(assessment, top: int = 10, by: str = "flow"):
-    """The ranked contributors, by elementary flow or by node."""
+def contributions(assessment, top: int = 10, by: str = "flow", labels=None):
+    """The ranked contributors, by elementary flow or by node.
+
+    ``labels`` maps node id to a name; the caller holds the Report and passes
+    ``{node.id: node.model}``. The Assessment keys by id because it is a
+    reading of the Report, not a second copy of the graph.
+    """
     go = _plotly()
     if by == "flow":
         pairs = [
