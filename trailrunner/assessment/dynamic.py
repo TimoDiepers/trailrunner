@@ -69,6 +69,12 @@ from trailrunner.orchestration.report import Report
 
 CO2_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
 CO2_BIOGENIC_UPTAKE = "https://vocab.sentier.dev/flows/co2-uptake"
+# Spelled out here, and again in trailrunner/models/dac.py, the same way
+# CO2_FOSSIL is spelled out here and in trailrunner/models/electricity.py: this
+# table is a fact about gases, not a dependency on whoever happens to emit them,
+# so assessment does not import from models. The two sign conventions these
+# constants sit either side of are documented on default_functions().
+CO2_AIR = "https://vocab.sentier.dev/flows/co2-from-air"
 CH4_FOSSIL = "https://vocab.sentier.dev/flows/ch4-fossil"
 N2O = "https://vocab.sentier.dev/flows/n2o"
 CO = "https://vocab.sentier.dev/flows/co"
@@ -138,10 +144,34 @@ def default_functions() -> dict[tuple[str, str], Callable]:
     kilogram (their radiative efficiencies are ``radiative_efficiency_kg``).
     Applying one to an amount denominated in anything else is not a rounding
     error, it is a factor of 1000, so ``"kg"`` is stated rather than assumed.
+
+    **Two sign conventions meet in this table, so each removal flow is paired
+    with the function that matches how it is written down.**
+
+    - ``co2-from-air`` gets :func:`characterize_co2`, the *ordinary* CO2
+      function, **not** ``characterize_co2_uptake``. The flow is a removal, but
+      :class:`trailrunner.models.dac.DirectAirCapture` already writes it
+      **negative** (``amount=-demand.amount``), so it is a CO2 exchange like any
+      other and the ordinary function gives it a negative forcing.
+      ``characterize_co2_uptake`` negates its input, which applied to an
+      already-negative amount would turn 1000 kg of removal into 1000 kg of
+      warming — the sign error would be silent, and it would invert the whole
+      curve the showcase turns on.
+    - ``co2-uptake`` gets ``characterize_co2_uptake``, which is the same
+      statement read the other way: that flow's convention is a **positive**
+      amount meaning uptake, and the negation is what makes it cooling.
+
+    A model emitting a removal on one of these IRIs must therefore use that
+    IRI's convention. If a new model writes uptake on ``co2-uptake`` negatively,
+    or on ``co2-from-air`` positively, the curve flips and nothing complains —
+    which is why both conventions are written down here rather than inferred.
     """
     ipcc = _require("dynamic_characterization.ipcc_ar6")
     return {
         (CO2_FOSSIL, "kg"): ipcc.characterize_co2,
+        # Negative-amount convention: see the docstring above.
+        (CO2_AIR, "kg"): ipcc.characterize_co2,
+        # Positive-amount convention: characterize_co2_uptake negates.
         (CO2_BIOGENIC_UPTAKE, "kg"): ipcc.characterize_co2_uptake,
         (CH4_FOSSIL, "kg"): ipcc.characterize_ch4,
         (N2O, "kg"): ipcc.characterize_n2o,

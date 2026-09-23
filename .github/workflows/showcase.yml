@@ -1,0 +1,42 @@
+---
+name: Showcase
+
+# The five-minute showcase is presented on stage, from a laptop that may have no
+# network. This workflow is the standing proof that it can be: it executes the
+# notebook the docs page is made of with **no PYST_AUTH_TOKEN in the
+# environment**, so every vocabulary lookup has to come from the committed
+# examples/pyst_cache.json, exactly as it will on the day.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  tests:
+    name: Test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev --extra viz --extra dynamic
+      - run: uv run pytest -q
+
+  showcase:
+    # "without a token", not "offline": this job proves the notebook runs with
+    # no PYST_AUTH_TOKEN in the environment, which is what makes a network call
+    # structurally impossible here (PystTaxonomy is constructed with
+    # client=None). It does not sandbox the runner's network, so naming it
+    # "offline" would assert more than it tests.
+    name: Execute the showcase notebook, without a token
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev --extra examples --extra viz --extra dynamic
+      - name: Execute the showcase notebook
+        # No PYST_AUTH_TOKEN here on purpose: the showcase must run from the
+        # committed cache alone, which is exactly what it has to do on stage.
+        run: >
+          uv run jupyter nbconvert --execute --to notebook --stdout
+          examples/showcase.ipynb > /dev/null

@@ -447,3 +447,39 @@ def test_a_legacy_iri_keyed_functions_mapping_is_rejected_by_name():
             horizon=20,
             functions={CO2_IRI: lambda *args, **kwargs: None},
         )
+
+
+# --- the sign of a removal ----------------------------------------------------
+
+
+def test_the_showcase_chain_characterizes_its_capture_as_cooling():
+    """1000 kg captured must come back **negative**, from the defaults alone.
+
+    Two sign conventions live in this codebase: ``co2-from-air``, which
+    ``DirectAirCapture`` emits already negative, and ``co2-uptake``, whose
+    convention is a positive amount negated by ``characterize_co2_uptake``.
+    Pairing either flow with the other's function inverts the curve silently --
+    a removal would read as a century of warming, and nothing would complain.
+
+    So this pins the showcase's own demand end to end, through the committed
+    example parameters and ``default_functions()`` with nothing passed: the
+    total is cooling, and the capture is not sitting in ``uncharacterized``.
+    """
+    from pathlib import Path
+
+    from trailrunner.cli import load_models
+    from trailrunner.models.dac import CO2_AIR, CO2_CAPTURED
+    from trailrunner.orchestration.glossary import Glossary
+    from trailrunner.orchestration.orchestrator import Orchestrator
+
+    models = load_models(
+        Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
+    )
+    report = Orchestrator(Glossary(models)).calculate(
+        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg")
+    )
+    assert report.inventory[(Flow(iri=CO2_AIR, location="CH", time=2030), "kg")] == -1000.0
+
+    dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
+    assert dynamic.uncharacterized == []
+    assert dynamic.total < 0.0

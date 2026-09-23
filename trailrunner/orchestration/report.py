@@ -12,6 +12,17 @@ from trailrunner.orchestration.log import (
 )
 
 
+def _require_pandas():
+    try:
+        import pandas
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        raise ImportError(
+            "pandas is needed for to_dataframe(); install it with "
+            "`uv sync --extra viz` or `--extra dynamic`. The parquet log needs nothing."
+        ) from exc
+    return pandas
+
+
 def _short(iri: str) -> str:
     """The last path segment of an IRI, for a tree a human reads.
 
@@ -65,6 +76,13 @@ class Report:
     attribution_settings: Any = None
     """The run's AttributionSettings, so the report states the choices that
     produced it without the reader having to know how it was called."""
+    log: Any = None
+    """The Log this Report was built from.
+
+    Kept so a caller who only has the Report can still write the run out. The
+    Report is a reading of the Log, not a replacement for it, and the parquet
+    is the Log's job.
+    """
 
     @classmethod
     def from_log(
@@ -107,6 +125,7 @@ class Report:
             truncated=truncated,
             attribution=attribution,
             attribution_settings=attribution_settings,
+            log=log,
         )
 
     def _tag(self, node: NodeRecord) -> str:
@@ -240,3 +259,28 @@ class Report:
         if self.warnings:
             lines.append(f"{len(self.warnings)} warnings")
         return "\n".join(lines)
+
+    def to_dataframe(self):
+        """One row per node, for anyone who wants to leave for pandas.
+
+        pandas is not a core dependency; the parquet log is the
+        dependency-free way out and stays the canonical one.
+        """
+        pandas = _require_pandas()
+        return pandas.DataFrame(
+            [
+                {
+                    "node": node.id,
+                    "parent": node.parent,
+                    "depth": node.depth,
+                    "model": node.model,
+                    "tier": node.resolution.get("tier", "model"),
+                    "demand_iri": node.demand.flow.iri,
+                    "location": node.demand.flow.location,
+                    "time": node.demand.flow.time,
+                    "amount": node.demand.amount,
+                    "unit": node.demand.unit,
+                }
+                for node in self.nodes
+            ]
+        )

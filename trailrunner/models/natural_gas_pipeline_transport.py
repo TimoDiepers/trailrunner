@@ -39,7 +39,14 @@ METHANE_FOSSIL = "https://vocab.sentier.dev/flows/methane-fossil"
 ETHANE = "https://vocab.sentier.dev/flows/ethane"
 PROPANE = "https://vocab.sentier.dev/flows/propane"
 BUTANE = "https://vocab.sentier.dev/flows/butane"
-CARBON_DIOXIDE_FOSSIL = "https://vocab.sentier.dev/flows/carbon-dioxide-fossil"
+# Same spelling as electricity.py's CO2_FOSSIL and assessment/dynamic.py's
+# characterization table -- this used to be "flows/carbon-dioxide-fossil", a
+# different IRI for the same substance. The showcase runs this model
+# alongside the background pack in one inventory, and a split spelling meant
+# one of the two CO2 amounts silently went uncharacterized in the static
+# assessment and was silently dropped from the dynamic curve. Settled on
+# "co2-fossil": it is the side assessment/dynamic.py actually characterizes.
+CARBON_DIOXIDE_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
 MERCURY = "https://vocab.sentier.dev/flows/mercury"
 NMVOC = "https://vocab.sentier.dev/flows/nmvoc-unspecified-origin"
 HALON_1211 = "https://vocab.sentier.dev/flows/methane-bromochlorodifluoro-halon-1211"

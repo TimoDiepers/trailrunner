@@ -19,6 +19,9 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = ["pyarrow>=15"]
 
+[project.scripts]
+trailrunner = "trailrunner.cli:main"
+
 [project.urls]
 source = "https://github.com/TimoDiepers/trailrunner"
 homepage = "https://github.com/TimoDiepers/trailrunner"
@@ -53,6 +56,13 @@ brightway = [
   # Offline only: dev/convert_brightway_method.py writes a method parquet from
   # an existing Brightway project. trailrunner itself never imports bw2data.
   "bw2data>=4.0; python_version >= '3.12'",
+]
+viz = [
+  "plotly>=5.20",
+  # Static export for the showcase figures; the interactive figures work
+  # without it.
+  "kaleido>=0.2",
+  "pandas>=2",
 ]
 
 [build-system]

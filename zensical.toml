@@ -13,6 +13,7 @@ copyright = "Copyright &copy; 2026 trailrunner developers"
 nav = [
   { Home = [
     { Overview = "index.md" },
+    { "5-minute tour" = "showcase.md" },
   ]},
   { "User Guide" = [
     { Installation = "content/installation.md" },
