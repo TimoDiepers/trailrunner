@@ -45,8 +45,6 @@ class Runner:
                 f"no model produces {demand.flow.iri} at "
                 f"location={demand.flow.location!r} time={demand.flow.time!r}"
             )
-        result = model.apply(demand)
-        self.validate(demand, result, model=model)
 
         rule = self.settings.attribution.allocation
         supports = getattr(model, "supports", frozenset({"none"}))
@@ -55,6 +53,10 @@ class Runner:
                 f"the run's allocation rule is {rule!r} but "
                 f"{type(model).__name__} supports only {sorted(supports)}"
             )
+
+        result = model.apply(demand)
+        self.validate(demand, result, model=model)
+
         if rule == "substitution":
             return substitute(demand, result, type(model).__name__)
         return allocate(demand, result, rule, type(model).__name__)
