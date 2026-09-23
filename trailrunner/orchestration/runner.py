@@ -2,10 +2,12 @@
 
 import math
 
-from trailrunner.core.errors import NoModelFound, ValidationError
+from trailrunner.attribution.allocation import allocate
+from trailrunner.core.errors import NoModelFound, UnsupportedAttribution, ValidationError
 from trailrunner.core.flow import Demand
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
+from trailrunner.core.settings import Settings
 from trailrunner.orchestration.glossary import Glossary
 
 PRODUCTION_RELATIVE_TOLERANCE = 1e-9
@@ -26,8 +28,14 @@ class Runner:
     behind the same interface without the Orchestrator changing.
     """
 
-    def __init__(self, glossary: Glossary) -> None:
+    def __init__(self, glossary: Glossary | None = None, settings: Settings | None = None) -> None:
+        # `None` is a real case since phase 2: a ResolutionChain with no
+        # ModelProvider has no Glossary to expose, and the Orchestrator always
+        # passes `model=offer.model` into apply(), so the Runner never consults
+        # it. The annotation now says so instead of leaving a type-checker
+        # mismatch for the next reader to trip over.
         self.glossary = glossary
+        self.settings = settings if settings is not None else Settings()
 
     def apply(self, demand: Demand, model: Model | None = None) -> Result:
         if model is None:
@@ -39,7 +47,17 @@ class Runner:
             )
         result = model.apply(demand)
         self.validate(demand, result, model=model)
-        return result
+
+        rule = self.settings.attribution.allocation
+        supports = getattr(model, "supports", frozenset({"none"}))
+        if rule != "none" and rule not in supports:
+            raise UnsupportedAttribution(
+                f"the run's allocation rule is {rule!r} but "
+                f"{type(model).__name__} supports only {sorted(supports)}"
+            )
+        if rule == "substitution":
+            raise NotImplementedError("substitution lands in Task 2 of this phase")
+        return allocate(demand, result, rule, type(model).__name__)
 
     @staticmethod
     def validate(demand: Demand, result: Result, model: Model | None = None) -> None:

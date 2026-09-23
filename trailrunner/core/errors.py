@@ -53,6 +53,23 @@ class MissingColumns(TrailrunnerError):
     """
 
 
+class MissingProperty(TrailrunnerError):
+    """A co-product lacks the property the run's allocation rule partitions on.
+
+    Raised rather than defaulted: a partition over an assumed price is a
+    fabricated value judgement, and it would be invisible in the result.
+    """
+
+
+class UnsupportedAttribution(TrailrunnerError):
+    """A model cannot honour the run's attribution setting.
+
+    A model may legitimately limit how far a user setting reaches. Saying so is
+    the whole point — a model that silently ignored the setting would produce a
+    number answering a different question than the one asked.
+    """
+
+
 class DuplicateBackgroundEntry(TrailrunnerError):
     """A background pack states two datasets for one product, unit and location.
 

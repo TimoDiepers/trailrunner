@@ -176,6 +176,12 @@ class BackgroundDataset(Model):
     ``complete: False`` is what tells the reader which one happened.
     """
 
+    supports = frozenset({"none"})
+    """A borrowed row of coefficients has no co-products to partition, so no
+    allocation rule but ``none`` applies here; a run under any other rule
+    fails loudly at it rather than silently treating the borrow as if a
+    partition had been applied."""
+
     def __init__(self, entry: BackgroundEntry) -> None:
         super().__init__()
         self.entry = entry

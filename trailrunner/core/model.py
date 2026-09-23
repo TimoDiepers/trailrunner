@@ -31,6 +31,15 @@ class Model:
     coverage: Coverage | None = None
     params: Any = None
 
+    supports: frozenset[str] = frozenset({"none"})
+    """Allocation rules this model can honour.
+
+    The default is the conservative one: a model says nothing about
+    multifunctionality until its author has thought about it. A run asking for
+    a rule that is not here raises ``UnsupportedAttribution`` rather than
+    quietly answering a different question.
+    """
+
     def __init__(self, settings: Settings | None = None, params: Any = None) -> None:
         self.settings = settings if settings is not None else Settings()
         if params is not None:
@@ -51,6 +60,9 @@ class Model:
           thousandfold. Producing more than demanded is allowed.
         - Every amount in ``production`` is positive, and every exchange in
           all three lists carries a non-empty unit.
+        - ``supports`` names the allocation rules this model can honour; the
+          Runner rejects a run whose rule is not in it rather than letting the
+          model silently ignore it.
 
         The usual first line is therefore::
 
