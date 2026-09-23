@@ -200,5 +200,34 @@ def test_parquet_carries_the_model_and_one_row_per_resolution_key(tmp_path):
 
     rows = pq.read_table(path).to_pylist()
     resolution_rows = [row for row in rows if row["kind"] == "resolution"]
-    assert {row["key"] for row in resolution_rows} == {"tier", "relaxations"}
+    assert {row["key"] for row in resolution_rows} == {"tier", "relaxation.0"}
     assert all(row["model"] == "GridElectricity" for row in rows)
+
+
+def test_parquet_writes_one_resolution_row_per_relaxation(tmp_path):
+    """A list value under 'relaxations' must not be stringified whole -- a
+    reader should never have to parse a Python repr like "['a', 'b']" out of
+    a single cell."""
+    log = Log()
+    demand = a_demand()
+    log.write(
+        demand,
+        a_result(demand),
+        model="GridElectricity",
+        resolution={
+            "tier": "generalising",
+            "relaxations": ["location: CH -> RER", "time: 2030 -> 2025"],
+        },
+    )
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+
+    rows = pq.read_table(path).to_pylist()
+    relaxation_rows = {
+        row["key"]: row["value"] for row in rows if row["kind"] == "resolution" and row["key"].startswith("relaxation.")
+    }
+    assert relaxation_rows == {
+        "relaxation.0": "location: CH -> RER",
+        "relaxation.1": "time: 2030 -> 2025",
+    }
+    assert all("[" not in value and "]" not in value for value in relaxation_rows.values())

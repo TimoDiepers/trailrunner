@@ -8,6 +8,8 @@ from trailrunner.orchestration.log import Log
 from trailrunner.orchestration.queue import Queue, QueueItem
 from trailrunner.orchestration.report import Report
 from trailrunner.orchestration.runner import Runner
+from trailrunner.resolution.chain import ResolutionChain
+from trailrunner.resolution.models import ModelProvider
 
 
 class Orchestrator:
@@ -26,14 +28,26 @@ class Orchestrator:
 
     def __init__(
         self,
-        glossary: Glossary,
+        resolver: Glossary | ResolutionChain,
         runner: Runner | None = None,
         max_depth: int = 10,
         max_nodes: int = 1000,
         priority: Callable[[Demand], float] | None = None,
     ) -> None:
-        self.glossary = glossary
-        self.runner = runner if runner is not None else Runner(glossary)
+        # A bare Glossary is still a valid argument: it is the one-tier chain,
+        # and every v1 caller passes one.
+        self.chain = (
+            resolver
+            if isinstance(resolver, ResolutionChain)
+            else ResolutionChain([ModelProvider(resolver)])
+        )
+        self.glossary = self.chain.glossary
+        # self.glossary can be None here (a chain with no ModelProvider). That
+        # is safe today because the Orchestrator always passes
+        # model=offer.model into runner.apply below, so the Runner never
+        # consults its own glossary; a later phase will change the Runner's
+        # constructor so this can't be relied on by accident.
+        self.runner = runner if runner is not None else Runner(self.glossary)
         self.max_depth = max_depth
         self.max_nodes = max_nodes
         self.priority = priority
@@ -57,41 +71,26 @@ class Orchestrator:
                 log.unresolved(item.demand, reason="max_depth", depth=item.depth, parent=item.parent)
                 continue
 
-            model = self.glossary.resolve(item.demand.flow)
-            if model is None:
-                # "Nobody models this" and "a model does, but its coverage
-                # rejected this flow" are different problems with different
-                # fixes — widen the coverage, or fill in the year the flow is
-                # missing. Reporting the second as the first sends the reader
-                # looking for a model that is already registered.
-                near_misses = self.glossary.declared_models(item.demand.flow)
-                if near_misses:
-                    names = ", ".join(type(m).__name__ for m in near_misses)
-                    log.unresolved(
-                        item.demand,
-                        reason="coverage_excluded",
-                        depth=item.depth,
-                        parent=item.parent,
-                        detail=(
-                            f"{names} declares this product but its coverage does not "
-                            f"cover location={item.demand.flow.location!r} "
-                            f"time={item.demand.flow.time!r}"
-                        ),
-                    )
-                else:
-                    log.unresolved(
-                        item.demand, reason="no_model_found", depth=item.depth, parent=item.parent
-                    )
+            offer = self.chain.offer(item.demand)
+            if offer is None:
+                reason, detail = self.chain.explain(item.demand)
+                log.unresolved(
+                    item.demand,
+                    reason=reason,
+                    depth=item.depth,
+                    parent=item.parent,
+                    detail=detail or None,
+                )
                 continue
 
-            result = self.runner.apply(item.demand, model=model)
+            result = self.runner.apply(offer.demand, model=offer.model)
             node_id = log.write(
                 item.demand,
                 result,
                 depth=item.depth,
                 parent=item.parent,
-                model=type(model).__name__,
-                resolution={"tier": "model", "model": type(model).__name__},
+                model=type(offer.model).__name__,
+                resolution=dict(offer.resolution),
             )
 
             if item.demand.flow.iri in item.path:

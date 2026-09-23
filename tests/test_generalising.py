@@ -1,0 +1,308 @@
+import pytest
+
+from trailrunner.core.errors import AmbiguousModelMatch
+from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.model import Model
+from trailrunner.core.result import Result
+from trailrunner.core.settings import ProxySettings
+from trailrunner.orchestration.glossary import Glossary
+from trailrunner.params.coverage import Coverage
+from trailrunner.params.location import LocationHierarchy
+from trailrunner.resolution import GeneralisingProvider, ModelProvider, StaticTaxonomy
+
+HEAT = "https://vocab.sentier.dev/products/heat"
+GREEN_TRUCK = "https://vocab.sentier.dev/products/truck-green"
+TRUCK = "https://vocab.sentier.dev/products/truck"
+VEHICLE = "https://vocab.sentier.dev/products/road-vehicle"
+
+HIERARCHY = LocationHierarchy({"CH": "RER", "RER": "GLO"})
+
+
+class RegionalBoiler(Model):
+    produces = [HEAT]
+    coverage = Coverage(locations=frozenset({"RER"}))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+class DatedBoiler(Model):
+    produces = [HEAT]
+    coverage = Coverage(time_range=(2035, 2050))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+class GenericTruck(Model):
+    produces = [TRUCK]
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+class GenericVehicle(Model):
+    produces = [VEHICLE]
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+def provider(models, settings=None, taxonomy=None):
+    return GeneralisingProvider(
+        ModelProvider(Glossary(models)),
+        settings=settings or ProxySettings(),
+        hierarchy=HIERARCHY,
+        taxonomy=taxonomy,
+    )
+
+
+def test_location_is_widened_up_the_hierarchy():
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    offer = provider([RegionalBoiler()]).offer(demand)
+    assert isinstance(offer.model, RegionalBoiler)
+    assert offer.demand.flow.location == "RER"
+
+
+def test_the_relaxation_is_recorded_in_the_offer():
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    offer = provider([RegionalBoiler()]).offer(demand)
+    assert offer.tier == "generalising"
+    assert offer.resolution["relaxations"] == ["location: CH -> RER"]
+
+
+def test_the_amount_and_unit_survive_the_relaxation():
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    offer = provider([RegionalBoiler()]).offer(demand)
+    assert offer.demand.amount == 10.0
+    assert offer.demand.unit == "MJ"
+
+
+def test_location_budget_is_respected():
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    settings = ProxySettings(order=("location",), max_steps={"location": 0})
+    assert provider([RegionalBoiler()], settings=settings).offer(demand) is None
+
+
+def test_time_is_snapped_to_a_covered_year_within_tolerance():
+    demand = Demand(flow=Flow(iri=HEAT, time=2032), amount=10.0, unit="MJ")
+    offer = provider([DatedBoiler()]).offer(demand)
+    assert offer.demand.flow.time == 2035
+    assert offer.resolution["relaxations"] == ["time: 2032 -> 2035"]
+
+
+def test_time_outside_the_tolerance_is_not_snapped():
+    demand = Demand(flow=Flow(iri=HEAT, time=2020), amount=10.0, unit="MJ")
+    assert provider([DatedBoiler()]).offer(demand) is None
+
+
+def test_product_is_widened_through_the_taxonomy():
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    offer = provider([GenericTruck()], taxonomy=taxonomy).offer(demand)
+    assert isinstance(offer.model, GenericTruck)
+    assert offer.resolution["relaxations"] == ["product: truck-green -> truck"]
+
+
+def test_the_product_note_is_short_and_the_full_pair_is_still_recorded():
+    """The note is what ``tree()`` prints, so it carries the last segment of
+    each IRI; the full pair a reader traces a number with stays in the
+    resolution, and so in ``report.proxies`` and the log parquet."""
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    offer = provider([GenericTruck()], taxonomy=taxonomy).offer(demand)
+    note = offer.resolution["relaxations"][0]
+    assert "https://" not in note
+    assert len(note) < 60
+    assert GREEN_TRUCK in offer.resolution["asked"]
+    assert TRUCK in offer.resolution["answered"]
+
+
+def test_product_relaxation_needs_a_taxonomy():
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    assert provider([GenericTruck()], taxonomy=None).offer(demand) is None
+
+
+def test_dimensions_are_tried_in_the_declared_order():
+    """Location first finds the regional boiler; time first finds the dated one."""
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2032), amount=10.0, unit="MJ")
+    location_first = provider(
+        [RegionalBoiler(), DatedBoiler()],
+        settings=ProxySettings(order=("location", "time")),
+    ).offer(demand)
+    time_first = provider(
+        [RegionalBoiler(), DatedBoiler()],
+        settings=ProxySettings(order=("time", "location")),
+    ).offer(demand)
+    assert isinstance(location_first.model, RegionalBoiler)
+    assert isinstance(time_first.model, DatedBoiler)
+
+
+def test_an_exact_match_is_left_to_tier_one():
+    """The generalising tier never answers a demand tier 1 could have."""
+    class ExactBoiler(Model):
+        produces = [HEAT]
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    assert provider([ExactBoiler()]).offer(demand) is not None  # it would answer
+    # but in a real chain ModelProvider is asked first and wins:
+    from trailrunner.resolution import ResolutionChain
+    chain = ResolutionChain([ModelProvider(Glossary([ExactBoiler()])),
+                             provider([ExactBoiler()])])
+    assert chain.offer(demand).tier == "model"
+
+
+def test_explain_says_generalisation_was_tried():
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    reason, detail = provider([]).explain(demand)
+    assert reason == "generalisation_exhausted"
+    assert "location" in detail
+
+
+def test_explain_is_silent_when_no_candidate_could_be_generated():
+    """A demand with no location, no year and no taxonomy has nothing to
+    relax, whatever the budgets say. Explaining it as "budget spent" was both
+    false and useless: it pointed the reader at ``max_steps``, which cannot
+    manufacture a candidate. Silence here is what lets the chain fall through
+    to its own ``no_model_found``."""
+    demand = Demand(flow=Flow(iri="https://vocab.sentier.dev/products/unobtainium"),
+                    amount=1.0, unit="kg")
+    assert provider([]).explain(demand) is None
+
+
+def test_explain_counts_the_candidates_it_actually_generated():
+    """Not the budget it was allowed. CH -> RER -> GLO offers two candidates
+    against a location budget of three, and the detail says two."""
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    settings = ProxySettings(order=("location",), max_steps={"location": 3})
+    _reason, detail = provider([], settings=settings).explain(demand)
+    assert "location(2)" in detail
+
+
+def test_explain_ignores_a_dimension_with_nothing_to_try():
+    """A budget for the product dimension with no taxonomy behind it is not a
+    thing that was tried, and must not be reported as one."""
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    _reason, detail = provider([], taxonomy=None).explain(demand)
+    assert "product" not in detail
+    assert "time" not in detail
+
+
+def test_explain_is_silent_when_no_budget_was_available():
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    settings = ProxySettings(order=(), max_steps={})
+    assert provider([], settings=settings).explain(demand) is None
+
+
+def test_budget_counts_attempts_not_successes():
+    """A step is spent on every candidate tried, not only on ones that match.
+
+    HIERARCHY runs CH -> RER -> GLO; this model covers only GLO, the second
+    hop. A budget of 1 is spent trying RER (which fails) and never reaches
+    GLO. ``test_location_budget_is_respected`` uses ``max_steps=0``, which the
+    outer ``budget <= 0`` guard catches before the inner per-step comparison
+    ever runs -- it cannot tell "0 attempts" apart from "1 attempt that
+    failed." This does.
+    """
+
+    class GloOnlyBoiler(Model):
+        produces = [HEAT]
+        coverage = Coverage(locations=frozenset({"GLO"}))
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+
+    one_step = ProxySettings(order=("location",), max_steps={"location": 1})
+    assert provider([GloOnlyBoiler()], settings=one_step).offer(demand) is None
+
+    two_steps = ProxySettings(order=("location",), max_steps={"location": 2})
+    offer = provider([GloOnlyBoiler()], settings=two_steps).offer(demand)
+    assert isinstance(offer.model, GloOnlyBoiler)
+    assert offer.demand.flow.location == "GLO"
+
+
+def test_ambiguous_match_reached_through_relaxation_is_not_swallowed():
+    """Two models matching the *relaxed* demand are a data error, not a decline.
+
+    ``Glossary.resolve`` already raises ``AmbiguousModelMatch`` for two
+    candidates at tier 1; the generalising tier must let that propagate
+    rather than catching it and reporting "no offer", which would hide a real
+    modelling conflict behind an ordinary cutoff.
+    """
+
+    class BoilerA(Model):
+        produces = [HEAT]
+        coverage = Coverage(locations=frozenset({"RER"}))
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    class BoilerB(Model):
+        produces = [HEAT]
+        coverage = Coverage(locations=frozenset({"RER"}))
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    with pytest.raises(AmbiguousModelMatch):
+        provider([BoilerA(), BoilerB()]).offer(demand)
+
+
+def test_the_product_walk_climbs_more_than_one_level():
+    """``product: 2`` means two levels up the vocabulary, the way
+    ``location: 3`` means three steps up the hierarchy -- not two of the
+    direct parents. A real chain (fi_17100 -> fi_1710 -> fi_171) is three
+    levels deep, and a single-level walk could never reach past the first.
+    """
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 2})
+    offer = provider([GenericVehicle()], settings=settings, taxonomy=taxonomy).offer(demand)
+    assert isinstance(offer.model, GenericVehicle)
+    assert offer.demand.flow.iri == VEHICLE
+    assert offer.resolution["relaxations"] == ["product: truck-green -> road-vehicle"]
+
+
+def test_the_product_budget_stops_the_walk_at_the_level_it_says():
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 1})
+    assert provider([GenericVehicle()], settings=settings, taxonomy=taxonomy).offer(demand) is None
+
+
+def test_the_nearer_concept_is_tried_before_the_wider_one():
+    """Breadth-first: every concept one level up is tried before any concept
+    two levels up, so the most specific model still standing wins."""
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 2})
+    offer = provider(
+        [GenericTruck(), GenericVehicle()], settings=settings, taxonomy=taxonomy
+    ).offer(demand)
+    assert isinstance(offer.model, GenericTruck)
+
+
+def test_a_cycle_in_the_taxonomy_does_not_hang_the_walk():
+    """A vocabulary is not guaranteed acyclic, and this walks it in a loop."""
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [GREEN_TRUCK]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 5})
+    assert provider([], settings=settings, taxonomy=taxonomy).offer(demand) is None
+
+
+def test_every_tier_two_resolution_speaks_the_shared_vocabulary():
+    """``tier``, ``model``, ``asked`` and ``answered`` mean the same thing in
+    every tier, and ``asked`` describes the demand rather than restating an
+    IRI that did not change."""
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit="MJ")
+    resolution = provider([RegionalBoiler()]).offer(demand).resolution
+    assert resolution["tier"] == "generalising"
+    assert resolution["model"] == "RegionalBoiler"
+    assert resolution["asked"] == f"{HEAT} @CH/2030"
+    assert resolution["answered"] == f"{HEAT} @RER/2030"

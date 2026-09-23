@@ -27,8 +27,7 @@
 - All tooling runs through `uv`. Repo root is
   `/Users/timodiepers/Documents/Coding/trailrunner`.
 - Work on branch `feat/phase-3-attribution`, branched from `feat/phase-2-resolution`.
-- Commit after every task, ending each message with
-  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Commit after every task, with no attribution trailer and no tooling references.
 
 ## What this phase does *not* do
 
@@ -384,7 +383,12 @@ __all__ = ["ALLOCATION_PROPERTY", "allocate"]
 In `trailrunner/orchestration/runner.py`:
 
 ```python
-    def __init__(self, glossary: Glossary, settings: Settings | None = None) -> None:
+    def __init__(self, glossary: Glossary | None = None, settings: Settings | None = None) -> None:
+        # `None` is a real case since phase 2: a ResolutionChain with no
+        # ModelProvider has no Glossary to expose, and the Orchestrator always
+        # passes `model=offer.model` into apply(), so the Runner never consults
+        # it. The annotation now says so instead of leaving a type-checker
+        # mismatch for the next reader to trip over.
         self.glossary = glossary
         self.settings = settings if settings is not None else Settings()
 ```
@@ -446,9 +450,7 @@ The rule is the run's, applied in one place so every model partitions
 identically and the choice is recorded once. A co-product without the
 property the rule needs raises rather than defaulting, and a model that
 cannot honour the rule refuses rather than answering a different
-question.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+question."
 ```
 
 ---
@@ -680,9 +682,7 @@ The co-product is pushed onto the same FIFO queue with a negative
 amount: whoever would otherwise have made it is asked what that would
 have cost, and the answer is subtracted. Validation is now sign-aware --
 production must match the demand's sign and cover its magnitude -- since
-refusing negative demands would make the rule unusable.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+refusing negative demands would make the rule unusable."
 ```
 
 ---
@@ -943,9 +943,7 @@ The three capital rules move out of the DAC model into one function, so
 every model attributes construction the same way, and the rule used is
 recorded per node. The Report now states the run's allocation and
 capital settings in its summary: the value judgements that produced the
-number, in the same place as the number.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+number, in the same place as the number."
 ```
 
 ---

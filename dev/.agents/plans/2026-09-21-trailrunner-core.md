@@ -24,8 +24,8 @@
   string. Unit compatibility in v1 is **string equality** — no conversion.
 - Repo root is `/Users/timodiepers/Documents/Coding/trailrunner`. Paths below
   are relative to it.
-- Commit after every task. **Commit messages must carry no Claude attribution
-  trailers** — no `Co-Authored-By: Claude`, no `Generated with Claude Code`.
+- Commit after every task. **Commit messages carry no attribution trailer**
+  and no tooling or assistant references, per the repo owner's instruction.
 - Work directly on `main`. This is a new repo with no shared history.
 
 ## File Structure

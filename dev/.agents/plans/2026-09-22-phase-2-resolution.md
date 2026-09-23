@@ -45,8 +45,7 @@ in `docs/content/resolution.md`, rather than leaving a reader to infer it.
 - All tooling runs through `uv`. Repo root is
   `/Users/timodiepers/Documents/Coding/trailrunner`.
 - Work on branch `feat/phase-2-resolution`, branched from `feat/phase-1-assessment`.
-- Commit after every task, ending each message with
-  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Commit after every task, with no attribution trailer and no tooling references.
 
 ## File Structure
 
@@ -443,9 +442,7 @@ explain() produces the reason the Log records -- coverage_excluded still
 comes from tier 1, which is the more useful thing to tell the reader.
 
 Orchestrator(glossary) still works: a bare Glossary is the one-tier
-chain.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+chain."
 ```
 
 ---
@@ -788,7 +785,7 @@ and extend `__all__`.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_generalising.py -v`
-Expected: PASS, all fourteen.
+Expected: PASS, all twelve.
 
 - [ ] **Step 5: Check the unresolved reason reaches the report**
 
@@ -831,9 +828,7 @@ indistinguishable from a wrong number.
 
 Relaxations do not compose in v2: the composed search is a cross-product
 whose preference order is a second normative choice, and inventing one
-silently is what this tier exists to prevent.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+silently is what this tier exists to prevent."
 ```
 
 ---
@@ -855,16 +850,34 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 In `pyproject.toml`, under `[project.optional-dependencies]`:
 
-```toml
-pyst = [
-  # pyst-client requires >=3.12, so the marker has to match it. The product
-  # dimension of the generalising tier is the only thing that needs it; time
-  # and location relax without any network at all.
-  "pyst-client>=1.2; python_version >= '3.12'",
-]
+**No extra, and no dependency.** `pyst-client` 1.2.0's published wheel is
+broken — its `__init__.py` imports `pyst_client.api.*` and `pyst_client.models.*`
+and the wheel ships neither — so it cannot be imported at all. The service is
+plain HTTP, so the client is built on `urllib.request` from the standard
+library: no dependency, no version floor, and the product dimension works on
+3.11 like everything else.
+
+**Broader relations are not on the concept.** `GET /api/v1/concepts/{iri}`
+returns labels, notes, `inScheme`, `topConceptOf` and `xkos#depth` — but no
+`broader` key, even for a concept at depth 5. Reading that endpoint makes every
+lookup return `[]`, which disables the product dimension while looking like it
+works.
+
+The hierarchy is at **`GET /api/v1/relationships/?iri=<url-encoded-iri>`**,
+which returns a *list* of objects, each with `@id` and the full-URI broader
+key:
+
+```json
+[{"@id": ".../BONSAI2025.1/fi_17100",
+  "http://www.w3.org/2004/02/skos/core#broader": [{"@id": ".../BONSAI2025.1/fi_1710"}]}]
 ```
 
-Run: `uv sync --extra dev --extra pyst`
+Authentication is an `x-pyst-auth-token` header when `PYST_AUTH_TOKEN` is set,
+anonymous otherwise; the IRI is quoted with `safe=""`. Record this in the
+client's docstring, so nobody "simplifies" it back to the concept endpoint.
+
+Run: `uv sync --all-extras --dev` — syncing a subset silently uninstalls the
+other extras and turns their tests into skips.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1096,9 +1109,7 @@ reproduced on a plane or in two years, and the generalisation a study
 took is part of its result. Plain JSON, committable beside the study.
 
 A cache miss with no client generalises less and says so through the
-report's proxies, rather than refusing to run.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+report's proxies, rather than refusing to run."
 ```
 
 ---
@@ -1120,8 +1131,38 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   emits the pack's biosphere exchanges scaled by the demanded amount.
 
 Pack parquet columns: `product_iri` (string), `product_unit` (string),
-`location` (string), `dataset` (string), `flow_iri` (string),
+`location` (string), `dataset` (string), `source` (string — the citation),
+`basis` (string — `cumulative` or `unit_process`), `flow_iri` (string),
 `flow_unit` (string), `amount` (double — **per unit of product**).
+
+### The `basis` column, and why it exists
+
+The original design assumed every borrowed row was a **cumulative** LCI: the
+whole upstream of a product, per unit, so the subtree terminates and nothing is
+missing. That is what a Brightway-backed provider would return from
+`lca.inventory`.
+
+The data actually available in this repo is not that. `dev/BAFU ecospold/raw/`
+holds ~12,000 **EcoSpold 1 unit processes** — each dataset's own direct
+exchanges, with its technosphere inputs unresolved. Borrowing one and calling
+it cumulative would claim a complete subtree while silently omitting all of its
+upstream. That is precisely the failure this project exists to refuse.
+
+So a row declares its basis, and the provider tells the truth about it:
+
+- `cumulative` — the whole upstream is in these exchanges. The subtree is
+  complete and terminates honestly.
+- `unit_process` — these are the dataset's **direct** exchanges only. The
+  subtree terminates because trailrunner has no matrix to solve, so its
+  upstream is **missing from the inventory**. The provider records
+  `basis: "unit_process"` and `complete: False` in the node's resolution, and
+  the Report surfaces it: such a node appears in `report.proxies`, `tree()`
+  tags it `[background: unit_process]` rather than a bare `[background]`, and
+  `summary()` counts it separately from a complete borrow.
+
+A reader must be able to tell, from the report alone, which parts of the
+inventory are whole. An incomplete borrow that looks complete is worse than a
+cutoff, because a cutoff is visible.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1147,11 +1188,17 @@ def pack_file(tmp_path):
     path = tmp_path / "pack.parquet"
     rows = [
         {"product_iri": GAS, "product_unit": "kg", "location": "GLO",
-         "dataset": "natural gas, at consumer", "flow_iri": CO2, "flow_unit": "kg", "amount": 0.4},
+         "dataset": "natural gas, at consumer", "source": "test-fixture",
+         "basis": "cumulative",
+         "flow_iri": CO2, "flow_unit": "kg", "amount": 0.4},
         {"product_iri": GAS, "product_unit": "kg", "location": "GLO",
-         "dataset": "natural gas, at consumer", "flow_iri": CH4, "flow_unit": "kg", "amount": 0.01},
+         "dataset": "natural gas, at consumer", "source": "test-fixture",
+         "basis": "cumulative",
+         "flow_iri": CH4, "flow_unit": "kg", "amount": 0.01},
         {"product_iri": STEEL, "product_unit": "kg", "location": "RER",
-         "dataset": "steel, low-alloyed", "flow_iri": CO2, "flow_unit": "kg", "amount": 1.9},
+         "dataset": "steel, low-alloyed", "source": "test-fixture",
+         "basis": "unit_process",
+         "flow_iri": CO2, "flow_unit": "kg", "amount": 1.9},
     ]
     pq.write_table(pa.Table.from_pylist(rows), path)
     return path
@@ -1190,6 +1237,22 @@ def test_the_borrowed_subtree_says_it_is_matrix_lca(pack_file):
     assert offer.resolution["tier"] == "background"
     assert offer.resolution["kind"] == "linear_background"
     assert offer.resolution["dataset"] == "natural gas, at consumer"
+
+
+def test_a_unit_process_row_says_its_subtree_is_incomplete(pack_file):
+    """A borrowed unit process carries direct exchanges only; its upstream is
+    missing from the inventory, and the report has to say so."""
+    demand = Demand(flow=Flow(iri=STEEL, location="RER"), amount=1.0, unit="kg")
+    offer = provider(pack_file, LocationHierarchy({"CH": "RER", "RER": "GLO"})).offer(demand)
+    assert offer.resolution["basis"] == "unit_process"
+    assert offer.resolution["complete"] is False
+
+
+def test_a_cumulative_row_says_its_subtree_is_complete(pack_file):
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    offer = provider(pack_file).offer(demand)
+    assert offer.resolution["basis"] == "cumulative"
+    assert offer.resolution["complete"] is True
 
 
 def test_the_biosphere_flows_carry_the_demands_time(pack_file):
@@ -1386,17 +1449,31 @@ Expected: PASS, all nine.
 
 - [ ] **Step 5: Build the curated pack**
 
-Create `dev/build_background_pack.py`: a script with the ~20 datasets the
-showcase chain actually hits, written as a literal list of rows and saved to
-`examples/background_pack.parquet`. Cover at minimum: grid electricity for CH
-and RER, natural gas at consumer, hard coal, steel low-alloyed, concrete,
-cement, aluminium, copper, lorry transport, rail freight transport, pipeline
-transport, and heat from a gas boiler. Each row carries CO2 fossil, CH4 fossil
-and N2O amounts per unit, so a GWP method characterizes them all.
+Create `dev/build_background_pack.py`, which **extracts** the pack from the
+BAFU EcoSpold 1 datasets already in this repo rather than inventing figures.
 
-Every number in that file must carry a comment naming where it came from.
-An uncited figure in a background pack is worse than a cutoff, because it
-looks like data.
+- Source: `dev/BAFU ecospold/raw/ecoSpold files/process_<uuid>.xml`. These are
+  EcoSpold **1** (no XML namespace, `openLCA` generator). A dataset's reference
+  product and its exchanges are `dataset/flowData/exchange` elements carrying
+  `name`, `category`, `subCategory`, `unit` and `meanValue`; the first is the
+  reference product. Elementary flows are distinguished from technosphere
+  inputs by their category — inspect a file before assuming a rule, and write
+  the rule you found into the script's docstring.
+- Pick roughly 20 datasets covering what the showcase chain actually hits:
+  grid electricity (CH and RER), natural gas at consumer, hard coal, steel,
+  concrete, cement, aluminium, copper, lorry and rail freight transport,
+  pipeline transport, and heat from a gas boiler. Find them by searching the
+  corpus for their reference-product names; do not guess UUIDs.
+- Every row carries `source` — the process UUID it came from — and
+  `basis="unit_process"`, because that is what these datasets are.
+- Map each elementary flow's name to a vocabulary IRI. Where no confident
+  mapping exists, **leave the flow out and print it**, rather than inventing an
+  IRI. A wrong IRI silently characterizes as nothing.
+
+**No number in the pack may be typed by hand.** Every value comes from a named
+dataset, and the script prints what it extracted and what it skipped. An
+uncited figure in a background pack is worse than a cutoff, because it looks
+like data.
 
 Run: `uv run python dev/build_background_pack.py`
 Expected: writes `examples/background_pack.parquet`; print the row count.
@@ -1450,9 +1527,7 @@ matrix starts.
 
 This is the shape a Brightway-backed provider would take -- lca.inventory
 returns the same cumulative per-unit exchanges -- so nothing above this
-tier changes when one arrives.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+tier changes when one arrives."
 ```
 
 ---

@@ -55,6 +55,16 @@ class ProxySettings:
     max_steps: dict[str, int] = field(
         default_factory=lambda: {"time": 1, "location": 3, "product": 2}
     )
+    """How many steps away from the original demand each dimension may go.
+
+    A step means the same thing in every dimension: one level up the location
+    hierarchy, one level up the product taxonomy's ``skos:broader``, or one
+    year snapped to. A single step can offer more than one candidate — a
+    concept with two broader concepts is one level up either way — and all of
+    a permitted level's candidates are tried. A dimension absent from this
+    dict is not relaxed at all.
+    """
+
     time_tolerance: int = 5
     """Years. How far a demand's year may be moved to meet a model's coverage."""
 

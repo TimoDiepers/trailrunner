@@ -2,6 +2,7 @@
 
 from trailrunner.core.errors import (
     AmbiguousModelMatch,
+    DuplicateBackgroundEntry,
     DuplicateFactor,
     MissingColumns,
     MissingUnit,
@@ -22,6 +23,7 @@ from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet, FleetSelection
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
+from trailrunner.resolution import ModelProvider, Offer, ResolutionChain
 
 __version__ = "0.1.0"
 
@@ -30,6 +32,7 @@ __all__ = [
     # ValidationError and ParameterNotFound straight to the caller, so they
     # belong here rather than behind trailrunner.core.errors.
     "AmbiguousModelMatch",
+    "DuplicateBackgroundEntry",
     "DuplicateFactor",
     "MissingColumns",
     "MissingUnit",
@@ -48,11 +51,14 @@ __all__ = [
     "Glossary",
     "LocationHierarchy",
     "Model",
+    "ModelProvider",
+    "Offer",
     "Orchestrator",
     "ParameterSet",
     "Property",
     "ProxySettings",
     "Report",
+    "ResolutionChain",
     "Result",
     "Runner",
     "Settings",

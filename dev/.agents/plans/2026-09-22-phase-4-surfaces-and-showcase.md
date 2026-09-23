@@ -24,8 +24,7 @@
 - All tooling runs through `uv`. Repo root is
   `/Users/timodiepers/Documents/Coding/trailrunner`.
 - Work on branch `feat/phase-4-surfaces`, branched from `feat/phase-3-attribution`.
-- Commit after every task, ending each message with
-  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Commit after every task, with no attribution trailer and no tooling references.
 
 ## File Structure
 
@@ -572,9 +571,7 @@ Three figures, no arithmetic: everything drawn comes from a Report or an
 Assessment that already computed it. Sankey nodes are coloured by tier,
 so a reader sees which parts of the chain were modelled and which were
 borrowed before looking at any number. Transparent canvases, because the
-docs render in both themes.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+docs render in both themes."
 ```
 
 ---
@@ -880,9 +877,7 @@ Stdlib argparse only: a convenience that adds a dependency to every
 install is not one.
 
 The Report now keeps a reference to its Log, so a caller can write the
-run out without having built the Log itself.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+run out without having built the Log itself."
 ```
 
 ---
@@ -898,6 +893,38 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: everything. This task adds no library code.
 - Produces: a page that reads correctly to a stranger and cues a speaker
   through seven beats in five minutes.
+
+- [ ] **Step 0: Give the models real vocabulary IRIs**
+
+Beat 4 of the showcase claims the product dimension generalises a demand up
+`skos:broader`. It cannot, as things stand: the IRIs the shipped models use are
+**invented, not vocabulary concepts**. Verified against the live service —
+`GET /api/v1/concepts/https%3A%2F%2Fvocab.sentier.dev%2Fproducts%2Felectricity`
+returns **404**, as do `products/heat`, `products/natural-gas` and
+`products/co2-captured`. The relationships endpoint still answers `200 []` for
+them, which is why nothing noticed.
+
+`dev/warm_pyst_cache.py` now prints this loudly and refuses to cache them, so
+the examples ship **no** `pyst_cache.json` until this is fixed.
+
+Real concepts do exist and do have parents — `fi_17100 → fi_1710 → fi_171` in
+the BONSAI scheme, verified live and traversable by the multi-level walk. So:
+
+1. Search the vocabulary (`/api/v1/concepts/search/?query=...`) for concepts
+   matching the products the showcase models produce — heat, electricity,
+   natural gas, and the captured-CO2 product if one exists.
+2. Repoint the models at the IRIs the vocabulary actually has, updating the
+   background pack's `product_iri` values and any test constant that names one.
+3. Re-run `dev/warm_pyst_cache.py` with `PYST_AUTH_TOKEN` set and commit the
+   cache it produces. It must be non-empty, and the script must print no
+   `THE VOCABULARY HAS NO SUCH CONCEPT` block.
+4. If a product genuinely has no vocabulary concept, **say so in the showcase**
+   rather than implying the dimension applies to it. A beat that demonstrates a
+   capability on a product it cannot actually apply to is the one thing this
+   page must not do.
+
+Until this step is done, beat 4 demonstrates nothing, and the offline-run
+constraint in this plan's Global Constraints cannot be met.
 
 - [ ] **Step 1: Write the notebook**
 
@@ -1006,9 +1033,7 @@ Seven beats on one demand -- 1000 kg CO2 captured, CH, 2030 -- from a
 fixed coefficient to a time-resolved forcing curve. Figures are
 pre-rendered and committed, PyST comes from the committed cache, and CI
 executes the notebook with no token, so the page is exactly as
-reproducible as it claims to be.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+reproducible as it claims to be."
 ```
 
 ---
