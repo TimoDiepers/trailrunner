@@ -27,14 +27,14 @@ name = "aiohttp"
 version = "3.14.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiohappyeyeballs", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "aiosignal", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "attrs", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "frozenlist", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "multidict", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "propcache", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "aiohappyeyeballs", marker = "python_full_version >= '3.12'" },
+    { name = "aiosignal", marker = "python_full_version >= '3.12'" },
+    { name = "attrs", marker = "python_full_version >= '3.12'" },
+    { name = "frozenlist", marker = "python_full_version >= '3.12'" },
+    { name = "multidict", marker = "python_full_version >= '3.12'" },
+    { name = "propcache", marker = "python_full_version >= '3.12'" },
     { name = "typing-extensions", marker = "python_full_version == '3.12.*'" },
-    { name = "yarl", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "yarl", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/58/d9/22ce5786ac0c1653ae8b6c23bded02c1686d11f0dbb45b31ce128e0df985/aiohttp-3.14.3.tar.gz", hash = "sha256:9491196535a88924a60afd5b5f434b5b203b6cc616250878dbdb223a8f7844bc", size = 7971213, upload-time = "2026-07-23T01:57:27.037Z" }
 wheels = [
@@ -145,7 +145,7 @@ name = "aiohttp-retry"
 version = "2.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiohttp", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "aiohttp", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9d/61/ebda4d8e3d8cfa1fd3db0fb428db2dd7461d5742cea35178277ad180b033/aiohttp_retry-2.9.1.tar.gz", hash = "sha256:8eb75e904ed4ee5c2ec242fefe85bf04240f685391c4879d8f541d6028ff01f1", size = 13608, upload-time = "2024-11-06T10:44:54.574Z" }
 wheels = [
@@ -157,7 +157,7 @@ name = "aiosignal"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "frozenlist", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "frozenlist", marker = "python_full_version >= '3.12'" },
     { name = "typing-extensions", marker = "python_full_version == '3.12.*'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/61/62/06741b579156360248d1ec624842ad0edf697050bbaf7c3e46394e106ad1/aiosignal-1.4.0.tar.gz", hash = "sha256:f47eecd9468083c2029cc99945502cb7708b082c232f9aca65da147157b251c7", size = 25007, upload-time = "2025-07-03T22:54:43.528Z" }
@@ -3415,19 +3415,19 @@ name = "pyst-client"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiohttp", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "aiohttp-retry", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "httpx", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "orjson", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "platformdirs", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "pydantic", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "python-dateutil", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "rdflib", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "skosify", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "structlog", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "tqdm", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "typing-extensions", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "urllib3", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "aiohttp", marker = "python_full_version >= '3.12'" },
+    { name = "aiohttp-retry", marker = "python_full_version >= '3.12'" },
+    { name = "httpx", marker = "python_full_version >= '3.12'" },
+    { name = "orjson", marker = "python_full_version >= '3.12'" },
+    { name = "platformdirs", marker = "python_full_version >= '3.12'" },
+    { name = "pydantic", marker = "python_full_version >= '3.12'" },
+    { name = "python-dateutil", marker = "python_full_version >= '3.12'" },
+    { name = "rdflib", marker = "python_full_version >= '3.12'" },
+    { name = "skosify", marker = "python_full_version >= '3.12'" },
+    { name = "structlog", marker = "python_full_version >= '3.12'" },
+    { name = "tqdm", marker = "python_full_version >= '3.12'" },
+    { name = "typing-extensions", marker = "python_full_version >= '3.12'" },
+    { name = "urllib3", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/07/1f/c593cf000e03364a388458caf92b3dfa6862278264839bf138cb5b8ac0b3/pyst_client-1.2.0.tar.gz", hash = "sha256:1e1f5e93cf20de700e54565c215c37e99db7e990b3a7afc8db6759f773726c65", size = 28408, upload-time = "2025-05-07T11:00:07.45Z" }
 wheels = [
@@ -3755,7 +3755,7 @@ name = "rdflib"
 version = "7.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyparsing", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "pyparsing", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/98/f5/18bb77b7af9526add0c727a3b2048959847dc5fb030913e2918bf384fec3/rdflib-7.6.0.tar.gz", hash = "sha256:6c831288d5e4a5a7ece85d0ccde9877d512a3d0f02d7c06455d00d6d0ea379df", size = 4943826, upload-time = "2026-02-13T07:15:55.938Z" }
 wheels = [
@@ -4069,6 +4069,9 @@ examples = [
     { name = "pandas" },
     { name = "trailpack", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
 ]
+pyst = [
+    { name = "pyst-client", marker = "python_full_version >= '3.12'" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -4081,11 +4084,12 @@ requires-dist = [
     { name = "pandas", marker = "extra == 'examples'", specifier = ">=2" },
     { name = "pyarrow", specifier = ">=15" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.0" },
+    { name = "pyst-client", marker = "python_full_version >= '3.12' and extra == 'pyst'", specifier = ">=1.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "trailpack", marker = "python_full_version >= '3.12' and python_full_version < '3.14' and extra == 'examples'", specifier = ">=0.3" },
     { name = "zensical", marker = "extra == 'docs'" },
 ]
-provides-extras = ["brightway", "dev", "docs", "dynamic", "examples"]
+provides-extras = ["brightway", "dev", "docs", "dynamic", "examples", "pyst"]
 
 [[package]]
 name = "shellingham"
@@ -4110,7 +4114,7 @@ name = "skosify"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "rdflib", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "rdflib", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c7/61/066294d0711ddf554e67e8185006b9e67530e59f11f96a3e9120ac3ff148/skosify-2.3.0.tar.gz", hash = "sha256:012beee78f23038edbb5783f7163afb3fedd2d8a0b68cfc2408566df59bb5611", size = 25631, upload-time = "2021-08-31T10:51:52.158Z" }
 wheels = [
@@ -4725,9 +4729,9 @@ name = "yarl"
 version = "1.25.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "idna", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "multidict", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
-    { name = "propcache", marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
+    { name = "idna", marker = "python_full_version >= '3.12'" },
+    { name = "multidict", marker = "python_full_version >= '3.12'" },
+    { name = "propcache", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/75/16/e8be8e2fb175bbf41a0680381a319f1199fae256588241a2ac8677eafb49/yarl-1.25.1.tar.gz", hash = "sha256:03dd38de09bc213e9a8b29761eec33ee1d5318dac0e49d8af36e4d27830e23a7", size = 246245, upload-time = "2026-09-15T19:35:02.264Z" }
 wheels = [
