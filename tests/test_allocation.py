@@ -64,6 +64,35 @@ def test_energy_allocation_splits_by_energy_content():
     assert result.biosphere[0].amount == pytest.approx(12.0 * 2 / 3)
 
 
+def test_a_product_split_across_exchanges_is_not_double_counted():
+    class SplitHeat(CHP):
+        def apply(self, demand):
+            return Result(
+                production=[
+                    Exchange(
+                        flow=Flow(iri=HEAT, location="CH"), amount=50.0, unit="MJ",
+                        properties=(Property("energy", 50.0, "MJ"),),
+                    ),
+                    Exchange(
+                        flow=Flow(iri=HEAT, location="CH"), amount=50.0, unit="MJ",
+                        properties=(Property("energy", 50.0, "MJ"),),
+                    ),
+                    Exchange(
+                        flow=Flow(iri=POWER, location="CH"), amount=50.0, unit="MJ",
+                        properties=(Property("energy", 50.0, "MJ"),),
+                    ),
+                ],
+                technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit="MJ")],
+                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit="kg")],
+            )
+
+    result = runner_for(SplitHeat(), "energy").apply(HEAT_DEMAND)
+    # heat is still 100 of 150 MJ total, whether it arrives as one exchange or
+    # two: the split must not change the share.
+    assert result.provenance["attribution"]["share"] == pytest.approx(2 / 3)
+    assert result.technosphere[0].amount == pytest.approx(200.0 * 2 / 3)
+
+
 def test_economic_allocation_splits_by_price():
     result = runner_for(CHP(), "economic").apply(HEAT_DEMAND)
     # heat is 3 of 12 EUR: one quarter

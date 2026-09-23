@@ -71,7 +71,7 @@ def allocate(demand: Demand, result: Result, rule: str, model_name: str) -> Resu
             f"{rule!r} rule has nothing to partition on"
         )
 
-    share = sum(values[e.flow.iri] for e in demanded) / total
+    share = sum(values[iri] for iri in {e.flow.iri for e in demanded}) / total
 
     allocated = Result(
         production=list(demanded),
