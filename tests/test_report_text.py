@@ -97,6 +97,46 @@ def test_summary_of_an_empty_report_does_not_crash():
     assert "0 nodes" in Report.from_log(Log()).summary()
 
 
+def test_tree_tags_a_unit_process_borrow_as_incomplete():
+    """basis=unit_process means the upstream is missing, not just deferred --
+    the tree must say so distinctly from a cumulative (complete) borrow."""
+    log = Log()
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    log.write(
+        demand,
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        resolution={
+            "tier": "background",
+            "kind": "linear_background",
+            "dataset": "natural gas, at consumer",
+            "basis": "unit_process",
+            "complete": False,
+        },
+    )
+    tree = Report.from_log(log).tree()
+    assert "unit_process" in tree
+    assert "incomplete" in tree
+
+
+def test_tree_tags_a_cumulative_borrow_as_complete_and_distinctly():
+    log = Log()
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    log.write(
+        demand,
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        resolution={
+            "tier": "background",
+            "kind": "linear_background",
+            "dataset": "clinker, at plant (cumulative)",
+            "basis": "cumulative",
+            "complete": True,
+        },
+    )
+    tree = Report.from_log(log).tree()
+    assert "cumulative" in tree
+    assert "incomplete" not in tree
+
+
 def test_an_unrecognised_tier_is_never_labelled_an_exact_match():
     """tree() and proxies must agree: whatever summary() counts as a proxy,
     tree() must not print as a model."""

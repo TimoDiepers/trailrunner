@@ -85,6 +85,11 @@ class Report:
         """How honestly this node was answered, in one bracket."""
         tier = node.resolution.get("tier", "model")
         if tier == "background":
+            basis = node.resolution.get("basis")
+            if basis == "unit_process":
+                return "[background: unit_process, incomplete]"
+            if basis == "cumulative":
+                return "[background: cumulative]"
             return "[background]"
         if tier == "generalising":
             relaxations = node.resolution.get("relaxations") or []
