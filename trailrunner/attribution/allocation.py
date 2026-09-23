@@ -86,3 +86,34 @@ def allocate(demand: Demand, result: Result, rule: str, model_name: str) -> Resu
         "co_products": [e.flow.iri for e in others],
     }
     return allocated
+
+
+def substitute(demand: Demand, result: Result, model_name: str) -> Result:
+    """Credit each co-product as an avoided burden.
+
+    The co-product is pushed onto the queue as a **negative** demand: whoever
+    would otherwise have made it is asked what that would have cost, and the
+    answer is subtracted. This is the only rule that reaches the traversal
+    rather than the arithmetic, which is why the Runner calls it instead of
+    ``allocate``.
+    """
+    demanded = [e for e in result.production if e.flow.iri == demand.flow.iri]
+    others = [e for e in result.production if e.flow.iri != demand.flow.iri]
+
+    credits = [
+        Demand(flow=exchange.flow, amount=-exchange.amount, unit=exchange.unit)
+        for exchange in others
+    ]
+
+    substituted = Result(
+        production=list(demanded),
+        technosphere=[*result.technosphere, *credits],
+        biosphere=list(result.biosphere),
+        provenance=dict(result.provenance),
+    )
+    substituted.provenance["attribution"] = {
+        "allocation": "substitution",
+        "share": 1.0,
+        "substituted": [exchange.flow.iri for exchange in others],
+    }
+    return substituted

@@ -2,7 +2,7 @@
 
 import math
 
-from trailrunner.attribution.allocation import allocate
+from trailrunner.attribution.allocation import allocate, substitute
 from trailrunner.core.errors import NoModelFound, UnsupportedAttribution, ValidationError
 from trailrunner.core.flow import Demand
 from trailrunner.core.model import Model
@@ -56,7 +56,7 @@ class Runner:
                 f"{type(model).__name__} supports only {sorted(supports)}"
             )
         if rule == "substitution":
-            raise NotImplementedError("substitution lands in Task 2 of this phase")
+            return substitute(demand, result, type(model).__name__)
         return allocate(demand, result, rule, type(model).__name__)
 
     @staticmethod
@@ -64,18 +64,25 @@ class Runner:
         """Check a Result against the Model contract.
 
         Four rules, in the order a model author would want to hear about them:
-        every exchange carries a unit; production amounts are positive; the
-        demanded product is among them, in the demanded unit; and the summed
-        production of that product *covers* the demanded amount. The last is
-        load-bearing: ``apply`` receives the full demand and nothing downstream
-        rescales, so under-production silently shrinks the whole inventory.
-        Over-production is allowed — a process may legitimately make more than
-        was asked of it.
+        every exchange carries a unit; production has the same sign as the
+        demand, and covers it in magnitude; the demanded product is among
+        them, in the demanded unit; and the summed production of that
+        product *covers* the demanded amount. The sign rule is not "amounts
+        are positive" because a substitution credit *is* a negative demand —
+        the co-product an avoided process would otherwise have made, pushed
+        onto the queue with a flipped sign — and refusing negative demands
+        would make that rule unusable. The coverage rule is load-bearing
+        either way: ``apply`` receives the full demand and nothing downstream
+        rescales, so under-delivery silently shrinks the whole inventory (or,
+        for a credit, under-credits it). Over-production is allowed — a
+        process may legitimately make more than was asked of it.
         """
         origin = type(model).__name__ if model is not None else "model"
 
         if not isinstance(result, Result):
             raise ValidationError(f"{origin} returned {type(result).__name__}, expected Result")
+
+        sign = 1.0 if demand.amount >= 0 else -1.0
 
         # One pass over every exchange. The unit rule is checked before the
         # amount rule on each exchange, so an entry that breaks both is
@@ -86,10 +93,11 @@ class Runner:
         ):
             if not exchange.unit:
                 raise ValidationError(f"{origin} returned {exchange.flow.iri} without a unit")
-            if index < produced and exchange.amount <= 0:
+            if index < produced and exchange.amount * sign <= 0:
                 raise ValidationError(
-                    f"{origin} produced a non-positive amount "
-                    f"({exchange.amount}) of {exchange.flow.iri}"
+                    f"{origin} produced {exchange.amount} of {exchange.flow.iri} "
+                    f"against a demand of {demand.amount}; production must have "
+                    "the same sign as the demand"
                 )
 
         matching = [e for e in result.production if e.flow.iri == demand.flow.iri]
@@ -107,12 +115,14 @@ class Runner:
             )
 
         total = sum(e.amount for e in matching)
-        if total < demand.amount and not math.isclose(
+        if total * sign < demand.amount * sign and not math.isclose(
             total, demand.amount, rel_tol=PRODUCTION_RELATIVE_TOLERANCE
         ):
             raise ValidationError(
                 f"{origin} produced {total} {demand.unit} of {demand.flow.iri} "
                 f"but {demand.amount} {demand.unit} was demanded; production must "
                 "cover the demand, because apply() receives the full demand amount "
-                "and nothing downstream rescales the result"
+                "and nothing downstream rescales the result "
+                "(magnitudes are compared, so a credit demand is covered by a "
+                "credit of at least the same size)"
             )
