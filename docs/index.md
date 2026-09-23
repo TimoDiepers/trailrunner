@@ -1,14 +1,18 @@
 # Supply chains as computational models talking to each other
 
-**`trailrunner` replaces the static unit-process inventory with computational models that call each other.** A *model* is a computational model (e.g., Python code) for one process: given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted — and reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. Not every model computes anything, either: it can just as well be a plain measurement, such as metered emissions for this process at this location and time, read straight from the same trailpack parquet file. Every flow that crosses a model's boundary is identified by an IRI from the hierarchical [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can look at a model's further demands, work out which other models produce those flows, and call them in turn — cascading outward through the whole supply chain until nothing is left open.
+`trailrunner` computes a life cycle inventory by calling computational models instead of looking up fixed coefficients — each one answering, for its own process, what it needs and what it emits.
 
 ## 🧱 The problem
 
-A classic life cycle inventory is a matrix of fixed coefficients: one row of numbers per process, and a separate dataset for every location, year, or technology variant of the same physical activity, because a fixed coefficient can't adapt to context on its own. The catalog grows by duplication instead of by parameterization.
+A classic life cycle inventory is a matrix of fixed coefficients: one row of numbers per process, and a separate dataset for every location, year, or technology variant of the same physical activity, because a fixed coefficient can't adapt to context on its own. The catalog grows by duplication instead of by parameterization, and the links between datasets are frozen in at build time — nothing adapts when better data becomes available, or when a demand falls just outside what was modeled.
 
-`trailrunner` treats context as an input instead: one physical activity is one model, and the model picks whichever number actually fits the demand it was just given — a parameter read for the matching context, a plain measurement taken for exactly this location and time if one exists, or, when neither is on hand, the best available data found by falling back through the vocabulary's hierarchy: a precise location up to a broader region, a specific process up to a more general one. Nothing is substituted silently; every fallback taken shows up in `report.provenance`.
+## 💡 The idea
 
-## ✨ What `trailrunner` does
+Treat one physical activity as one *model* instead of one row. A model is a computational model for one process — most often Python code, but it can just as well be a plain measurement, such as metered emissions for this process at this location and time. It's called whenever something demands one of its products, and it answers by working out what other inputs it needs to produce that demand, and what it emitted — reading its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them, so the same model adapts as better context-specific data becomes available.
+
+Every flow crossing a model's boundary — its products, the further demands it raises, the emissions it reports — is identified by an IRI from the hierarchical, semantic [sentier vocabulary](https://vocab.sentier.dev), not a free-text name. That's what makes the system compose: the orchestrator reads a model's further demands, looks up by IRI which other model produces each one, and calls it in turn — cascading outward through the whole supply chain until nothing is left open. And because the vocabulary is hierarchical, a demand with no exact match can fall back through it instead of failing outright: a precise location up to a broader region, a specific process up to a more general one, using whatever data is actually available. Nothing is substituted silently — every fallback taken shows up in `report.provenance`.
+
+## ✨ The interface
 
 **You bring** a [`Model`](api/model.md) per process:
 
