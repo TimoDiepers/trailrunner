@@ -26,9 +26,14 @@ def _where(flow: Flow) -> str:
 class Report:
     """Aggregated inventory plus everything needed to judge it.
 
-    v1 stops at the inventory: no characterization, so no single score. The
-    unresolved list and the provenance table are as much a part of the answer
-    as the numbers are.
+    A ``Report`` is the inventory and nothing else: it takes no position on
+    how much any of it matters. ``trailrunner.assessment`` characterizes one
+    into a score or a time-explicit curve, as a separate reading afterwards;
+    nothing here knows that package exists, and nothing here changes if it is
+    never imported.
+
+    The unresolved list and the provenance table are as much a part of the
+    answer as the numbers are.
     """
 
     inventory: dict[tuple[Flow, str], float] = field(default_factory=dict)

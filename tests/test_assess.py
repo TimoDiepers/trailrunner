@@ -142,3 +142,109 @@ def test_a_roots_cumulative_contribution_accumulates_across_every_child(method_p
     assert assessment.cumulative_by_node[0] == direct_root + child_a + child_b
     assert assessment.cumulative_by_node[1] == child_a
     assert assessment.cumulative_by_node[2] == child_b
+
+
+def node_with_only_an_uncharacterized_emission() -> Report:
+    """Root emits 10 kg CO2; its child emits only 1 kg of a flow the method
+    has no factor for; its other child emits nothing at all."""
+    log = Log()
+    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
+    root = log.write(
+        root_demand,
+        Result(
+            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+        ),
+        model="DirectAirCapture",
+    )
+    sox_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit="MJ")
+    log.write(
+        sox_demand,
+        Result(
+            production=[Exchange(flow=sox_demand.flow, amount=5000.0, unit="MJ")],
+            biosphere=[Exchange(flow=Flow(iri=SOX, location="GLO"), amount=1.0, unit="kg")],
+        ),
+        depth=1,
+        parent=root,
+        model="SmellyBoiler",
+    )
+    clean_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=2000.0, unit="MJ")
+    log.write(
+        clean_demand,
+        Result(production=[Exchange(flow=clean_demand.flow, amount=2000.0, unit="MJ")]),
+        depth=1,
+        parent=root,
+        model="CleanBoiler",
+    )
+    return Report.from_log(log)
+
+
+def test_an_uncharacterized_node_is_distinguishable_from_a_silent_one(method_parquet_file):
+    """Both score 0.0 in ``direct_by_node``. Without a per-node record of what
+    was left out, "the method had nothing to say about this node's only
+    emission" and "this node emitted nothing" are the same number."""
+    assessment = assess(
+        node_with_only_an_uncharacterized_emission(), Method.from_parquet(method_parquet_file)
+    )
+    assert assessment.direct_by_node[1] == 0.0
+    assert assessment.direct_by_node[2] == 0.0
+    assert assessment.uncharacterized_by_node[1] == [
+        (Flow(iri=SOX, location="GLO"), "kg", 1.0)
+    ]
+    assert 2 not in assessment.uncharacterized_by_node
+
+
+def test_a_characterized_node_has_no_uncharacterized_entry(method_parquet_file):
+    assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
+    assert 0 not in assessment.uncharacterized_by_node
+    assert assessment.uncharacterized_by_node[1] == [
+        (Flow(iri=SOX, location="GLO"), "kg", 1.0)
+    ]
+
+
+def test_the_inventorys_own_gaps_reach_the_assessment(method_parquet_file):
+    """A consumer handed only an ``Assessment`` must be able to tell a complete
+    traversal's score from one that hit ``max_nodes`` halfway down."""
+    log = Log()
+    demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
+    log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1000.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+        ),
+        model="DirectAirCapture",
+    )
+    log.unresolved(
+        Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5.0, unit="MJ"),
+        reason="max_depth",
+        parent=0,
+    )
+    report = Report.from_log(log, truncated=True)
+    assessment = assess(report, Method.from_parquet(method_parquet_file))
+    assert assessment.truncated is True
+    assert assessment.unresolved == len(report.unresolved) == 1
+    assert assessment.proxies == len(report.proxies)
+
+
+def test_the_summary_carries_the_score_the_method_and_the_caveats(method_parquet_file):
+    assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
+    summary = assessment.summary()
+    assert "kg CO2eq" in summary
+    assert assessment.method in summary
+    assert "1 uncharacterized flow" in summary
+    assert "0 unresolved" in summary
+    assert "truncated" not in summary
+
+
+def test_the_summary_says_so_when_the_traversal_was_truncated(method_parquet_file):
+    report = two_level_report()
+    report.truncated = True
+    assessment = assess(report, Method.from_parquet(method_parquet_file))
+    assert "truncated" in assessment.summary()
+
+
+def test_the_summary_is_returned_not_printed(method_parquet_file, capsys):
+    assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
+    assert isinstance(assessment.summary(), str)
+    assert capsys.readouterr().out == ""

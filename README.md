@@ -102,6 +102,7 @@ from trailrunner.assessment import Method, assess
 assessment = assess(report, Method.from_parquet("gwp100.parquet"))
 assessment.score            # total, in the method's declared unit
 assessment.uncharacterized  # flows the method has no factor for — never silently zero
+print(assessment.summary())  # the score, the method, and every reason to distrust it
 ```
 
 `trailrunner` never writes a method parquet itself; convert one from an existing Brightway
