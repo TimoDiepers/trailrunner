@@ -306,3 +306,20 @@ def test_every_tier_two_resolution_speaks_the_shared_vocabulary():
     assert resolution["model"] == "RegionalBoiler"
     assert resolution["asked"] == f"{HEAT} @CH/2030"
     assert resolution["answered"] == f"{HEAT} @RER/2030"
+
+
+def test_a_relaxed_demand_still_carries_the_exclusion():
+    """A generalised credit must not land back on the model that minted it.
+
+    Relaxing a demand does not change whose avoided burden it is. A tier-2
+    offer that dropped ``exclude`` on its way to tier 1 would answer a
+    substitution credit with the very process that produced the co-product --
+    the self-substitution loop again, one hop later and wearing a proxy label.
+    """
+    boiler = RegionalBoiler()
+    swiss_heat = Demand(flow=Flow(iri=HEAT, location="CH"), amount=1.0, unit="MJ")
+
+    offer = provider([boiler]).offer(swiss_heat)
+    assert offer.model is boiler
+
+    assert provider([boiler]).offer(swiss_heat, exclude=(boiler,)) is None

@@ -13,9 +13,11 @@ plant was actually built** — so the construction inputs land in their own year
 and, once a model answers them, meet whatever background those years carry.
 """
 
+from trailrunner.attribution import amortize
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
+from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
 
@@ -54,6 +56,17 @@ class DirectAirCapture(Model):
     produces = [CO2_CAPTURED]
     coverage = Coverage(time_range=(2020, 2050))
     fleet: Fleet | None = None
+
+    supports = ALLOCATION_RULES
+    """Every rule, because this model is monofunctional.
+
+    Monofunctionality is a fact about the model, not a value judgement: with a
+    single product there is nothing to partition, so ``allocate`` takes its
+    no-op short-circuit and ``substitute`` mints no credits, and the answer is
+    the same under all five rules. Declaring only ``none`` would have made the
+    Runner's gate refuse this model at the first node of any non-``none`` run,
+    for a co-production problem it does not have.
+    """
 
     def __init__(self, settings=None, params=None, fleet: Fleet | None = None) -> None:
         super().__init__(settings=settings, params=params)
@@ -106,13 +119,24 @@ class DirectAirCapture(Model):
 
         The demanded capture is what decides how much of the fleet is claimed:
         ``share_of_fleet = amount / total_capacity``. Each plant carries that
-        share in proportion to its own capacity, spread over its own lifetime,
-        which is what keeps a plant from being built once per year it runs::
+        share of its own capacity — ``capacity_i * share_of_fleet`` — as the
+        ``demanded_output`` handed to :func:`amortize`, which spreads the
+        plant's capital (its own capacity, standing in for what it took to
+        build) over that plant's own annual and lifetime output according to
+        ``self.settings.attribution.capital``. Under the default rule,
+        ``per_output``, this reduces to::
 
             construction_i = amount * capacity_i / (total_capacity * lifetime_i)
 
-        With one lifetime across the fleet this sums to ``amount / lifetime`` —
-        one lifetime's worth of capture buys one fleet.
+        which, with one lifetime across the fleet, sums to ``amount /
+        lifetime`` — one lifetime's worth of capture buys one fleet.
+
+        Under ``first_life`` the answer is zero for every plant whose build
+        year is not the demanded year, so a study year with no construction in
+        it demands no construction at all. That is the rule, not a missing
+        fleet. ``demand.flow.time`` may be ``None`` — a demand that is not
+        time-specific — and :func:`amortize` refuses that under ``first_life``
+        rather than letting ``None != build_year`` quietly zero the capital.
         """
         if self.fleet is None:
             return [], {}
@@ -123,29 +147,41 @@ class DirectAirCapture(Model):
         capacity_column = self.fleet.capacity_column
         lifetime_column = self.fleet.lifetime_column
         unit = selection.unit_of(capacity_column)
+        rule = self.settings.attribution.capital
 
-        construction = [
-            Demand(
-                # The plant's own location and build year, not the demand's:
-                # that displacement in time is the whole point, and a fleet
-                # resolved through the hierarchy may sit somewhere else too.
-                flow=Flow(
-                    iri=DAC_PLANT,
-                    location=plant.get("location", demand.flow.location),
-                    time=int(plant["build_year"]),
-                ),
-                amount=(
-                    demand.amount
-                    * float(plant[capacity_column])
-                    / (selection.total_capacity * float(plant[lifetime_column]))
-                ),
-                unit=unit,
+        construction = []
+        for plant in selection.plants:
+            capacity = float(plant[capacity_column])
+            lifetime = float(plant[lifetime_column])
+            build_year = int(plant["build_year"])
+            amount = amortize(
+                capacity,
+                rule=rule,
+                demanded_output=capacity * demand.amount / selection.total_capacity,
+                annual_output=capacity,
+                lifetime_output=capacity * lifetime,
+                lifetime_years=lifetime,
+                demand_year=demand.flow.time,
+                build_year=build_year,
             )
-            for plant in selection.plants
-        ]
+            construction.append(
+                Demand(
+                    # The plant's own location and build year, not the demand's:
+                    # that displacement in time is the whole point, and a fleet
+                    # resolved through the hierarchy may sit somewhere else too.
+                    flow=Flow(
+                        iri=DAC_PLANT,
+                        location=plant.get("location", demand.flow.location),
+                        time=build_year,
+                    ),
+                    amount=amount,
+                    unit=unit,
+                )
+            )
 
         provenance = {
             **selection.provenance,
             "share_of_fleet": demand.amount / selection.total_capacity,
+            "capital_rule": rule,
         }
         return construction, provenance

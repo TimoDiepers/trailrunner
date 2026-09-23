@@ -53,6 +53,39 @@ class MissingColumns(TrailrunnerError):
     """
 
 
+class MissingProperty(TrailrunnerError):
+    """A co-product lacks the property the run's allocation rule partitions on.
+
+    Raised rather than defaulted: a partition over an assumed price is a
+    fabricated value judgement, and it would be invisible in the result.
+    """
+
+
+class UnallocatedCoProduction(TrailrunnerError, ValueError):
+    """A model returned co-products under the ``none`` allocation rule.
+
+    ``none`` is the default rule, so this is the likeliest refusal a user
+    meets: the first multifunctional model in a run that has not chosen a
+    rule stops it here. A bare ``ValueError`` put that one refusal outside
+    ``TrailrunnerError``, so the ``except TrailrunnerError`` a caller wraps a
+    calculation in caught every other refusal and missed this one.
+
+    Still a ``ValueError`` as well, because that is what it was raised as
+    before this class existed: code already catching ``ValueError`` around a
+    calculation keeps working, and the fix is additive rather than a silent
+    change in which exception escapes.
+    """
+
+
+class UnsupportedAttribution(TrailrunnerError):
+    """A model cannot honour the run's attribution setting.
+
+    A model may legitimately limit how far a user setting reaches. Saying so is
+    the whole point — a model that silently ignored the setting would produce a
+    number answering a different question than the one asked.
+    """
+
+
 class DuplicateBackgroundEntry(TrailrunnerError):
     """A background pack states two datasets for one product, unit and location.
 

@@ -4,7 +4,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from trailrunner.core.flow import Flow
-from trailrunner.orchestration.log import Log, NodeRecord, UnresolvedRecord
+from trailrunner.orchestration.log import (
+    ATTRIBUTION_KEY,
+    Log,
+    NodeRecord,
+    UnresolvedRecord,
+)
 
 
 def _short(iri: str) -> str:
@@ -39,6 +44,9 @@ class Report:
     inventory: dict[tuple[Flow, str], float] = field(default_factory=dict)
     unresolved: list[UnresolvedRecord] = field(default_factory=list)
     provenance: dict[int, dict[str, Any]] = field(default_factory=dict)
+    """Per node: what the *model* recorded — the parameter rows it read, the
+    fallbacks it took. The run's normative choices are not in here; they are
+    in ``attribution``, because the model neither chose nor saw them."""
     resolutions: dict[int, dict[str, Any]] = field(default_factory=dict)
     """Per node: which tier answered its demand, and what was relaxed to get there."""
     proxies: dict[int, dict[str, Any]] = field(default_factory=dict)
@@ -52,20 +60,38 @@ class Report:
     edges: list[tuple[int, int]] = field(default_factory=list)
     warnings: list[tuple[str, int | None]] = field(default_factory=list)
     truncated: bool = False
+    attribution: dict[int, dict[str, Any]] = field(default_factory=dict)
+    """Per node: the allocation rule applied and the shares computed."""
+    attribution_settings: Any = None
+    """The run's AttributionSettings, so the report states the choices that
+    produced it without the reader having to know how it was called."""
 
     @classmethod
-    def from_log(cls, log: Log, truncated: bool = False) -> "Report":
+    def from_log(
+        cls, log: Log, truncated: bool = False, attribution_settings: Any = None
+    ) -> "Report":
         inventory: dict[tuple[Flow, str], float] = {}
         provenance: dict[int, dict[str, Any]] = {}
         resolutions: dict[int, dict[str, Any]] = {}
         proxies: dict[int, dict[str, Any]] = {}
+        attribution: dict[int, dict[str, Any]] = {}
         for node in log.nodes:
-            if node.result.provenance:
-                provenance[node.id] = dict(node.result.provenance)
+            # The attribution record travels on the Result because that is
+            # what the Runner had in hand, but it is the orchestrator's, not
+            # the model's; it is reported beside provenance, never inside it.
+            recorded = {
+                key: value
+                for key, value in node.result.provenance.items()
+                if key != ATTRIBUTION_KEY
+            }
+            if recorded:
+                provenance[node.id] = recorded
             if node.resolution:
                 resolutions[node.id] = dict(node.resolution)
                 if node.resolution.get("tier", "model") != "model":
                     proxies[node.id] = dict(node.resolution)
+            if node.attribution:
+                attribution[node.id] = dict(node.attribution)
             for exchange in node.result.biosphere:
                 key = (exchange.flow, exchange.unit)
                 inventory[key] = inventory.get(key, 0.0) + exchange.amount
@@ -79,6 +105,8 @@ class Report:
             edges=[(edge.parent, edge.child) for edge in log.edges],
             warnings=list(log.warnings),
             truncated=truncated,
+            attribution=attribution,
+            attribution_settings=attribution_settings,
         )
 
     def _tag(self, node: NodeRecord) -> str:
@@ -161,10 +189,18 @@ class Report:
         ``unit_process`` borrow's upstream is missing, not merely deferred,
         and this is the one-line trust check where that has to be visible
         without a reader opening ``report.proxies`` or ``report.tree()``.
+
+        Both lines also split out what happened on a **credit branch** — a
+        negative demand, which under ``substitution`` is an avoided burden
+        being traversed. The sign is the point: a forgone burden *understates*
+        the impact, a forgone credit *overstates* it, and one bucket counting
+        both tells the reader neither. Under any rule but ``substitution``
+        nothing negative is ever demanded, so the clause simply never prints.
         """
         reasons: dict[str, int] = {}
         for record in self.unresolved:
             reasons[record.reason] = reasons.get(record.reason, 0) + 1
+        credit_cutoffs = sum(1 for record in self.unresolved if record.demand.amount < 0)
 
         entries = len(self.inventory)
         node_count = len(self.nodes)
@@ -174,6 +210,8 @@ class Report:
         ]
         if reasons:
             breakdown = ", ".join(f"{reason}: {count}" for reason, count in sorted(reasons.items()))
+            if credit_cutoffs:
+                breakdown += f", of which {credit_cutoffs} on a credit branch"
             lines.append(f"{len(self.unresolved)} unresolved ({breakdown})")
         else:
             lines.append("0 unresolved")
@@ -181,10 +219,22 @@ class Report:
         incomplete = sum(
             1 for resolution in self.proxies.values() if resolution.get("complete") is False
         )
+        amounts = {node.id: node.demand.amount for node in self.nodes}
+        credit_proxies = sum(1 for node_id in self.proxies if amounts.get(node_id, 0.0) < 0)
         proxy_line = f"{count} {'proxy' if count == 1 else 'proxies'}"
+        qualifiers = []
         if incomplete:
-            proxy_line += f" ({incomplete} incomplete)"
+            qualifiers.append(f"{incomplete} incomplete")
+        if credit_proxies:
+            qualifiers.append(f"of which {credit_proxies} on a credit branch")
+        if qualifiers:
+            proxy_line += f" ({', '.join(qualifiers)})"
         lines.append(proxy_line)
+        if self.attribution_settings is not None:
+            lines.append(
+                f"attribution: allocation={self.attribution_settings.allocation}, "
+                f"capital={self.attribution_settings.capital}"
+            )
         if self.truncated:
             lines.append("traversal was truncated: max_depth or max_nodes was reached")
         if self.warnings:

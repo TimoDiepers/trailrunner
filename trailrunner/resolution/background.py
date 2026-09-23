@@ -34,6 +34,7 @@ from trailrunner.core.errors import DuplicateBackgroundEntry
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
+from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution.chain import Offer, describe
 
@@ -176,6 +177,20 @@ class BackgroundDataset(Model):
     ``complete: False`` is what tells the reader which one happened.
     """
 
+    supports = ALLOCATION_RULES
+    """Every rule, because a borrowed row has a single product.
+
+    Its monofunctionality is a fact about the row, not a value judgement about
+    the run: with one product there is nothing to partition, so ``allocate``
+    takes its no-op short-circuit and ``substitute`` mints no credits, and the
+    borrow is the same number under all five rules. Declaring only ``none``
+    turned that fact into a refusal -- any run under any other rule died at
+    the first borrowed node, on the grounds that the row has no co-products,
+    which is precisely the reason it is compatible with every rule. The gate
+    in the Runner still earns its keep elsewhere: it exists for a model that
+    has *already* partitioned internally and would answer a different
+    question under a different rule."""
+
     def __init__(self, entry: BackgroundEntry) -> None:
         super().__init__()
         self.entry = entry
@@ -203,7 +218,15 @@ class BackgroundProvider:
     def __init__(self, pack: BackgroundPack) -> None:
         self.pack = pack
 
-    def offer(self, demand: Demand) -> Offer | None:
+    def offer(self, demand: Demand, exclude: Sequence[Model] = ()) -> Offer | None:
+        """``exclude`` is accepted and has nothing to drop.
+
+        A ``BackgroundDataset`` is minted per offer, so no instance a caller
+        could be excluding is ever a candidate here. Accepted anyway because
+        the chain calls every provider the same way, and a tier that silently
+        took a different signature would be a tier the credit rule quietly
+        skipped.
+        """
         found = self.pack.lookup(demand)
         if found is None:
             return None
@@ -232,7 +255,7 @@ class BackgroundProvider:
             },
         )
 
-    def explain(self, demand: Demand) -> tuple[str, str] | None:
+    def explain(self, demand: Demand, exclude: Sequence[Model] = ()) -> tuple[str, str] | None:
         """Never explains: a demand the background cannot answer is better
         described by the tiers above, which know what was actually attempted."""
         return None

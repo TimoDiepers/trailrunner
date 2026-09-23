@@ -4,8 +4,11 @@ import pytest
 
 from trailrunner.core.errors import DuplicateBackgroundEntry
 from trailrunner.core.flow import Demand, Flow
+from trailrunner.core.settings import ALLOCATION_RULES, AttributionSettings, Settings
+from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import BackgroundPack, BackgroundProvider
+from trailrunner.resolution.chain import ResolutionChain
 
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 STEEL = "https://vocab.sentier.dev/products/steel"
@@ -202,3 +205,25 @@ def test_every_background_resolution_speaks_the_shared_vocabulary(pack_file):
     assert resolution["model"] == "BackgroundDataset"
     assert resolution["asked"] == f"{GAS} @GLO/2030"
     assert resolution["answered"] == resolution["asked"]
+
+
+def test_a_borrowed_row_is_compatible_with_every_allocation_rule(pack_file):
+    """Its monofunctionality is a fact, not a value judgement.
+
+    A borrowed row has one product, so there is nothing to partition and the
+    number is the same under all five rules. Declaring only ``none`` turned
+    that into a refusal: any run under any other rule died at the first
+    borrowed node, on the very grounds that make the borrow compatible.
+    """
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    model = provider(pack_file).offer(demand).model
+    assert model.supports == ALLOCATION_RULES
+
+
+def test_a_borrowed_row_traverses_under_a_partitioning_rule(pack_file):
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    settings = Settings(attribution=AttributionSettings(allocation="economic"))
+    chain = ResolutionChain([BackgroundProvider(BackgroundPack.from_parquet(pack_file))])
+    report = Orchestrator(chain, settings=settings).calculate(demand)
+    assert [node.model for node in report.nodes] == ["BackgroundDataset"]
+    assert report.attribution[0]["share"] == 1.0

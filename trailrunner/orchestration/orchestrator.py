@@ -3,8 +3,9 @@
 from collections.abc import Callable
 
 from trailrunner.core.flow import Demand
+from trailrunner.core.settings import Settings
 from trailrunner.orchestration.glossary import Glossary
-from trailrunner.orchestration.log import Log
+from trailrunner.orchestration.log import ATTRIBUTION_KEY, Log
 from trailrunner.orchestration.queue import Queue, QueueItem
 from trailrunner.orchestration.report import Report
 from trailrunner.orchestration.runner import Runner
@@ -33,6 +34,7 @@ class Orchestrator:
         max_depth: int = 10,
         max_nodes: int = 1000,
         priority: Callable[[Demand], float] | None = None,
+        settings: Settings | None = None,
     ) -> None:
         # A bare Glossary is still a valid argument: it is the one-tier chain,
         # and every v1 caller passes one.
@@ -45,9 +47,9 @@ class Orchestrator:
         # self.glossary can be None here (a chain with no ModelProvider). That
         # is safe today because the Orchestrator always passes
         # model=offer.model into runner.apply below, so the Runner never
-        # consults its own glossary; a later phase will change the Runner's
-        # constructor so this can't be relied on by accident.
-        self.runner = runner if runner is not None else Runner(self.glossary)
+        # consults its own glossary.
+        self.settings = settings if settings is not None else Settings()
+        self.runner = runner if runner is not None else Runner(self.glossary, settings=self.settings)
         self.max_depth = max_depth
         self.max_nodes = max_nodes
         self.priority = priority
@@ -71,9 +73,9 @@ class Orchestrator:
                 log.unresolved(item.demand, reason="max_depth", depth=item.depth, parent=item.parent)
                 continue
 
-            offer = self.chain.offer(item.demand)
+            offer = self.chain.offer(item.demand, exclude=item.exclude)
             if offer is None:
-                reason, detail = self.chain.explain(item.demand)
+                reason, detail = self.chain.explain(item.demand, exclude=item.exclude)
                 log.unresolved(
                     item.demand,
                     reason=reason,
@@ -101,12 +103,31 @@ class Orchestrator:
                 )
 
             path = (*item.path, item.demand.flow.iri)
+            # Which of this node's children are substitution credits, and so
+            # must be answered by someone other than the model that just made
+            # them. Both halves are already here: the model that offered, and
+            # the co-product IRIs ``substitute`` recorded. Marking them is the
+            # Orchestrator's job because it is the only place that knows both
+            # — which is what keeps ``substitute`` pure arithmetic with no
+            # resolver of its own.
+            substituted = set(
+                (result.provenance.get(ATTRIBUTION_KEY) or {}).get("substituted", ())
+            )
             for child in result.technosphere:
+                credit = child.amount < 0 and child.flow.iri in substituted
                 queue.push(
-                    QueueItem(demand=child, depth=item.depth + 1, parent=node_id, path=path)
+                    QueueItem(
+                        demand=child,
+                        depth=item.depth + 1,
+                        parent=node_id,
+                        path=path,
+                        exclude=(offer.model,) if credit else (),
+                    )
                 )
 
-        return Report.from_log(log, truncated=truncated)
+        return Report.from_log(
+            log, truncated=truncated, attribution_settings=self.settings.attribution
+        )
 
     @staticmethod
     def _drain(queue: Queue, log: Log, reason: str) -> None:
