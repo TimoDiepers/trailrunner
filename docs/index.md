@@ -2,9 +2,9 @@
 
 `trailrunner` computes a life cycle inventory by orchestrating computational models instead of static unit-process datasets.
 
-## ⚙️ How it works
+## 💡 The idea
 
-A *model* is a computational model (e.g., Python code) for one process: given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted — and reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. So the answer can depend on the demand: a direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved, and the same model in Iceland in 2045 says something different from the same model in Switzerland in 2030. Not every model computes anything, either: it can just as well be a plain measurement, such as metered emissions for this process at this location and time, read straight from the same trailpack parquet file.
+Treat one physical activity as one *model*. A model is a computational model (e.g., Python code) for one process: given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted — and reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. So the answer can depend on the demand: a direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved, and the same model in Iceland in 2045 says something different from the same model in Switzerland in 2030. Not every model computes anything, either: it can just as well be a plain measurement, such as metered emissions for this process at this location and time, read straight from the same trailpack parquet file.
 
 Every flow that crosses a model's boundary is identified by an IRI from the hierarchical [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can look at a model's further demands, work out which other models produce those flows, and call them in turn — cascading outward through the whole supply chain until nothing is left open.
 
