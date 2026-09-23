@@ -9,7 +9,10 @@ A *model* is a computational model (e.g., Python code) for one process,
 called whenever something demands one of its products. It reads its
 parameters from a [trailpack](https://github.com/TimoDiepers/trailpack)
 parquet file and answers one question: *to produce this, what other inputs do
-I need, and what did I emit?* Every flow crossing that boundary — products,
+I need, and what did I emit?* A model need not compute anything at all —
+it can just as well be a plain measurement, such as metered emissions for
+this process at this location and time, read straight from the same
+trailpack parquet file. Every flow crossing that boundary — products,
 further demands, elementary flows — is identified by an IRI from the
 hierarchical [sentier vocabulary](https://vocab.sentier.dev), not a
 free-text name. Those IRIs are what let the orchestrator work out which
