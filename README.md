@@ -91,6 +91,8 @@ for (flow, unit), amount in report.inventory.items():
 
 for record in report.unresolved:
     print(f"unresolved: {record.demand.flow.iri} ({record.reason})")
+
+print(report.tree())
 ```
 
 A demand nobody models is reported as unresolved, never silently treated as

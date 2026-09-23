@@ -85,7 +85,14 @@ class Orchestrator:
                 continue
 
             result = self.runner.apply(item.demand, model=model)
-            node_id = log.write(item.demand, result, depth=item.depth, parent=item.parent)
+            node_id = log.write(
+                item.demand,
+                result,
+                depth=item.depth,
+                parent=item.parent,
+                model=type(model).__name__,
+                resolution={"tier": "model", "model": type(model).__name__},
+            )
 
             if item.demand.flow.iri in item.path:
                 log.warn(

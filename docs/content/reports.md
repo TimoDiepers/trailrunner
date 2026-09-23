@@ -59,6 +59,44 @@ its `demand`, its `result`, its `depth` and its `parent`; `edges` are `(parent, 
 pairs. Every visit is its own node — nodes are never merged, so the same process
 appearing twice in a supply chain appears twice here.
 
+## `summary()` and `tree()`
+
+Both return a string rather than printing, so they are testable and a caller can write them to
+a file.
+
+`tree()` is the traversal as indented text. Every line says how honestly that node was
+answered: `[model: ...]` for an exact match, `[proxy: ...]` for a node answered by relaxing the
+demand (naming what was relaxed), `[background]` for one borrowed from a cumulative dataset, or
+`[cutoff: ...]` for a demand nothing answered. A cutoff hangs under the node that asked for it,
+because that is where in the chain it happened, not under the root.
+
+`summary()` is nodes, inventory size, unresolved counts broken down by reason, proxy count, and
+whether the traversal was truncated — the numbers to check before trusting the inventory.
+
+```python
+print(report.tree())
+print()
+print(report.summary())
+```
+
+Running the DAC traversal with a `Boiler` model answering the heat demand and nothing
+registered for electricity (`tests/test_dac.py::test_end_to_end_traversal_with_a_heat_model`)
+prints:
+
+```text
+1000 kg co2-captured @CH/2030  [model: DirectAirCapture]
+  5000 MJ heat @CH/2030  [model: Boiler]
+  400 kWh electricity @CH/2030  [cutoff: no_model_found]
+
+2 nodes, 2 inventory entries
+1 unresolved (no_model_found: 1)
+0 proxies
+```
+
+The electricity cutoff is indented under the DAC node, not the root, because the DAC node is
+what asked for it. Only the `model` tier exists today — `[proxy: ...]` and `[background]` start
+appearing once the proxy and background tiers land in a later phase.
+
 ## `warnings` and `truncated`
 
 `warnings` is a list of `(message, node_id)`. A flow that repeats on its own supply chain
