@@ -81,22 +81,51 @@ only a trace of N2O as its own direct emission. Borrowing that row answers
 an electricity demand with a plausible-looking near-zero for climate
 impact -- worse than a cutoff, because a cutoff is visible.
 
-``_distribution_step_reason`` catches this shape structurally, not by
-naming "electricity" anywhere: a unit process whose *largest* technosphere
-input is (a) the same unit as its own reference product, (b) the same
-commodity -- judged by the leading word of both names before the first
-comma, e.g. "Electricity" in both "Electricity mix" and "Electricity, high
-voltage, at grid" -- and (c) within a small factor (0.5x-2x) of the
-reference amount, is redistributing or blending that same commodity rather
-than making it. Checked against every dataset in ``DATASETS``: only the two
-electricity rows (CH, RER) match all three conditions -- their dominant
-input is 1.03-1.04x itself, same unit, same leading word. Every other kept
-dataset fails at least one: different unit (steel's natural gas input,
-aluminium's electricity input), a different leading word despite a similar
-magnitude (clinker's limestone at 1.25x, pig iron's sinter at 1.07x -- real
-upstream materials, not the same commodity restated), or a large ratio
-despite a shared leading word (copper's concentrate at 4.14x -- refining
-concentrates the ore, it does not redistribute refined copper).
+``_distribution_step_reason`` catches this shape without naming
+"electricity" anywhere: a unit process whose *largest* technosphere input is
+(a) the same unit as its own reference product, (b) the same commodity --
+judged by the leading word of both names before the first comma, e.g.
+"Electricity" in both "Electricity mix" and "Electricity, high voltage, at
+grid" -- and (c) within a small factor (0.5x-2x) of the reference amount, is
+redistributing or blending that same commodity rather than making it.
+
+**The rule is hand-audited against this pack, not fully structural.** Its
+"largest" is a unit-blind ``max()`` over amounts in kg, MJ, kWh, m3 and tkm
+alike, which is not a comparison that means anything on its own -- the
+comparison only becomes meaningful at step (a), where an input of a
+different unit is discarded. What follows is the audit, re-run against the
+parsed files rather than remembered; every dominant input named here is the
+one this script's own ``max()`` picks.
+
+Only the two electricity rows (CH, RER) match all three conditions: their
+dominant input is "Electricity mix", 1.028x and 1.035x their own 1 kWh, same
+unit, same leading word. Every other kept dataset fails at least one:
+
+- a different unit from the reference product: natural gas at consumer (m3
+  of gas into an MJ reference), copper at refinery (4.53 MJ of heavy fuel
+  oil), transport, freight, rail (kWh into tkm), transport, natural gas,
+  pipeline (MJ into tkm), pig iron (1.51 MJ of blast furnace gas), steel,
+  electric (0.751 MJ of natural gas), and aluminium, primary, liquid (14.9
+  kWh of electricity);
+- the same unit but a different leading word: clinker (1.25 kg of crushed
+  limestone), hard coal at mine (1.68 kg of mine spoil disposal), steel,
+  converter (0.9 kg of pig iron) -- real upstream materials, not the same
+  commodity restated.
+
+**Aluminium is the dataset this rule does not decide honestly.** It survives
+only because the unit-blind ``max()`` lands on its 14.9 kWh of electricity,
+which is then discarded for having the wrong unit. Look inside the reference
+unit and it does contain a same-unit, same-leading-word, in-band input:
+"Aluminium oxide, at plant", 1.92 kg per 1 kg of liquid aluminium. Do **not**
+"harden" the rule to compare within the reference unit on the strength of
+that: alumina into aluminium is the Hall-Heroult reduction, a genuine
+producing step, and a rule that rejected it would throw away the one dataset
+in this pack where electrolysis CO2 is actually recorded. The leading-word
+heuristic simply cannot tell "aluminium oxide -> aluminium" (a reduction)
+from "electricity mix -> electricity" (a redistribution); the pack's author
+can, and did, one dataset at a time. Treat this function as a cheap guard
+that caught the case it was written for, and audit any dataset added to
+``DATASETS`` by hand.
 
 Run:
 
@@ -340,19 +369,23 @@ def _distribution_step_reason(
     as its own reference product -- same unit, and within a small factor of
     the reference amount -- is a distribution, mixing or aggregation step,
     not a producing one: whatever it emits directly describes that step, not
-    the product. See the module docstring's "distribution/mixing/aggregation
-    rule" for why this is not just a per-product exclusion list, and for the
-    worked comparison against copper, clinker and pig iron (none of which
-    trigger it).
+    the product.
 
-    "Same commodity" is judged the only structural way available from names
-    alone: the leading word of both names, before the first comma, matches
+    "Same commodity" is judged the only way available from names alone: the
+    leading word of both names, before the first comma, matches
     (``"Electricity"`` in both ``"Electricity mix"`` and ``"Electricity,
     high voltage, at grid"``). Deliberately narrow -- it does not fire on a
-    same-magnitude input that is a genuinely different commodity (limestone
-    into clinker, sinter into pig iron), nor on a same-named input at a
-    magnitude outside the small-factor band (copper concentrate into
-    refined copper, ~4x, because refining concentrates the ore).
+    same-unit input that is a genuinely different commodity (1.25 kg of
+    crushed limestone into clinker, 0.9 kg of pig iron into converter
+    steel).
+
+    ``max()`` here is unit-blind, and stays that way: see the module
+    docstring's "distribution/mixing/aggregation rule", which records the
+    full audit against ``DATASETS``, and in particular why comparing within
+    the reference unit would start rejecting alumina -> aluminium, a real
+    producing step. This is a cheap guard that caught the case it was
+    written for, not a structural test that can be trusted on a dataset
+    nobody has audited.
     """
     technosphere = [
         (name, unit, amount) for name, _cat, unit, group, amount in exchanges if group == "technosphere"

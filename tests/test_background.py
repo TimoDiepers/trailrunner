@@ -2,6 +2,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from trailrunner.core.errors import DuplicateBackgroundEntry
 from trailrunner.core.flow import Demand, Flow
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import BackgroundPack, BackgroundProvider
@@ -136,3 +137,68 @@ def test_both_bases_terminate_with_no_technosphere_children(pack_file):
     provider_ = provider(pack_file)
     assert provider_.offer(unit_process_demand).model.apply(unit_process_demand).technosphere == []
     assert provider_.offer(cumulative_demand).model.apply(cumulative_demand).technosphere == []
+
+
+def _row(**overrides):
+    row = {
+        "product_iri": GAS, "product_unit": "kg", "location": "GLO",
+        "dataset": "natural gas, at consumer", "source": "ede67f01",
+        "basis": "unit_process", "flow_iri": CO2, "flow_unit": "kg", "amount": 0.4,
+    }
+    row.update(overrides)
+    return row
+
+
+def _pack(tmp_path, rows, name="pack.parquet"):
+    path = tmp_path / name
+    pq.write_table(pa.Table.from_pylist(rows), path)
+    return path
+
+
+def test_two_datasets_for_one_product_and_location_are_refused(tmp_path):
+    """The lookup key is (product, unit, location) and an index cannot hold
+    two answers honestly: keeping whichever came last would put an
+    unexplained number in the inventory and label it with the other
+    dataset's name -- the same reasoning as ``AmbiguousModelMatch`` and
+    ``DuplicateFactor``."""
+    path = _pack(tmp_path, [
+        _row(dataset="natural gas, at consumer", source="ede67f01"),
+        _row(dataset="natural gas, at long-distance pipeline", source="a4273d5b", amount=0.9),
+    ])
+    with pytest.raises(DuplicateBackgroundEntry) as raised:
+        BackgroundPack.from_parquet(path)
+    message = str(raised.value)
+    assert "natural gas, at consumer" in message
+    assert "natural gas, at long-distance pipeline" in message
+    assert GAS in message
+    assert "GLO" in message
+
+
+def test_the_same_dataset_at_two_locations_is_not_a_duplicate(tmp_path):
+    path = _pack(tmp_path, [
+        _row(location="RER"),
+        _row(location="CH"),
+    ])
+    pack = BackgroundPack.from_parquet(path)
+    demand = Demand(flow=Flow(iri=GAS, location="CH"), amount=1.0, unit="kg")
+    assert pack.lookup(demand) is not None
+
+
+def test_an_unknown_basis_is_refused_on_load(tmp_path):
+    """``complete`` is ``basis == "cumulative"``, so an unrecognised word
+    would quietly read as an incomplete borrow nobody declared, described by
+    a term no reader can look up."""
+    path = _pack(tmp_path, [_row(basis="estimated")])
+    with pytest.raises(ValueError, match="not a known background basis"):
+        BackgroundPack.from_parquet(path)
+
+
+def test_every_background_resolution_speaks_the_shared_vocabulary(pack_file):
+    """``tier``, ``model``, ``asked`` and ``answered`` mean here what they
+    mean in tiers 1 and 2 -- tier 3 used to carry no ``model`` at all."""
+    demand = Demand(flow=Flow(iri=GAS, location="GLO", time=2030), amount=1.0, unit="kg")
+    resolution = provider(pack_file).offer(demand).resolution
+    assert resolution["tier"] == "background"
+    assert resolution["model"] == "BackgroundDataset"
+    assert resolution["asked"] == f"{GAS} @GLO/2030"
+    assert resolution["answered"] == resolution["asked"]

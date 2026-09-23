@@ -20,6 +20,16 @@ The cache this writes is not an optimisation: it is committed beside the
 examples so a run reproduces on a plane, in a lecture hall, or in two years'
 time without needing the network or the token again. See
 ``trailrunner/resolution/pyst.py`` for the taxonomy that reads it back.
+
+**Watch the "no such concept" block this prints.** An IRI the vocabulary
+does not have answers ``[]`` from the relationships endpoint exactly as a
+real top concept with no parents does, so a warming run that looks entirely
+successful can mean the product dimension will relax nothing, ever, for
+those IRIs -- and several of the IRIs this project's own models use are
+invented rather than vocabulary concepts. Nothing is cached for them (an
+invented IRI must not end up in a committed cache file looking like a
+concept), and they are printed at the end, loudly, because that is the one
+moment someone is looking.
 """
 
 from trailrunner.resolution import PystTaxonomy, default_client
@@ -37,6 +47,21 @@ def main() -> None:
     for iri in IRIS:
         print(iri, "->", taxonomy.broader(iri))
     taxonomy.save()
+
+    unknown = sorted(taxonomy.unknown_iris)
+    if unknown:
+        print()
+        print("!" * 72)
+        print("!! THE VOCABULARY HAS NO SUCH CONCEPT (404 from /api/v1/concepts/):")
+        for iri in unknown:
+            print(f"!!   {iri}")
+        print("!!")
+        print("!! These are not concepts, so they have no skos:broader and the")
+        print("!! product dimension can never relax them, whatever max_steps says.")
+        print("!! Nothing was cached for them. Either fix the IRI to one the")
+        print("!! vocabulary actually has, or accept that generalisation does not")
+        print("!! apply to this product and say so where the model declares it.")
+        print("!" * 72)
 
 
 if __name__ == "__main__":

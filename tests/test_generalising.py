@@ -13,6 +13,7 @@ from trailrunner.resolution import GeneralisingProvider, ModelProvider, StaticTa
 HEAT = "https://vocab.sentier.dev/products/heat"
 GREEN_TRUCK = "https://vocab.sentier.dev/products/truck-green"
 TRUCK = "https://vocab.sentier.dev/products/truck"
+VEHICLE = "https://vocab.sentier.dev/products/road-vehicle"
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "RER": "GLO"})
 
@@ -35,6 +36,13 @@ class DatedBoiler(Model):
 
 class GenericTruck(Model):
     produces = [TRUCK]
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+class GenericVehicle(Model):
+    produces = [VEHICLE]
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -93,7 +101,21 @@ def test_product_is_widened_through_the_taxonomy():
     demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
     offer = provider([GenericTruck()], taxonomy=taxonomy).offer(demand)
     assert isinstance(offer.model, GenericTruck)
-    assert offer.resolution["relaxations"] == [f"product: {GREEN_TRUCK} -> {TRUCK}"]
+    assert offer.resolution["relaxations"] == ["product: truck-green -> truck"]
+
+
+def test_the_product_note_is_short_and_the_full_pair_is_still_recorded():
+    """The note is what ``tree()`` prints, so it carries the last segment of
+    each IRI; the full pair a reader traces a number with stays in the
+    resolution, and so in ``report.proxies`` and the log parquet."""
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    offer = provider([GenericTruck()], taxonomy=taxonomy).offer(demand)
+    note = offer.resolution["relaxations"][0]
+    assert "https://" not in note
+    assert len(note) < 60
+    assert GREEN_TRUCK in offer.resolution["asked"]
+    assert TRUCK in offer.resolution["answered"]
 
 
 def test_product_relaxation_needs_a_taxonomy():
@@ -138,6 +160,35 @@ def test_explain_says_generalisation_was_tried():
     reason, detail = provider([]).explain(demand)
     assert reason == "generalisation_exhausted"
     assert "location" in detail
+
+
+def test_explain_is_silent_when_no_candidate_could_be_generated():
+    """A demand with no location, no year and no taxonomy has nothing to
+    relax, whatever the budgets say. Explaining it as "budget spent" was both
+    false and useless: it pointed the reader at ``max_steps``, which cannot
+    manufacture a candidate. Silence here is what lets the chain fall through
+    to its own ``no_model_found``."""
+    demand = Demand(flow=Flow(iri="https://vocab.sentier.dev/products/unobtainium"),
+                    amount=1.0, unit="kg")
+    assert provider([]).explain(demand) is None
+
+
+def test_explain_counts_the_candidates_it_actually_generated():
+    """Not the budget it was allowed. CH -> RER -> GLO offers two candidates
+    against a location budget of three, and the detail says two."""
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    settings = ProxySettings(order=("location",), max_steps={"location": 3})
+    _reason, detail = provider([], settings=settings).explain(demand)
+    assert "location(2)" in detail
+
+
+def test_explain_ignores_a_dimension_with_nothing_to_try():
+    """A budget for the product dimension with no taxonomy behind it is not a
+    thing that was tried, and must not be reported as one."""
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    _reason, detail = provider([], taxonomy=None).explain(demand)
+    assert "product" not in detail
+    assert "time" not in detail
 
 
 def test_explain_is_silent_when_no_budget_was_available():
@@ -201,3 +252,57 @@ def test_ambiguous_match_reached_through_relaxation_is_not_swallowed():
     demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
     with pytest.raises(AmbiguousModelMatch):
         provider([BoilerA(), BoilerB()]).offer(demand)
+
+
+def test_the_product_walk_climbs_more_than_one_level():
+    """``product: 2`` means two levels up the vocabulary, the way
+    ``location: 3`` means three steps up the hierarchy -- not two of the
+    direct parents. A real chain (fi_17100 -> fi_1710 -> fi_171) is three
+    levels deep, and a single-level walk could never reach past the first.
+    """
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 2})
+    offer = provider([GenericVehicle()], settings=settings, taxonomy=taxonomy).offer(demand)
+    assert isinstance(offer.model, GenericVehicle)
+    assert offer.demand.flow.iri == VEHICLE
+    assert offer.resolution["relaxations"] == ["product: truck-green -> road-vehicle"]
+
+
+def test_the_product_budget_stops_the_walk_at_the_level_it_says():
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 1})
+    assert provider([GenericVehicle()], settings=settings, taxonomy=taxonomy).offer(demand) is None
+
+
+def test_the_nearer_concept_is_tried_before_the_wider_one():
+    """Breadth-first: every concept one level up is tried before any concept
+    two levels up, so the most specific model still standing wins."""
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 2})
+    offer = provider(
+        [GenericTruck(), GenericVehicle()], settings=settings, taxonomy=taxonomy
+    ).offer(demand)
+    assert isinstance(offer.model, GenericTruck)
+
+
+def test_a_cycle_in_the_taxonomy_does_not_hang_the_walk():
+    """A vocabulary is not guaranteed acyclic, and this walks it in a loop."""
+    taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [GREEN_TRUCK]})
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    settings = ProxySettings(order=("product",), max_steps={"product": 5})
+    assert provider([], settings=settings, taxonomy=taxonomy).offer(demand) is None
+
+
+def test_every_tier_two_resolution_speaks_the_shared_vocabulary():
+    """``tier``, ``model``, ``asked`` and ``answered`` mean the same thing in
+    every tier, and ``asked`` describes the demand rather than restating an
+    IRI that did not change."""
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit="MJ")
+    resolution = provider([RegionalBoiler()]).offer(demand).resolution
+    assert resolution["tier"] == "generalising"
+    assert resolution["model"] == "RegionalBoiler"
+    assert resolution["asked"] == f"{HEAT} @CH/2030"
+    assert resolution["answered"] == f"{HEAT} @RER/2030"

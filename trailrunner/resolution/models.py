@@ -2,7 +2,7 @@
 
 from trailrunner.core.flow import Demand
 from trailrunner.orchestration.glossary import Glossary
-from trailrunner.resolution.chain import Offer
+from trailrunner.resolution.chain import Offer, describe
 
 
 class ModelProvider:
@@ -24,7 +24,15 @@ class ModelProvider:
             model=model,
             demand=demand,
             tier="model",
-            resolution={"tier": "model", "model": type(model).__name__},
+            # ``asked`` and ``answered`` are identical here, and said anyway:
+            # they are the two keys a reader compares across tiers, and one
+            # that is present only when it differs is a key whose absence has
+            # to be interpreted. See ``chain``'s module docstring.
+            resolution={
+                "model": type(model).__name__,
+                "asked": describe(demand),
+                "answered": describe(demand),
+            },
         )
 
     def explain(self, demand: Demand) -> tuple[str, str] | None:

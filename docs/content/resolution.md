@@ -67,16 +67,28 @@ Snaps to the nearest year some registered model actually declares coverage for, 
 
 ### Product
 
-Walks a [`Taxonomy`](../api/resolution.md)'s `skos:broader` relation one step at a time —
-"truck, green" generalises to "truck" before anything wider, so the most specific model
-still standing wins:
+Walks a [`Taxonomy`](../api/resolution.md)'s `skos:broader` relation upward,
+breadth-first: every concept one level up is tried before any concept two levels up, so
+"truck, green" generalises to "truck" before anything wider and the most specific model
+still standing wins. A concept with two broader concepts contributes both, and both are
+one level up.
 
 ```python
 from trailrunner.resolution import StaticTaxonomy
 
-taxonomy = StaticTaxonomy({"https://vocab.sentier.dev/products/truck-green":
-                            ["https://vocab.sentier.dev/products/truck"]})
+taxonomy = StaticTaxonomy({
+    "https://vocab.sentier.dev/products/truck-green": ["https://vocab.sentier.dev/products/truck"],
+    "https://vocab.sentier.dev/products/truck": ["https://vocab.sentier.dev/products/road-vehicle"],
+})
+# with max_steps={"product": 2}, a demand for "truck, green" is re-asked at
+# "truck", then at "road-vehicle"
 ```
+
+A step means the same thing here as everywhere else: `max_steps["product"]` is how many
+*levels up the vocabulary* the walk may climb, exactly as `max_steps["location"]` is how
+many levels up the hierarchy the region may widen. Real vocabulary chains are several
+levels deep — `fi_17100 → fi_1710 → fi_171` is three — and a budget of 2 reaches the
+second of them.
 
 In production this is backed by [`PystTaxonomy`](../api/resolution.md) instead of a
 hand-written map — see [below](#the-pyst-cache-and-offline-runs).
@@ -90,6 +102,12 @@ cross-product whose preference order (wider-region-first? earlier-year-first?) i
 normative choice, and inventing one silently is exactly what this tier exists to prevent.
 The demand falls through instead, and shows up as a `generalisation_exhausted` cutoff:
 deferred, not forgotten, and visible either way.
+
+That reason is only given when candidates actually existed and were tried — its detail
+counts them, e.g. `candidates tried: location(2), product(3)`. A demand with no location,
+no year and no taxonomy behind it has nothing to relax whatever `max_steps` permits, and
+this tier says nothing at all about it, so the chain reports `no_model_found`: the reader
+is pointed at a missing model rather than at a budget that could not have helped.
 
 ## Tier 3: borrowing from a background pack
 
@@ -118,6 +136,17 @@ from trailrunner.resolution import BackgroundPack, BackgroundProvider
 pack = BackgroundPack.from_parquet("examples/background_pack.parquet")
 provider = BackgroundProvider(pack)
 ```
+
+Two things are refused on load rather than carried into a run. A `basis` that is neither
+`"cumulative"` nor `"unit_process"` raises `ValueError` where it is written, because
+`complete` is derived from it and an unrecognised word would quietly read as an incomplete
+borrow nobody declared. And two datasets for one `(product_iri, product_unit, location)`
+raise [`DuplicateBackgroundEntry`](../api/errors.md), naming both: that triple is the
+pack's only lookup key, there is no rule that picks between two answers, and keeping
+whichever row came last would put an unexplained number in the inventory *and* label it
+with the other dataset's name in the very field a reader checks it against. It is the same
+refusal `Glossary.resolve` makes with `AmbiguousModelMatch` and a method file makes with
+`DuplicateFactor`.
 
 ### `basis`, and what a node's resolution says about it
 
@@ -165,6 +194,23 @@ not know the row came from a different-sounding process. Before trusting a borro
 number, check `resolution["dataset"]` (or the corresponding line in `report.tree()`)
 against the product you actually demanded.
 
+### What a resolution says, in every tier
+
+A resolution dict is read by people and by code that never knows which tier wrote it, so
+four keys mean the same thing in all three:
+
+| key | meaning |
+| --- | --- |
+| `tier` | `"model"`, `"generalising"` or `"background"` — copied from `Offer.tier`, never set independently |
+| `model` | class name of the model that produced the Result (tier 3's is `BackgroundDataset`) |
+| `asked` | the demand as it came in: full IRI, location and year |
+| `answered` | the demand the model was actually applied to — equal to `asked` where nothing was relaxed, rather than absent |
+
+Each tier then adds its own: `relaxations` for tier 2, and `dataset`, `source`, `basis`
+and `complete` for tier 3. The relaxation notes are written for a `tree()` line, so a
+product note shortens both IRIs to their last segment; the full pair is in `asked` and
+`answered`, and so in `report.proxies` and the log parquet.
+
 ### Reading `report.proxies`
 
 Every node whose resolution's `tier` is not `"model"` — a generalised match or a borrowed
@@ -172,13 +218,19 @@ one — lands in `report.proxies`, keyed by node id, holding the full resolution
 
 ```python
 for node_id, resolution in report.proxies.items():
-    if resolution.get("basis") == "unit_process":
+    if resolution.get("complete") is False:
         print(node_id, "incomplete borrow:", resolution["dataset"])
 ```
 
 `report.summary()` reports the count; `report.tree()` shows where in the traversal each one
-sits. Nothing has to be inferred from the absence of a `[model: ...]` tag — an unrecognised
-tier is never mistaken for an exact match, in either view.
+sits, and reads a borrow's incompleteness from the same `complete` key `summary()` counts,
+so the two views cannot disagree.
+
+Every `Offer` carries its tier into its resolution, so a provider cannot answer with a
+concession the report then prints as an exact match — the failure that made this promise
+worth checking. A resolution dict written straight into a `Log` by hand with no `tier` key
+at all is still read as `"model"` in both views: that default is uniform, not inferred, and
+anything trailrunner's own chain produces says which tier it came from outright.
 
 ## The PyST cache and offline runs
 
@@ -200,3 +252,38 @@ taxonomy = PystTaxonomy("examples/pyst_cache.json")
 # online, to warm the cache with a new IRI (see dev/warm_pyst_cache.py):
 taxonomy = PystTaxonomy("examples/pyst_cache.json", client=default_client())
 ```
+
+### A failure degrades the dimension, it does not end the run
+
+An unreachable service, a request that times out, a body that is not JSON: each answers
+`[]`, the same thing an offline run gets, and nothing is written to the cache, so a later
+run asks again rather than inheriting one outage as a fact about the vocabulary. A
+traversal must not die because one of three relaxation dimensions could not be reached.
+
+The one failure that *is* raised is a response of the wrong shape — the relationships
+endpoint answers a list, and something else means the API changed under this client, which
+is a bug to fix rather than a dimension to do without.
+
+### "No such concept" is not "no parents"
+
+`GET /api/v1/concepts/<iri>` answers **404** for an IRI the vocabulary does not have, while
+`GET /api/v1/relationships/?iri=<iri>` answers **200 with an empty list** for that same
+IRI — exactly as it does for a real top concept that genuinely has nothing above it. So
+`broader()` alone cannot tell the two apart, and an invented product IRI relaxes nothing
+while appearing to work.
+
+`broader()` still answers `[]` for both, because a missing concept should degrade the
+product dimension and not kill a traversal. The difference is recorded rather than
+discarded:
+
+```python
+taxonomy.broader("https://vocab.sentier.dev/products/electricity")  # []
+taxonomy.known("https://vocab.sentier.dev/products/electricity")    # False -- not a concept
+taxonomy.unknown_iris                                               # every 404 this instance hit
+```
+
+`known()` answers `None` when nobody could ask — an offline run, a cache hit, a client that
+cannot check, a network failure while checking — because "nobody asked" is not "the
+vocabulary says no". `dev/warm_pyst_cache.py` prints the unknown IRIs in a block nobody can
+miss, and caches nothing for them: an IRI that is not a concept must not end up in a
+committed cache file looking like one.

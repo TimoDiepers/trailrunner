@@ -30,14 +30,17 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from trailrunner.core.errors import DuplicateBackgroundEntry
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.params.location import LocationHierarchy
-from trailrunner.resolution.chain import Offer
+from trailrunner.resolution.chain import Offer, describe
 
 CUMULATIVE = "cumulative"
 UNIT_PROCESS = "unit_process"
+BASES = frozenset({CUMULATIVE, UNIT_PROCESS})
+"""The only two things a borrowed row can be. Closed, and checked on load."""
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,21 @@ class BackgroundEntry:
     """``"cumulative"`` or ``"unit_process"`` -- see the module docstring."""
     exchanges: tuple[tuple[str, str, float], ...]
     """(flow IRI, unit, amount per unit of product)."""
+
+    def __post_init__(self) -> None:
+        """An unknown ``basis`` is rejected where it is written.
+
+        ``complete`` is ``basis == CUMULATIVE``, so a typo or a pack built to
+        a third convention would quietly read as ``unit_process`` — an
+        incomplete borrow the pack's author never declared, described by a
+        word no reader can look up. Closed and checked here, the same way
+        ``AttributionSettings`` closes the run's normative choices.
+        """
+        if self.basis not in BASES:
+            raise ValueError(
+                f"{self.basis!r} is not a known background basis; allowed: "
+                f"{', '.join(sorted(BASES))}"
+            )
 
     @property
     def complete(self) -> bool:
@@ -74,6 +92,10 @@ class BackgroundPack:
     whatever identifies where the row came from) and ``basis`` carried on
     every row so nothing here can lose track of where a number came from or
     how complete it is.
+
+    Two datasets sharing one lookup key raise ``DuplicateBackgroundEntry``:
+    the index is the pack's only way of answering a demand, and an index
+    cannot hold two answers honestly.
     """
 
     def __init__(
@@ -84,9 +106,25 @@ class BackgroundPack:
     ) -> None:
         self.source = source
         self._hierarchy = hierarchy if hierarchy is not None else LocationHierarchy()
-        self._entries = {
-            (entry.product_iri, entry.product_unit, entry.location): entry for entry in entries
-        }
+        self._entries: dict[tuple[str, str, str | None], BackgroundEntry] = {}
+        for entry in entries:
+            key = (entry.product_iri, entry.product_unit, entry.location)
+            existing = self._entries.get(key)
+            if existing is not None:
+                # ``from_parquet`` groups by dataset as well, so two datasets
+                # for one product at one location arrive here as two entries
+                # for one lookup key. Keeping the last silently would answer a
+                # demand with an arbitrary one of them and then label it in
+                # the resolution -- the field a reader checks a borrowed
+                # number against -- with that arbitrary choice's name.
+                raise DuplicateBackgroundEntry(
+                    f"two background datasets answer {entry.product_iri} "
+                    f"({entry.product_unit}) at location {entry.location!r}: "
+                    f"{existing.dataset!r} (source {existing.source}) and "
+                    f"{entry.dataset!r} (source {entry.source}); there is no "
+                    "rule that picks between them"
+                )
+            self._entries[key] = entry
 
     @classmethod
     def from_parquet(
@@ -170,12 +208,20 @@ class BackgroundProvider:
         if found is None:
             return None
         entry, location, fell_back = found
+        model = BackgroundDataset(entry)
         return Offer(
-            model=BackgroundDataset(entry),
+            model=model,
             demand=demand,
             tier="background",
             resolution={
-                "tier": "background",
+                # ``model``, ``asked`` and ``answered`` mean here exactly what
+                # they mean in tiers 1 and 2; see ``chain``'s module
+                # docstring. The demand is answered as asked -- the row may
+                # come from a wider location, which ``location_used`` and
+                # ``location_fallback`` say, not the demand.
+                "model": type(model).__name__,
+                "asked": describe(demand),
+                "answered": describe(demand),
                 "kind": "linear_background",
                 "dataset": entry.dataset,
                 "source": entry.source,

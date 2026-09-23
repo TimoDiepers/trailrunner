@@ -208,3 +208,27 @@ def test_a_resolution_without_a_tier_is_treated_as_an_exact_match():
     report = Report.from_log(log)
     assert "[model: Boiler]" in report.tree()
     assert report.proxies == {}
+
+
+def test_tree_and_summary_agree_on_an_unrecognised_basis():
+    """``complete`` is the one authority on whether a borrow's upstream is
+    there. Re-deriving the tag from ``basis`` instead let ``tree()`` print a
+    bare ``[background]`` for a basis it did not recognise while
+    ``summary()`` counted the same node as incomplete -- two views of one
+    node disagreeing."""
+    log = Log()
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    log.write(
+        demand,
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        resolution={
+            "tier": "background",
+            "kind": "linear_background",
+            "dataset": "something, at plant",
+            "basis": "estimated",
+            "complete": False,
+        },
+    )
+    report = Report.from_log(log)
+    assert "incomplete" in report.tree()
+    assert "1 proxy (1 incomplete)" in report.summary()
