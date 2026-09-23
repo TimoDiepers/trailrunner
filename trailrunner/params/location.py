@@ -11,6 +11,12 @@ class LocationHierarchy:
         self._parents = dict(parents or {})
         self._root = root
 
+    @property
+    def root(self) -> str:
+        """The last resort every chain ends at. Read-only: changing it mid-run
+        would silently change which fallback rows match."""
+        return self._root
+
     def chain(self, location: str | None) -> list[str | None]:
         """Ordered candidates, most specific first.
 
