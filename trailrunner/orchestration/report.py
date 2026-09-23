@@ -148,6 +148,11 @@ class Report:
         Node and inventory counts come first, then the unresolved breakdown
         and the proxy count, then the truncation and warning flags — the
         numbers to check before trusting the inventory, in that order.
+
+        The proxy line splits out incomplete borrows on their own: a
+        ``unit_process`` borrow's upstream is missing, not merely deferred,
+        and this is the one-line trust check where that has to be visible
+        without a reader opening ``report.proxies`` or ``report.tree()``.
         """
         reasons: dict[str, int] = {}
         for record in self.unresolved:
@@ -165,7 +170,13 @@ class Report:
         else:
             lines.append("0 unresolved")
         count = len(self.proxies)
-        lines.append(f"{count} {'proxy' if count == 1 else 'proxies'}")
+        incomplete = sum(
+            1 for resolution in self.proxies.values() if resolution.get("complete") is False
+        )
+        proxy_line = f"{count} {'proxy' if count == 1 else 'proxies'}"
+        if incomplete:
+            proxy_line += f" ({incomplete} incomplete)"
+        lines.append(proxy_line)
         if self.truncated:
             lines.append("traversal was truncated: max_depth or max_nodes was reached")
         if self.warnings:

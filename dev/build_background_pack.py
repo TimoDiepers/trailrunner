@@ -70,6 +70,34 @@ Every other elementary flow this script finds (NOx, SO2, particulates,
 NMVOC, noise, embodied water, ...) has no IRI mapping attempted here, and is
 printed, deduplicated, when the script runs.
 
+**The distribution/mixing/aggregation rule.** A dataset with none of the
+three mapped flows is an easy call to leave out (see ``EXCLUDED`` above).
+Harder: a dataset that *does* carry a mapped flow, but at a near-zero
+amount, because its own direct exchanges are mostly a technosphere input of
+the very commodity it produces -- e.g. "Electricity, high voltage, at grid"
+(1 kWh out) whose only sizeable input is 1.028 kWh of "Electricity mix" (the
+actual generation, one hop upstream and unresolved by this tier), leaving
+only a trace of N2O as its own direct emission. Borrowing that row answers
+an electricity demand with a plausible-looking near-zero for climate
+impact -- worse than a cutoff, because a cutoff is visible.
+
+``_distribution_step_reason`` catches this shape structurally, not by
+naming "electricity" anywhere: a unit process whose *largest* technosphere
+input is (a) the same unit as its own reference product, (b) the same
+commodity -- judged by the leading word of both names before the first
+comma, e.g. "Electricity" in both "Electricity mix" and "Electricity, high
+voltage, at grid" -- and (c) within a small factor (0.5x-2x) of the
+reference amount, is redistributing or blending that same commodity rather
+than making it. Checked against every dataset in ``DATASETS``: only the two
+electricity rows (CH, RER) match all three conditions -- their dominant
+input is 1.03-1.04x itself, same unit, same leading word. Every other kept
+dataset fails at least one: different unit (steel's natural gas input,
+aluminium's electricity input), a different leading word despite a similar
+magnitude (clinker's limestone at 1.25x, pig iron's sinter at 1.07x -- real
+upstream materials, not the same commodity restated), or a large ratio
+despite a shared leading word (copper's concentrate at 4.14x -- refining
+concentrates the ore, it does not redistribute refined copper).
+
 Run:
 
     uv run python dev/build_background_pack.py
@@ -106,12 +134,20 @@ PRODUCTS = "https://vocab.sentier.dev/products/"
 # the file fails loudly instead of silently mismatching.
 DATASETS: list[dict[str, Any]] = [
     {
+        # Kept here, not moved to EXCLUDED, because it *was* searched for
+        # under the brief's literal product name and does carry a mapped
+        # elementary flow (N2O) directly -- but ``_distribution_step_reason``
+        # rejects it at build time, structurally, before it reaches the pack:
+        # its only sizeable direct exchange is ~1.03 kWh of "Electricity
+        # mix", the same commodity one hop upstream. See the module
+        # docstring's "distribution/mixing/aggregation rule".
         "file": "process_b29c2511-45c2-33b2-b08e-39580e0fe346.xml",
         "expected_name": "Electricity, high voltage, at grid",
         "expected_location": "CH",
         "product_iri": PRODUCTS + "electricity",
     },
     {
+        # Same shape, same rejection -- see the CH entry above.
         "file": "process_5c40be39-7138-3b60-8d16-54298bca1926.xml",
         "expected_name": "Electricity, high voltage, at grid",
         "expected_location": "RER",
@@ -243,13 +279,13 @@ EXCLUDED: list[dict[str, str]] = [
 ]
 
 
-def parse_dataset(path: Path) -> tuple[dict[str, str], list[tuple[str, str, str, float]]]:
+def parse_dataset(path: Path) -> tuple[dict[str, str], list[tuple[str, str, str, str, float]]]:
     """Read one EcoSpold file: (reference-product identity, exchanges).
 
-    Each exchange is ``(name, category, group, meanValue)`` where ``group``
-    is ``"reference"`` (outputGroup 0), ``"elementary"`` (outputGroup 4 or
-    inputGroup 4) or ``"technosphere"`` (inputGroup 5) -- the rule from the
-    module docstring, applied here and nowhere else.
+    Each exchange is ``(name, category, unit, group, meanValue)`` where
+    ``group`` is ``"reference"`` (outputGroup 0), ``"elementary"``
+    (outputGroup 4 or inputGroup 4) or ``"technosphere"`` (inputGroup 5) --
+    the rule from the module docstring, applied here and nowhere else.
     """
     root = ET.parse(path).getroot()
     dataset = root.find("dataset")
@@ -262,7 +298,7 @@ def parse_dataset(path: Path) -> tuple[dict[str, str], list[tuple[str, str, str,
         "location": geography.get("location") if geography is not None else None,
     }
 
-    exchanges: list[tuple[str, str, str, float]] = []
+    exchanges: list[tuple[str, str, str, str, float]] = []
     for exchange in dataset.find("flowData").findall("exchange"):
         output_group = exchange.find("outputGroup")
         input_group = exchange.find("inputGroup")
@@ -283,14 +319,78 @@ def parse_dataset(path: Path) -> tuple[dict[str, str], list[tuple[str, str, str,
                 "the rule this script relies on does not cover it"
             )
         exchanges.append(
-            (exchange.get("name"), exchange.get("category"), group, float(exchange.get("meanValue")))
+            (
+                exchange.get("name"),
+                exchange.get("category"),
+                exchange.get("unit"),
+                group,
+                float(exchange.get("meanValue")),
+            )
         )
     return identity, exchanges
 
 
-def build_rows() -> tuple[list[dict[str, Any]], set[str]]:
+def _distribution_step_reason(
+    identity: dict[str, str], exchanges: list[tuple[str, str, str, str, float]]
+) -> str | None:
+    """Structural check: is this dataset redistributing/blending its own
+    reference product rather than producing it?
+
+    A unit process whose *largest* technosphere input is the same commodity
+    as its own reference product -- same unit, and within a small factor of
+    the reference amount -- is a distribution, mixing or aggregation step,
+    not a producing one: whatever it emits directly describes that step, not
+    the product. See the module docstring's "distribution/mixing/aggregation
+    rule" for why this is not just a per-product exclusion list, and for the
+    worked comparison against copper, clinker and pig iron (none of which
+    trigger it).
+
+    "Same commodity" is judged the only structural way available from names
+    alone: the leading word of both names, before the first comma, matches
+    (``"Electricity"`` in both ``"Electricity mix"`` and ``"Electricity,
+    high voltage, at grid"``). Deliberately narrow -- it does not fire on a
+    same-magnitude input that is a genuinely different commodity (limestone
+    into clinker, sinter into pig iron), nor on a same-named input at a
+    magnitude outside the small-factor band (copper concentrate into
+    refined copper, ~4x, because refining concentrates the ore).
+    """
+    technosphere = [
+        (name, unit, amount) for name, _cat, unit, group, amount in exchanges if group == "technosphere"
+    ]
+    if not technosphere:
+        return None
+    dominant_name, dominant_unit, dominant_amount = max(technosphere, key=lambda t: t[2])
+
+    ref_name = identity["name"]
+    ref_unit = identity["unit"]
+    ref_amount = float(identity["amount"])
+    if dominant_unit != ref_unit:
+        return None
+
+    ref_word = ref_name.split(",", 1)[0].strip().split()[0].lower()
+    dominant_word = dominant_name.split(",", 1)[0].strip().split()[0].lower()
+    if ref_word != dominant_word:
+        return None
+
+    if ref_amount == 0:
+        return None
+    ratio = dominant_amount / ref_amount
+    if not (0.5 <= ratio <= 2.0):
+        return None
+
+    return (
+        f"largest technosphere input is {dominant_name!r} "
+        f"({dominant_amount:g} {dominant_unit} per {ref_amount:g} {ref_unit} "
+        f"of {ref_name!r}, ratio {ratio:.3g}) -- same commodity, same unit, "
+        "within a small factor: a distribution/mixing/aggregation step, not "
+        "a producing one"
+    )
+
+
+def build_rows() -> tuple[list[dict[str, Any]], set[str], list[dict[str, str]]]:
     rows: list[dict[str, Any]] = []
     skipped_flows: dict[str, int] = {}
+    structural_skips: list[dict[str, str]] = []
 
     for entry in DATASETS:
         path = CORPUS / entry["file"]
@@ -311,8 +411,19 @@ def build_rows() -> tuple[list[dict[str, Any]], set[str]]:
             "need rescaling by it, and this script does not do that"
         )
 
+        distribution_reason = _distribution_step_reason(identity, exchanges)
+        if distribution_reason is not None:
+            structural_skips.append(
+                {
+                    "name": f"{identity['name']} ({identity['location']})",
+                    "reason": distribution_reason,
+                }
+            )
+            print(f"skipped dataset: {identity['name']} ({identity['location']}) -- {distribution_reason}")
+            continue
+
         found_any = False
-        for name, _category, group, mean_value in exchanges:
+        for name, _category, _unit, group, mean_value in exchanges:
             if group != "elementary":
                 continue
             mapping = ELEMENTARY_FLOW_MAP.get(name)
@@ -345,7 +456,7 @@ def build_rows() -> tuple[list[dict[str, Any]], set[str]]:
             f"{sum(1 for r in rows if r['source'] == source)} row(s), source={source}"
         )
 
-    return rows, skipped_flows
+    return rows, skipped_flows, structural_skips
 
 
 def print_excluded() -> None:
@@ -377,7 +488,7 @@ def write_pack(rows: list[dict[str, Any]], path: Path) -> None:
 
 
 if __name__ == "__main__":
-    rows, skipped_flows = build_rows()
+    rows, skipped_flows, structural_skips = build_rows()
     print()
     print_excluded()
     print()

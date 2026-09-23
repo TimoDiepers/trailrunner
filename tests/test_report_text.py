@@ -154,6 +154,47 @@ def test_an_unrecognised_tier_is_never_labelled_an_exact_match():
     assert len(report.proxies) == 1
 
 
+def test_summary_breaks_incomplete_borrows_out_of_the_proxy_count():
+    """summary() is the one-line trust check; an incomplete borrow must be
+    visible there, not only in report.proxies or report.tree()."""
+    log = Log()
+    unit_process_demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    cumulative_demand = Demand(
+        flow=Flow(iri="https://vocab.sentier.dev/products/clinker", location="GLO"),
+        amount=1.0,
+        unit="kg",
+    )
+    log.write(
+        unit_process_demand,
+        Result(production=[Exchange(flow=unit_process_demand.flow, amount=1.0, unit="kg")]),
+        resolution={
+            "tier": "background",
+            "kind": "linear_background",
+            "dataset": "natural gas, at consumer",
+            "basis": "unit_process",
+            "complete": False,
+        },
+    )
+    log.write(
+        cumulative_demand,
+        Result(production=[Exchange(flow=cumulative_demand.flow, amount=1.0, unit="kg")]),
+        resolution={
+            "tier": "background",
+            "kind": "linear_background",
+            "dataset": "clinker, at plant (cumulative)",
+            "basis": "cumulative",
+            "complete": True,
+        },
+    )
+    summary = Report.from_log(log).summary()
+    assert "2 proxies (1 incomplete)" in summary
+
+
+def test_summary_says_nothing_extra_when_no_proxy_is_incomplete():
+    summary = built_report().summary()
+    assert "incomplete" not in summary
+
+
 def test_a_resolution_without_a_tier_is_treated_as_an_exact_match():
     """The absent-tier default is 'model' in both views, not just one."""
     log = Log()
