@@ -32,3 +32,22 @@ class MissingUnit(TrailrunnerError):
     Exchange's unit is a ``str``, and a silent ``None`` surfaces much later as
     a validation error blaming the model for what is really missing metadata.
     """
+
+
+class DuplicateFactor(TrailrunnerError):
+    """A method file states two characterization factors for one key.
+
+    ``(flow_iri, flow_unit, location, time)`` identifies a factor. Two rows
+    sharing one key is a data error in exactly the way two models producing
+    one product is: there is no rule that picks between them, so silently
+    keeping whichever came last would put an unexplained number in the score.
+    """
+
+
+class MissingColumns(TrailrunnerError):
+    """A parquet file does not have the columns its reader needs.
+
+    Named in the same style as ``MissingUnit``, and for the same reason: a
+    bare ``KeyError('flow_iri')`` names neither the file nor the layout that
+    was expected, which leaves the reader guessing at both.
+    """

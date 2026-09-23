@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from trailrunner.core.flow import Demand, Exchange, Flow
@@ -15,16 +17,22 @@ CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 
 
 def report_with(emissions) -> Report:
-    """One node per (year, amount) pair, each emitting fossil CO2 that year."""
+    """One node per (year, amount[, unit]) tuple, each emitting fossil CO2 that year.
+
+    ``unit`` defaults to ``"kg"``, which is what the IPCC AR6 characterization
+    functions are defined for; pass another to exercise the mismatch path.
+    """
     log = Log()
-    for year, amount in emissions:
+    for emission in emissions:
+        year, amount = emission[0], emission[1]
+        unit = emission[2] if len(emission) > 2 else "kg"
         demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=year), amount=1.0, unit="kg")
         log.write(
             demand,
             Result(
                 production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
                 biosphere=[
-                    Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=year), amount=amount, unit="kg")
+                    Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=year), amount=amount, unit=unit)
                 ],
             ),
             model="DirectAirCapture",
@@ -47,9 +55,11 @@ def test_the_flow_column_carries_the_iri():
     assert frame["flow"].iloc[0] == CO2_IRI
 
 
-def test_the_activity_column_names_the_model():
-    frame = inventory_dataframe(report_with([(2030, 10.0)]))
-    assert frame["activity"].iloc[0] == "DirectAirCapture"
+def test_the_activity_column_names_the_model_and_the_node():
+    """Not just the model: two nodes of one model class must stay apart, or a
+    row of the series cannot be attributed back to a place in the chain."""
+    frame = inventory_dataframe(report_with([(2030, 10.0), (2040, 10.0)]))
+    assert list(frame["activity"]) == ["DirectAirCapture#0", "DirectAirCapture#1"]
 
 
 def test_exchanges_without_a_time_are_left_out_and_reported():
@@ -64,7 +74,7 @@ def test_exchanges_without_a_time_are_left_out_and_reported():
         model="Undated",
     )
     assessment = assess_dynamic(Report.from_log(log))
-    assert assessment.undated == [(CO2_IRI, "kg", 5.0)]
+    assert assessment.undated == [(Flow(iri=CO2_IRI, location="CH"), "kg", 5.0)]
     assert len(assessment.series) == 0
 
 
@@ -117,9 +127,211 @@ def test_an_unknown_flow_is_reported_rather_than_silently_dropped():
         model="Mystery",
     )
     assessment = assess_dynamic(Report.from_log(log))
-    assert unknown in assessment.uncharacterized
+    assert assessment.uncharacterized == [
+        (Flow(iri=unknown, location="CH", time=2030), "kg", 1.0)
+    ]
+    assert assessment.wrong_unit == []
+    assert assessment.total == 0.0
 
 
 def test_an_unknown_metric_is_rejected():
     with pytest.raises(ValueError, match="cheeseburgers"):
         assess_dynamic(report_with([(2030, 10.0)]), metric="cheeseburgers")
+
+
+# --- the unit is half the key -------------------------------------------------
+#
+# The IPCC AR6 functions are per kilogram. Feeding them an amount denominated
+# in anything else is a silent factor of 1000 (or 1/1000), which is worse than
+# no answer: the static path puts exactly the same exchange in
+# `uncharacterized`, so the two paths would disagree about the same input.
+
+
+def test_an_exchange_in_grams_is_reported_and_contributes_nothing():
+    assessment = assess_dynamic(report_with([(2030, 10.0, "g")]), horizon=20)
+    assert assessment.wrong_unit == [
+        (Flow(iri=CO2_IRI, location="CH", time=2030), "g", 10.0)
+    ]
+    assert assessment.uncharacterized == []
+    assert assessment.total == 0.0
+    assert len(assessment.series) == 0
+
+
+def test_an_exchange_in_tonnes_is_reported_and_contributes_nothing():
+    assessment = assess_dynamic(report_with([(2030, 10.0, "tonne")]), horizon=20)
+    assert assessment.wrong_unit == [
+        (Flow(iri=CO2_IRI, location="CH", time=2030), "tonne", 10.0)
+    ]
+    assert assessment.total == 0.0
+
+
+def test_an_exchange_in_kilograms_is_characterized():
+    assessment = assess_dynamic(report_with([(2030, 10.0, "kg")]), horizon=20)
+    assert assessment.wrong_unit == []
+    assert assessment.uncharacterized == []
+    assert assessment.total > 0.0
+
+
+def test_a_mixed_report_characterizes_only_the_kilograms_and_reports_the_rest():
+    """The grams must not be swept in as kilograms, and must not vanish: the
+    total is the kg-only total exactly, and the grams are named with their
+    amount."""
+    kilograms_only = assess_dynamic(report_with([(2030, 10.0, "kg")]), horizon=20)
+    mixed = assess_dynamic(report_with([(2030, 10.0, "kg"), (2030, 5.0, "g")]), horizon=20)
+    assert mixed.total == pytest.approx(kilograms_only.total)
+    assert mixed.wrong_unit == [
+        (Flow(iri=CO2_IRI, location="CH", time=2030), "g", 5.0)
+    ]
+    assert mixed.uncharacterized == []
+
+
+def test_a_wrong_unit_is_not_filed_as_uncharacterized():
+    """Two different problems: 'nobody characterized this gas' versus 'this gas
+    is characterized, per kilogram, and the model emitted grams'."""
+    assessment = assess_dynamic(report_with([(2030, 10.0, "g")]), horizon=20)
+    assert assessment.uncharacterized == []
+    assert len(assessment.wrong_unit) == 1
+
+
+def test_a_caller_can_supply_functions_for_another_unit():
+    """The table is keyed on (iri, unit), and a caller keys theirs the same way."""
+    from trailrunner.assessment.dynamic import default_functions
+
+    functions = dict(default_functions())
+    functions[(CO2_IRI, "g")] = functions[(CO2_IRI, "kg")]
+    grams = assess_dynamic(report_with([(2030, 10.0, "g")]), horizon=20, functions=functions)
+    assert grams.wrong_unit == []
+    assert grams.total > 0.0
+
+
+def test_the_undated_and_the_uncharacterized_are_both_recorded_for_one_exchange():
+    """An exchange can be both. Recording it only as undated hides the other
+    gap from anyone who reads the other list."""
+    log = Log()
+    unknown = "https://vocab.sentier.dev/flows/unobtainium"
+    demand = Demand(flow=Flow(iri=CAPTURED, location="CH"), amount=1.0, unit="kg")
+    log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=unknown, location="CH"), amount=3.0, unit="kg")],
+        ),
+        model="Mystery",
+    )
+    assessment = assess_dynamic(Report.from_log(log))
+    entry = (Flow(iri=unknown, location="CH"), "kg", 3.0)
+    assert assessment.undated == [entry]
+    assert assessment.uncharacterized == [entry]
+
+
+# --- the Levasseur anchor -----------------------------------------------------
+
+
+def test_a_fixed_horizon_spans_the_full_horizon_from_the_anchor():
+    """With the anchor derived from the report's own earliest emission, the
+    only emission there is gets exactly its full horizon -- the same span the
+    conventional convention gives it, which is the definition of the anchor
+    being right."""
+    fixed = assess_dynamic(report_with([(2030, 10.0)]), horizon=20, fixed_time_horizon=True)
+    conventional = assess_dynamic(report_with([(2030, 10.0)]), horizon=20)
+    assert fixed.time_horizon_start == datetime(2030, 1, 1)
+    assert fixed.series["date"].dt.year.min() == conventional.series["date"].dt.year.min()
+    assert fixed.series["date"].dt.year.max() == conventional.series["date"].dt.year.max()
+    assert fixed.total == pytest.approx(conventional.total)
+
+
+def test_a_fixed_horizon_run_is_reproducible():
+    """The library's own default anchor is ``datetime.now()`` bound at import,
+    so this used to depend on the day it ran."""
+    one = assess_dynamic(report_with([(2030, 10.0)]), horizon=20, fixed_time_horizon=True)
+    two = assess_dynamic(report_with([(2030, 10.0)]), horizon=20, fixed_time_horizon=True)
+    assert one.total == two.total
+    assert one.time_horizon_start == two.time_horizon_start
+
+
+def test_an_earlier_emission_is_integrated_for_longer_under_levasseur():
+    """That is what the convention *is*: both horizons end together."""
+    assessment = assess_dynamic(
+        report_with([(2030, 10.0), (2040, 10.0)]), horizon=20, fixed_time_horizon=True
+    )
+    conventional = assess_dynamic(report_with([(2030, 10.0), (2040, 10.0)]), horizon=20)
+    assert assessment.series["date"].dt.year.max() < conventional.series["date"].dt.year.max()
+
+
+def test_an_emission_past_the_end_of_a_fixed_horizon_does_not_raise():
+    """It gets a zero-length horizon from the library and comes back as a
+    single NaT row. Guarding on the series rather than the curve used to walk
+    straight into an IndexError off the end of an empty frame."""
+    assessment = assess_dynamic(
+        report_with([(2030, 10.0), (2300, 10.0)]), horizon=20, fixed_time_horizon=True
+    )
+    only_the_first = assess_dynamic(
+        report_with([(2030, 10.0)]), horizon=20, fixed_time_horizon=True
+    )
+    assert assessment.total == pytest.approx(only_the_first.total)
+    assert assessment.curve["date"].notna().all()
+
+
+def test_an_explicit_anchor_is_honoured():
+    """An anchor ten years before the emission cuts ten years off its horizon."""
+    early = assess_dynamic(
+        report_with([(2030, 10.0)]),
+        horizon=20,
+        fixed_time_horizon=True,
+        time_horizon_start=datetime(2020, 1, 1),
+    )
+    derived = assess_dynamic(report_with([(2030, 10.0)]), horizon=20, fixed_time_horizon=True)
+    assert early.time_horizon_start == datetime(2020, 1, 1)
+    assert early.series["date"].dt.year.max() < derived.series["date"].dt.year.max()
+    assert early.total < derived.total
+
+
+def test_the_anchor_is_recorded_even_for_the_conventional_convention():
+    assessment = assess_dynamic(report_with([(2040, 10.0), (2030, 10.0)]), horizon=20)
+    assert assessment.time_horizon_start == datetime(2030, 1, 1)
+
+
+# --- units and summary --------------------------------------------------------
+
+
+def test_the_cumulative_unit_is_the_integral_of_the_marginal_one():
+    assessment = assess_dynamic(report_with([(2030, 10.0)]), horizon=20)
+    assert assessment.unit == "W/m2"
+    assert assessment.cumulative_unit == "W·yr/m2"
+
+
+def test_the_gwp_metrics_accumulate_into_their_own_unit():
+    assessment = assess_dynamic(report_with([(2030, 10.0)]), metric="GWP", horizon=20)
+    assert assessment.unit == "kg CO2eq"
+    assert assessment.cumulative_unit == "kg CO2eq"
+
+
+def test_the_summary_names_the_total_the_anchor_and_every_gap():
+    assessment = assess_dynamic(
+        report_with([(2030, 10.0, "kg"), (2031, 5.0, "g")]),
+        horizon=20,
+        fixed_time_horizon=True,
+    )
+    summary = assessment.summary()
+    assert "W·yr/m2" in summary
+    assert "radiative_forcing" in summary
+    assert "2030-01-01" in summary
+    assert "1 wrong unit exchange" in summary
+    assert "0 uncharacterized exchanges" in summary
+    assert "0 undated exchanges" in summary
+
+
+def test_two_units_of_one_flow_with_different_functions_is_refused():
+    """The characterization library keys its own function table on the flow
+    column alone, so this cannot be expressed in one call. Refused loudly
+    rather than resolved by whichever came first."""
+    from trailrunner.assessment.dynamic import default_functions
+
+    functions = dict(default_functions())
+    functions[(CO2_IRI, "g")] = lambda *args, **kwargs: None
+    with pytest.raises(ValueError, match="assess them separately"):
+        assess_dynamic(
+            report_with([(2030, 10.0, "kg"), (2030, 5.0, "g")]),
+            horizon=20,
+            functions=functions,
+        )

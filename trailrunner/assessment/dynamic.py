@@ -24,6 +24,27 @@ writing down, because they surprise a reader expecting a plain
 
 Both are the installed library's behaviour, not this module's; the tests
 assert the observed values rather than the naive ones.
+
+Two conventions of this module's own, which are *not* the library's:
+
+- **Characterization functions are keyed on ``(flow IRI, unit)``, not on the
+  IRI alone.** The IPCC AR6 functions are per kilogram, so handing them an
+  exchange denominated in grams would characterize 10 g of fossil CO2 as
+  10 kg — a number 1000x too large with nothing anywhere saying so. Unit
+  compatibility here is string equality, exactly as in ``Method``: a mismatch
+  is *reported*, never converted. An exchange whose ``(iri, unit)`` has no
+  function lands in ``wrong_unit`` when the IRI is known in some other unit,
+  and in ``uncharacterized`` when the gas is not covered at all — two
+  different problems for whoever reads the result.
+- **The Levasseur horizon is anchored to the study, not to the wall clock.**
+  ``dynamic_characterization.characterize``'s ``time_horizon_start`` defaults
+  to ``datetime.now()`` evaluated at *module import*, which would make every
+  ``fixed_time_horizon=True`` result depend on the day it was run. This module
+  derives the anchor from the report instead — the earliest dated biosphere
+  emission in it, as ``datetime(year, 1, 1)`` — passes it explicitly, and
+  records it on the result as ``time_horizon_start``. A caller who knows a
+  better anchor (a functional unit dated earlier than any emission, say) can
+  pass one.
 """
 
 from collections.abc import Callable, Mapping
@@ -31,6 +52,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from trailrunner.core.flow import Flow
 from trailrunner.orchestration.report import Report
 
 CO2_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
@@ -40,6 +62,17 @@ N2O = "https://vocab.sentier.dev/flows/n2o"
 CO = "https://vocab.sentier.dev/flows/co"
 
 METRICS = ("radiative_forcing", "GWP", "pGWP", "pGTP", "prospective_radiative_forcing")
+"""The metrics ``dynamic_characterization`` accepts.
+
+``pGWP``, ``pGTP`` and ``prospective_radiative_forcing`` are the Watanabe
+et al. scenario-based metrics, and they require
+``dynamic_characterization.prospective.set_scenario()`` to have been called
+first. ``trailrunner`` exposes no way to call it — there is no scenario
+argument anywhere in this module — so reaching those three means importing
+``dynamic_characterization.prospective`` yourself and setting the scenario
+before calling ``assess_dynamic``. They are listed here because the library
+accepts them, not because this module wires them up.
+"""
 
 METRIC_UNITS = {
     "radiative_forcing": "W/m2",
@@ -48,6 +81,23 @@ METRIC_UNITS = {
     "pGWP": "kg CO2eq",
     "pGTP": "kg CO2eq",
 }
+"""The unit of ``series`` — the *marginal* quantity, per year."""
+
+CUMULATIVE_METRIC_UNITS = {
+    "radiative_forcing": "W·yr/m2",
+    "prospective_radiative_forcing": "W·yr/m2",
+    "GWP": "kg CO2eq",
+    "pGWP": "kg CO2eq",
+    "pGTP": "kg CO2eq",
+}
+"""The unit of ``curve`` and ``total`` — the cumulative sum of ``series``.
+
+For the radiative-forcing metrics that sum is an integral over time, so it is
+W·yr/m2 and not W/m2. For the GWP metrics the marginal series is already in
+kg CO2eq per year and its cumulative sum is kg CO2eq, so the two units
+coincide — which is exactly why a single ``unit`` field looked right for long
+enough to ship.
+"""
 
 
 def _require(module: str):
@@ -65,20 +115,25 @@ def _require(module: str):
         ) from exc
 
 
-def default_functions() -> dict[str, Callable]:
-    """IRI -> IPCC AR6 characterization function.
+def default_functions() -> dict[tuple[str, str], Callable]:
+    """``(IRI, unit)`` -> IPCC AR6 characterization function.
 
     A declared table rather than a lookup through a background database: the
     flows are identified by vocabulary IRI, and the mapping from an IRI to the
     physics of that gas is a fact about the gas, not about anyone's database.
+
+    The unit is half the key because the IPCC AR6 functions are defined per
+    kilogram (their radiative efficiencies are ``radiative_efficiency_kg``).
+    Applying one to an amount denominated in anything else is not a rounding
+    error, it is a factor of 1000, so ``"kg"`` is stated rather than assumed.
     """
     ipcc = _require("dynamic_characterization.ipcc_ar6")
     return {
-        CO2_FOSSIL: ipcc.characterize_co2,
-        CO2_BIOGENIC_UPTAKE: ipcc.characterize_co2_uptake,
-        CH4_FOSSIL: ipcc.characterize_ch4,
-        N2O: ipcc.characterize_n2o,
-        CO: ipcc.characterize_co,
+        (CO2_FOSSIL, "kg"): ipcc.characterize_co2,
+        (CO2_BIOGENIC_UPTAKE, "kg"): ipcc.characterize_co2_uptake,
+        (CH4_FOSSIL, "kg"): ipcc.characterize_ch4,
+        (N2O, "kg"): ipcc.characterize_n2o,
+        (CO, "kg"): ipcc.characterize_co,
     }
 
 
@@ -93,12 +148,104 @@ class DynamicAssessment:
     total: float = 0.0
     metric: str = "radiative_forcing"
     unit: str = ""
+    """The unit of ``series``: the marginal quantity, per year."""
+    cumulative_unit: str = ""
+    """The unit of ``curve`` and ``total``: the cumulative sum of ``series``.
+
+    Separate from ``unit`` because for the radiative-forcing metrics they
+    differ — W/m2 marginal, W·yr/m2 accumulated — and labelling an integral
+    with its integrand's unit is wrong by a dimension.
+    """
     horizon: int = 100
-    uncharacterized: list[str] = field(default_factory=list)
-    """Flow IRIs with no characterization function. Reported, never zeroed."""
-    undated: list[tuple[str, str, float]] = field(default_factory=list)
-    """(IRI, unit, amount) for exchanges with no ``time``. A dynamic assessment
-    cannot place them on the axis, so it says so instead of assuming a year."""
+    time_horizon_start: datetime | None = None
+    """What the Levasseur horizon was anchored to, whether or not it was used.
+
+    Recorded on every result so a reader can see it without re-deriving it.
+    It only *changes* anything when ``fixed_time_horizon=True``; with the
+    conventional convention each emission starts its own horizon and the
+    anchor is inert.
+    """
+    uncharacterized: list[tuple[Flow, str, float]] = field(default_factory=list)
+    """``(Flow, unit, amount)`` per exchange whose flow no function covers.
+
+    Reported, never zeroed, and per exchange with its amount rather than as a
+    deduplicated list of IRIs — the same shape as
+    ``Assessment.uncharacterized``, so "how much did this path leave out" is
+    the same question with the same answer everywhere.
+    """
+    wrong_unit: list[tuple[Flow, str, float]] = field(default_factory=list)
+    """``(Flow, unit, amount)`` per exchange whose flow *is* covered, but not
+    in the unit the exchange is denominated in.
+
+    Kept apart from ``uncharacterized`` because they are different problems:
+    "nobody characterized this gas" is a gap in the method, while "this gas is
+    characterized, but per kilogram, and your model emitted grams" is a
+    mismatch between the model and the method that somebody can fix today.
+    """
+    undated: list[tuple[Flow, str, float]] = field(default_factory=list)
+    """``(Flow, unit, amount)`` for exchanges with no ``time``. A dynamic
+    assessment cannot place them on the axis, so it says so instead of
+    assuming a year."""
+
+    def summary(self) -> str:
+        """The curve's headline number and everything left out of it.
+
+        The same shape as ``Report.summary()`` and ``Assessment.summary()``:
+        the caveats in front of the reader rather than behind an attribute
+        they have to know to look at. Returns the block rather than printing
+        it.
+        """
+        anchor = (
+            self.time_horizon_start.date().isoformat()
+            if self.time_horizon_start is not None
+            else "none (no dated emission)"
+        )
+        lines = [
+            f"{self.total:g} {self.cumulative_unit}".strip(),
+            f"metric: {self.metric}, horizon: {self.horizon} years",
+            f"horizon anchored at: {anchor}",
+        ]
+        for label, entries in (
+            ("uncharacterized", self.uncharacterized),
+            ("wrong unit", self.wrong_unit),
+            ("undated", self.undated),
+        ):
+            count = len(entries)
+            lines.append(
+                f"{count} {label} "
+                f"{'exchange' if count == 1 else 'exchanges'}"
+            )
+        return "\n".join(lines)
+
+
+def _activity(node: Any) -> str:
+    """A label for the ``activity`` column that is unique per *node*.
+
+    ``node.model`` alone collapses every node of the same model class into one
+    label — a supply chain with eleven gas boilers in it would come back as a
+    single ``"GasBoiler"`` series — and nothing downstream could attribute a
+    row back to the place in the chain it came from. The node id is what makes
+    that place identifiable, so it travels with the model name.
+    """
+    return f"{node.model or 'node'}#{node.id}"
+
+
+def _horizon_anchor(report: Report) -> datetime | None:
+    """The earliest dated biosphere emission in the report, at 1 January.
+
+    The Levasseur horizon has to be anchored to *something*, and the library's
+    own default — ``datetime.now()``, bound at import — anchors it to the
+    machine's calendar, which makes the same study give different answers on
+    different days. The study's own earliest emission is the one anchor that
+    is both reproducible and derived from the thing being assessed.
+    """
+    years = [
+        exchange.flow.time
+        for node in report.nodes
+        for exchange in node.result.biosphere
+        if exchange.flow.time is not None
+    ]
+    return datetime(min(years), 1, 1) if years else None
 
 
 def inventory_dataframe(report: Report) -> Any:
@@ -108,22 +255,27 @@ def inventory_dataframe(report: Report) -> Any:
     becomes ``datetime(Y, 1, 1)``. That is an assumption, not a fact — a finer
     ``Flow.time`` would change it — and it lives in this one function so the
     change would be one edit.
+
+    Exchanges with no ``flow.time`` are **silently left out**: there is no
+    place on the axis to put them and this function returns a frame, not a
+    report of what it dropped. It is a shaping helper, not an assessment. Use
+    ``assess_dynamic``, which records every one of them in
+    ``DynamicAssessment.undated`` (along with anything the characterization
+    functions could not cover), when the omissions matter — and they always
+    matter to a number somebody will quote.
     """
     pandas = _require("pandas")
-    rows = []
-    for node in report.nodes:
-        activity = node.model or f"node {node.id}"
-        for exchange in node.result.biosphere:
-            if exchange.flow.time is None:
-                continue
-            rows.append(
-                {
-                    "date": datetime(exchange.flow.time, 1, 1),
-                    "amount": exchange.amount,
-                    "flow": exchange.flow.iri,
-                    "activity": activity,
-                }
-            )
+    rows = [
+        {
+            "date": datetime(exchange.flow.time, 1, 1),
+            "amount": exchange.amount,
+            "flow": exchange.flow.iri,
+            "activity": _activity(node),
+        }
+        for node in report.nodes
+        for exchange in node.result.biosphere
+        if exchange.flow.time is not None
+    ]
     frame = pandas.DataFrame(rows, columns=["date", "amount", "flow", "activity"])
     return frame.astype({"date": "datetime64[s]", "amount": "float64"})
 
@@ -133,14 +285,31 @@ def assess_dynamic(
     metric: str = "radiative_forcing",
     horizon: int = 100,
     fixed_time_horizon: bool = False,
-    functions: Mapping[str, Callable] | None = None,
+    functions: Mapping[tuple[str, str], Callable] | None = None,
+    time_horizon_start: datetime | None = None,
 ) -> DynamicAssessment:
     """Characterize the time-stamped inventory over ``horizon`` years.
+
+    ``functions`` is a mapping keyed on ``(flow IRI, unit)`` — the same shape
+    ``default_functions()`` returns — because a characterization function is
+    defined for a particular denomination and the IPCC AR6 ones are per
+    kilogram. An exchange whose ``(iri, unit)`` pair has no entry is left out
+    of the characterization and reported: in ``wrong_unit`` if some other unit
+    of that IRI does have a function, in ``uncharacterized`` if none does.
+    Nothing is converted between units; a mismatch is a fact about the
+    inventory and the method, and this module's job is to state it.
 
     ``fixed_time_horizon=False`` is the conventional convention: each emission
     is characterized over its own horizon. ``True`` is Levasseur: every horizon
     ends at the same date, so an earlier emission is counted for longer. Both
     are exposed because neither is the obviously right one.
+
+    ``time_horizon_start`` is where that shared Levasseur horizon starts.
+    Left as ``None`` it is derived from the report — the earliest dated
+    biosphere emission, at 1 January — so that a given report and horizon give
+    the same answer today and next year. The value actually used is recorded
+    on the result. Pass one explicitly when the study has a better anchor than
+    its own first emission, such as a functional unit dated before it.
     """
     if metric not in METRICS:
         raise ValueError(f"{metric!r} is not a known metric; allowed: {', '.join(METRICS)}")
@@ -148,39 +317,100 @@ def assess_dynamic(
     pandas = _require("pandas")
     characterization = _require("dynamic_characterization")
 
-    table = functions if functions is not None else default_functions()
+    table = dict(functions) if functions is not None else default_functions()
+    known_iris = {iri for iri, _ in table}
+
+    anchor = time_horizon_start if time_horizon_start is not None else _horizon_anchor(report)
 
     assessment = DynamicAssessment(
-        metric=metric, unit=METRIC_UNITS[metric], horizon=horizon
+        metric=metric,
+        unit=METRIC_UNITS[metric],
+        cumulative_unit=CUMULATIVE_METRIC_UNITS[metric],
+        horizon=horizon,
+        time_horizon_start=anchor,
     )
-    for node in report.nodes:
-        for exchange in node.result.biosphere:
-            if exchange.flow.time is None:
-                assessment.undated.append((exchange.flow.iri, exchange.unit, exchange.amount))
-            elif exchange.flow.iri not in table:
-                if exchange.flow.iri not in assessment.uncharacterized:
-                    assessment.uncharacterized.append(exchange.flow.iri)
 
-    frame = inventory_dataframe(report)
+    rows: list[dict[str, Any]] = []
+    # Which function each IRI in the frame is characterized with. The library
+    # keys its own table on the frame's ``flow`` column alone, so two units of
+    # one IRI with two different functions cannot both be expressed there.
+    used: dict[str, tuple[str, Callable]] = {}
+
+    for node in report.nodes:
+        activity = _activity(node)
+        for exchange in node.result.biosphere:
+            key = (exchange.flow.iri, exchange.unit)
+            function = table.get(key)
+            record = (exchange.flow, exchange.unit, exchange.amount)
+            if function is None:
+                # Known gas, unknown denomination, versus unknown gas: the
+                # reader can act on the first one today.
+                if exchange.flow.iri in known_iris:
+                    assessment.wrong_unit.append(record)
+                else:
+                    assessment.uncharacterized.append(record)
+            # An exchange can be both undated and uncharacterized, and it is
+            # recorded under both: each list answers its own question, and
+            # dropping it from one because it appeared in the other is how a
+            # gap goes unnoticed.
+            if exchange.flow.time is None:
+                assessment.undated.append(record)
+                continue
+            if function is None:
+                continue
+            previous = used.get(exchange.flow.iri)
+            if previous is not None and previous[1] is not function:
+                raise ValueError(
+                    f"{exchange.flow.iri} appears in the inventory in both "
+                    f"{previous[0]!r} and {exchange.unit!r} with different "
+                    "characterization functions; the characterization library "
+                    "keys its functions on the flow alone, so the two cannot be "
+                    "characterized in one call — assess them separately"
+                )
+            used[exchange.flow.iri] = (exchange.unit, function)
+            rows.append(
+                {
+                    "date": datetime(exchange.flow.time, 1, 1),
+                    "amount": exchange.amount,
+                    "flow": exchange.flow.iri,
+                    "activity": activity,
+                }
+            )
+
+    empty_curve = pandas.DataFrame(columns=["date", "amount"])
+    frame = pandas.DataFrame(rows, columns=["date", "amount", "flow", "activity"]).astype(
+        {"date": "datetime64[s]", "amount": "float64"}
+    )
     if frame.empty:
         assessment.series = frame
-        assessment.curve = pandas.DataFrame(columns=["date", "amount"])
+        assessment.curve = empty_curve
         return assessment
 
     series = characterization.characterize(
         frame,
         metric=metric,
-        characterization_functions=dict(table),
+        characterization_functions={iri: func for iri, (_, func) in used.items()},
         time_horizon=horizon,
         fixed_time_horizon=fixed_time_horizon,
+        time_horizon_start=anchor,
     )
     assessment.series = series
 
-    if len(series):
-        curve = series.groupby("date", as_index=False)["amount"].sum().sort_values("date")
+    # An emission past the end of a fixed horizon gets a zero-length horizon
+    # from the library and comes back as a single NaT/NaN row. Those rows
+    # carry no date, so they cannot go on a curve; drop them, then guard on
+    # the *curve* rather than on the series, because a non-empty series can
+    # still leave nothing to accumulate.
+    dated = series.dropna(subset=["date"]) if len(series) else series
+    curve = (
+        dated.groupby("date", as_index=False)["amount"].sum().sort_values("date")
+        if len(dated)
+        else empty_curve
+    )
+    if len(curve):
         curve["amount"] = curve["amount"].cumsum()
         assessment.curve = curve.reset_index(drop=True)
         assessment.total = float(assessment.curve["amount"].iloc[-1])
     else:
-        assessment.curve = pandas.DataFrame(columns=["date", "amount"])
+        assessment.curve = empty_curve
     return assessment
