@@ -4,11 +4,9 @@
 
 ## 🧱 The problem
 
-A classic life cycle inventory is a matrix of fixed coefficients: a static table of unit processes, pre-linked into a fixed graph. Every process is linear and scale-free: ten times the demand is exactly ten times the inputs, and the numbers never depend on where or when the process runs.
+A classic life cycle inventory is a matrix of fixed coefficients: one row of numbers per process, and a separate dataset for every location, year, or technology variant of the same physical activity, because a fixed coefficient can't adapt to context on its own. The catalog grows by duplication instead of by parameterization.
 
-Real processes do not behave like that. A direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient — it has to live in code.
-
-The links between processes are not static either. A vocabulary identifier is hierarchical and semantic, not a free-text name, so `trailrunner` can match a demand to the model that covers it, or — when no model matches exactly — fall back through the hierarchy: a specific process to a more general one, a precise location to a coarser one, depending on what's actually available.
+`trailrunner` treats context as an input instead: one physical activity is one model, and the model picks whichever number actually fits the demand it was just given — a parameter read for the matching context, a plain measurement taken for exactly this location and time if one exists, or, when neither is on hand, the best available data found by falling back through the vocabulary's hierarchy: a precise location up to a broader region, a specific process up to a more general one. Nothing is substituted silently; every fallback taken shows up in `report.provenance`.
 
 ## ✨ What `trailrunner` does
 
