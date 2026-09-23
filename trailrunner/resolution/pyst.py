@@ -25,6 +25,19 @@ dimension, since a concept with real ancestors becomes indistinguishable from
 one with none. The relationships endpoint (``GET /api/v1/relationships/?iri=``)
 answers with a *list* of relationship objects, each keyed by full predicate
 URI, which is where this module actually reads ``skos:broader`` from.
+
+**A non-list response is an error, not a guess.** An earlier version of this
+module let a response that was not a list through unchanged, to keep an older
+stub-client shape working. That meant any real response that was not a list --
+a changed API shape, or an error body that still happens to parse as JSON --
+would be silently treated as a single relationship entry and normalised down
+to "no parents": the same "wrong shape decodes to empty and looks like
+success" failure the endpoint correction above exists to remove, just
+narrower. So ``_select_relationship`` now raises ``TypeError`` on anything
+that is not a list, and every client this module talks to -- the real
+``PystHttpClient`` and the stub the tests use -- returns the real list shape.
+There is no passthrough left that has to be kept in sync with two different
+contracts.
 """
 
 import json
@@ -37,6 +50,11 @@ from typing import Any
 PYST_TOKEN_ENV = "PYST_AUTH_TOKEN"
 DEFAULT_BASE_URL = "https://vocab.sentier.dev"
 RELATIONSHIPS_PATH = "/api/v1/relationships/"
+
+# Seconds. This is the module's only network boundary; a hung request must
+# not block a run indefinitely just because the taxonomy is one dimension
+# among several a demand can still be answered without.
+DEFAULT_TIMEOUT = 10.0
 
 # The service answers in JSON-LD, keyed by full predicate URIs rather than
 # prefixed names -- a relationship entry fetched from the real service came
@@ -63,8 +81,13 @@ class PystHttpClient:
     otherwise, rather than refusing to run without one.
     """
 
-    def __init__(self, base_url: str = DEFAULT_BASE_URL) -> None:
+    def __init__(
+        self,
+        base_url: str = DEFAULT_BASE_URL,
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
         token = os.environ.get(PYST_TOKEN_ENV)
         self._headers = {"x-pyst-auth-token": token} if token else {}
 
@@ -72,38 +95,40 @@ class PystHttpClient:
         query = urllib.parse.urlencode({"iri": iri})
         url = f"{self.base_url}{RELATIONSHIPS_PATH}?{query}"
         request = urllib.request.Request(url, headers=self._headers)
-        with urllib.request.urlopen(request) as response:  # noqa: S310 -- fixed host, no user input in the URL beyond the IRI
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310 -- fixed host, no user input in the URL beyond the IRI
             return json.loads(response.read())
 
 
-def default_client(base_url: str = DEFAULT_BASE_URL) -> Any:
+def default_client(base_url: str = DEFAULT_BASE_URL, timeout: float = DEFAULT_TIMEOUT) -> Any:
     """A configured client for the PyST relationships endpoint.
 
     A plain function rather than the class directly so a cached run needs
     neither the token nor a client passed in at all -- ``PystTaxonomy`` never
     calls this itself; the caller decides whether to go online.
     """
-    return PystHttpClient(base_url)
+    return PystHttpClient(base_url, timeout)
 
 
 def _select_relationship(response: Any, iri: str) -> Any:
     """Pick the entry describing ``iri`` out of a relationships response.
 
-    ``/api/v1/relationships/`` answers with a *list*, because the endpoint can
-    in principle describe more than one node; this module only ever asks
-    about one IRI at a time, so it looks for the entry whose ``@id`` matches
-    the one requested. If none matches but exactly one entry came back, that
-    entry is used anyway -- a defensive fallback for a serialisation quirk,
-    not the expected case. Anything else (no match, more than one candidate
-    and no match) yields ``None``, which downstream reads as "no parents"
-    rather than guessing.
+    ``/api/v1/relationships/`` always answers a *list* -- every client this
+    module talks to, real or stubbed, returns that shape, so a response that
+    is not a list is not a shape to guess at; it is a sign the API changed
+    underneath this client, and raising beats silently reading it as "no
+    parents".
 
-    A non-list response is passed through unchanged: the stub client the
-    tests use hands back a concept-shaped object directly, not a list, and
-    that shape must keep working exactly as before.
+    Within the list, this looks for the entry whose ``@id`` matches the one
+    requested. If none matches but exactly one entry came back, that entry is
+    used anyway -- a defensive fallback for a serialisation quirk, not the
+    expected case. Anything else (no match among several, or none at all)
+    yields ``None``, read downstream as "no parents" rather than guessed at.
     """
     if not isinstance(response, list):
-        return response
+        raise TypeError(
+            "expected a list from the PyST relationships endpoint, got "
+            f"{type(response).__name__}; the API's response shape may have changed"
+        )
     for entry in response:
         if isinstance(entry, dict) and entry.get("@id") == iri:
             return entry
@@ -115,20 +140,19 @@ def _select_relationship(response: Any, iri: str) -> Any:
 def _raw_broader(entry: Any) -> Any:
     """Pull whatever ``broader`` value a relationship entry carries.
 
-    Two shapes are expected: the stub client tests use, which hands back an
-    object with a ``.broader`` attribute, and the real service's JSON-LD
-    ``dict``, whose key is the full predicate URI (or, defensively, a plain
-    ``"broader"`` or ``"skos:broader"``, since the service's own serialisation
-    is not something this module controls). A concept with no broader concept
-    at all -- a top concept -- simply omits the key; that is normal, not an
-    error, and is read the same as an empty list.
+    ``entry`` is a JSON-LD ``dict`` -- or ``None``, when
+    ``_select_relationship`` found nothing to select -- keyed by the full
+    predicate URI, or, defensively, a plain ``"broader"`` or ``"skos:broader"``,
+    since the service's own serialisation is not something this module
+    controls. A concept with no broader concept at all -- a top concept --
+    simply omits the key; that is normal, not an error, and is read the same
+    as ``None``.
     """
     if isinstance(entry, dict):
         for key in (SKOS_BROADER, "broader", "skos:broader"):
             if key in entry:
                 return entry[key]
-        return None
-    return getattr(entry, "broader", None)
+    return None
 
 
 def _normalise_broader(raw: Any) -> list[str]:
@@ -167,11 +191,9 @@ class PystTaxonomy:
         self,
         cache_path: str | Path,
         client: Any | None = None,
-        base_url: str = DEFAULT_BASE_URL,
     ) -> None:
         self.cache_path = Path(cache_path)
         self.client = client
-        self.base_url = base_url
         self._cache: dict[str, list[str]] = self._load()
 
     def _load(self) -> dict[str, list[str]]:
