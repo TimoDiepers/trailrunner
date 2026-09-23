@@ -52,13 +52,21 @@ class Report:
     edges: list[tuple[int, int]] = field(default_factory=list)
     warnings: list[tuple[str, int | None]] = field(default_factory=list)
     truncated: bool = False
+    attribution: dict[int, dict[str, Any]] = field(default_factory=dict)
+    """Per node: the allocation rule applied and the shares computed."""
+    attribution_settings: Any = None
+    """The run's AttributionSettings, so the report states the choices that
+    produced it without the reader having to know how it was called."""
 
     @classmethod
-    def from_log(cls, log: Log, truncated: bool = False) -> "Report":
+    def from_log(
+        cls, log: Log, truncated: bool = False, attribution_settings: Any = None
+    ) -> "Report":
         inventory: dict[tuple[Flow, str], float] = {}
         provenance: dict[int, dict[str, Any]] = {}
         resolutions: dict[int, dict[str, Any]] = {}
         proxies: dict[int, dict[str, Any]] = {}
+        attribution: dict[int, dict[str, Any]] = {}
         for node in log.nodes:
             if node.result.provenance:
                 provenance[node.id] = dict(node.result.provenance)
@@ -66,6 +74,9 @@ class Report:
                 resolutions[node.id] = dict(node.resolution)
                 if node.resolution.get("tier", "model") != "model":
                     proxies[node.id] = dict(node.resolution)
+            attribution_record = node.result.provenance.get("attribution")
+            if attribution_record:
+                attribution[node.id] = dict(attribution_record)
             for exchange in node.result.biosphere:
                 key = (exchange.flow, exchange.unit)
                 inventory[key] = inventory.get(key, 0.0) + exchange.amount
@@ -79,6 +90,8 @@ class Report:
             edges=[(edge.parent, edge.child) for edge in log.edges],
             warnings=list(log.warnings),
             truncated=truncated,
+            attribution=attribution,
+            attribution_settings=attribution_settings,
         )
 
     def _tag(self, node: NodeRecord) -> str:
@@ -185,6 +198,11 @@ class Report:
         if incomplete:
             proxy_line += f" ({incomplete} incomplete)"
         lines.append(proxy_line)
+        if self.attribution_settings is not None:
+            lines.append(
+                f"attribution: allocation={self.attribution_settings.allocation}, "
+                f"capital={self.attribution_settings.capital}"
+            )
         if self.truncated:
             lines.append("traversal was truncated: max_depth or max_nodes was reached")
         if self.warnings:

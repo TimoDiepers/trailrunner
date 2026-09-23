@@ -125,3 +125,24 @@ def test_nodes_without_a_resolution_are_not_proxies():
     demand = a_demand()
     log.write(demand, Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]))
     assert Report.from_log(log).proxies == {}
+
+
+def test_report_collects_per_node_attribution():
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            provenance={"attribution": {"allocation": "economic", "share": 0.25}},
+        ),
+    )
+    report = Report.from_log(log)
+    assert report.attribution[node_id]["share"] == 0.25
+
+
+def test_summary_states_the_runs_normative_choices():
+    from trailrunner.core.settings import AttributionSettings
+
+    report = Report.from_log(Log(), attribution_settings=AttributionSettings(allocation="economic"))
+    assert "allocation=economic" in report.summary()
