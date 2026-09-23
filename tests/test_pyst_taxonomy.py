@@ -9,14 +9,15 @@ TRUCK = "https://vocab.sentier.dev/products/truck"
 VEHICLE = "https://vocab.sentier.dev/products/road-vehicle"
 
 
-class StubConcept:
-    def __init__(self, broader):
-        self.broader = [{"@id": iri} for iri in broader]
-
-
 class StubClient:
-    """Stands in for pyst_client.ConceptApi. Counts calls, so a cache hit is
-    provable rather than assumed."""
+    """Stands in for the real ``/api/v1/relationships/`` client.
+
+    Returns the same *list* shape the live service does -- a stub that
+    hands back something the real client never would is exactly what let
+    the wrong endpoint pass review in the first place, so this returns the
+    real contract rather than a convenient stand-in for it. Counts calls, so
+    a cache hit is provable rather than assumed.
+    """
 
     def __init__(self, concepts):
         self.concepts = concepts
@@ -24,7 +25,26 @@ class StubClient:
 
     def concept_get(self, iri):
         self.calls += 1
-        return StubConcept(self.concepts.get(iri, []))
+        if iri not in self.concepts:
+            return []
+        broader = self.concepts[iri]
+        return [{"@id": iri, SKOS_BROADER: [{"@id": parent} for parent in broader]}]
+
+
+class FixedListClient:
+    """Returns the same list response for every IRI, whatever it is.
+
+    Lets a test hand-craft a relationships list directly -- entries that
+    don't match the requested IRI, several entries, an ambiguous one -- to
+    exercise ``_select_relationship`` through the public ``broader()`` call
+    rather than reaching into a private function.
+    """
+
+    def __init__(self, response):
+        self.response = response
+
+    def concept_get(self, iri):
+        return self.response
 
 
 def test_broader_reads_the_concept(tmp_path):
@@ -79,6 +99,38 @@ def test_the_cache_file_is_plain_readable_json(tmp_path):
     assert json.loads(path.read_text())[GREEN_TRUCK] == [TRUCK]
 
 
+def test_sole_entry_fallback_is_used_when_its_id_does_not_match(tmp_path):
+    """A one-entry list is used even when its ``@id`` differs from the
+    requested IRI -- a defensive fallback for a serialisation quirk, not the
+    expected case, but one this client must not just drop on the floor."""
+    response = [{"@id": "https://vocab.sentier.dev/products/other", SKOS_BROADER: [{"@id": TRUCK}]}]
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=FixedListClient(response))
+    assert taxonomy.broader(GREEN_TRUCK) == [TRUCK]
+
+
+def test_no_matching_entry_among_several_has_no_parents(tmp_path):
+    """Several entries, none matching the requested IRI: nothing is
+    selected, and an ambiguous response reads as no parents rather than
+    guessing which one was meant."""
+    response = [
+        {"@id": "https://vocab.sentier.dev/products/a", SKOS_BROADER: [{"@id": TRUCK}]},
+        {"@id": "https://vocab.sentier.dev/products/b", SKOS_BROADER: [{"@id": VEHICLE}]},
+    ]
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=FixedListClient(response))
+    assert taxonomy.broader(GREEN_TRUCK) == []
+
+
+def test_the_matching_entry_is_chosen_not_the_first(tmp_path):
+    """Several entries, one of which matches: the match wins, even though it
+    is not the first one in the list."""
+    response = [
+        {"@id": "https://vocab.sentier.dev/products/a", SKOS_BROADER: [{"@id": VEHICLE}]},
+        {"@id": GREEN_TRUCK, SKOS_BROADER: [{"@id": TRUCK}]},
+    ]
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=FixedListClient(response))
+    assert taxonomy.broader(GREEN_TRUCK) == [TRUCK]
+
+
 class FakeHttpResponse:
     """Stands in for the ``http.client.HTTPResponse`` ``urlopen`` returns.
 
@@ -86,7 +138,7 @@ class FakeHttpResponse:
     ``read()`` gives raw bytes.
     """
 
-    def __init__(self, payload: list | dict) -> None:
+    def __init__(self, payload: list) -> None:
         self._body = json.dumps(payload).encode()
 
     def __enter__(self):
