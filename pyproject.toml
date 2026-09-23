@@ -54,6 +54,13 @@ brightway = [
   # an existing Brightway project. trailrunner itself never imports bw2data.
   "bw2data>=4.0; python_version >= '3.12'",
 ]
+viz = [
+  "plotly>=5.20",
+  # Static export for the showcase figures; the interactive figures work
+  # without it.
+  "kaleido>=0.2",
+  "pandas>=2",
+]
 
 [build-system]
 requires = ["hatchling>=1.27"]
