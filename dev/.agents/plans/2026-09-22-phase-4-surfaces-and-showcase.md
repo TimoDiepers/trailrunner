@@ -56,7 +56,7 @@
 - Produces:
   `sankey(report: Report, assessment: Assessment | None = None) -> go.Figure`;
   `curve(dynamic: DynamicAssessment) -> go.Figure`;
-  `contributions(assessment: Assessment, top: int = 10, by: str = "flow") -> go.Figure`;
+  `contributions(assessment: Assessment, top: int = 10, by: str = "flow", labels: Mapping[int, str] | None = None) -> go.Figure`;
   `save(figure, path: str | Path) -> None`.
 
 Tests assert on figure **structure** — trace counts, labels, node ordering —
@@ -168,6 +168,14 @@ def test_contributions_can_rank_by_node(method_parquet_file):
     assert figure.layout.xaxis.title.text
 
 
+def test_node_bars_use_the_labels_the_caller_supplies(method_parquet_file):
+    report = two_level_report()
+    assessment = assess(report, Method.from_parquet(method_parquet_file))
+    labels = {node.id: node.model for node in report.nodes}
+    figure = contributions(assessment, by="node", labels=labels)
+    assert "DirectAirCapture" in list(figure.data[0].x)
+
+
 def test_an_unknown_ranking_axis_is_rejected(method_parquet_file):
     report = two_level_report()
     assessment = assess(report, Method.from_parquet(method_parquet_file))
@@ -224,7 +232,30 @@ def test_curve_draws_the_series_and_its_cumulative_integral():
     )
     figure = curve(assess_dynamic(Report.from_log(log), horizon=20))
     assert len(figure.data) == 2
+    # The marginal axis is W/m2; the cumulative one is its integral.
     assert figure.layout.yaxis.title.text.startswith("W/m2")
+    assert figure.layout.yaxis2.title.text.startswith("W")
+    assert figure.layout.yaxis2.title.text != figure.layout.yaxis.title.text
+
+
+def test_the_bars_are_one_per_year_not_one_per_emission():
+    """Two emissions in the same year make one bar, not two overlapping ones."""
+    log = Log()
+    for year in (2030, 2030):
+        demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=year), amount=1.0, unit="kg")
+        log.write(
+            demand,
+            Result(
+                production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+                biosphere=[
+                    Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=year), amount=5.0, unit="kg")
+                ],
+            ),
+            model="DirectAirCapture",
+        )
+    figure = curve(assess_dynamic(Report.from_log(log), horizon=10))
+    dates = list(figure.data[0].x)
+    assert len(dates) == len(set(dates))
 ```
 
 - [ ] **Step 3: Run the tests to verify they fail**
@@ -327,18 +358,34 @@ def curve(dynamic):
     is the number a static LCA would have given at the end of the horizon.
     """
     go = _plotly()
+    # series has one row per (emission, year) pair, so plotting it raw draws
+    # overlapping bars whenever two emissions land in the same year. Sum per
+    # year first: the bar is what happened that year, from every emission.
+    marginal = dynamic.series.groupby("date", as_index=False)["amount"].sum()
+
     figure = go.Figure()
     figure.add_trace(
-        go.Bar(x=dynamic.series["date"], y=dynamic.series["amount"], name=f"{dynamic.metric}, per year")
+        go.Bar(x=marginal["date"], y=marginal["amount"], name=f"{dynamic.metric}, per year")
     )
     figure.add_trace(
-        go.Scatter(x=dynamic.curve["date"], y=dynamic.curve["amount"], name="cumulative", mode="lines")
+        go.Scatter(
+            x=dynamic.curve["date"],
+            y=dynamic.curve["amount"],
+            name=f"cumulative ({dynamic.cumulative_unit})",
+            mode="lines",
+            yaxis="y2",
+        )
     )
+    # Two axes, because the marginal and the cumulative are different
+    # dimensions: W/m2 in a year against W*yr/m2 accumulated. One axis for both
+    # is the mislabel this phase's predecessor had to fix.
+    figure.update_layout(yaxis2=dict(overlaying="y", side="right",
+                                     title=dynamic.cumulative_unit))
     _layout(
         figure,
         f"{dynamic.metric} over {dynamic.horizon} years",
         xaxis="year",
-        yaxis=f"{dynamic.unit}",
+        yaxis=dynamic.unit,
     )
     return figure
 
@@ -353,7 +400,15 @@ def contributions(assessment, top: int = 10, by: str = "flow"):
         ]
         axis = "elementary flow"
     elif by == "node":
-        pairs = [(f"node {node}", value) for node, value in assessment.direct_by_node.items()]
+        # An Assessment keys its node contributions by id, not by name: it is a
+        # reading of the Report, not a copy of it. The caller holds the Report
+        # and passes the labels, rather than the Assessment carrying a second
+        # copy of the graph that could drift from the first.
+        names = labels or {}
+        pairs = [
+            (names.get(node, f"node {node}"), value)
+            for node, value in assessment.direct_by_node.items()
+        ]
         axis = "node"
     else:
         raise ValueError(f"{by!r} is not a ranking axis; use 'flow' or 'node'")
@@ -416,8 +471,18 @@ def test_assessment_to_dataframe_has_one_row_per_characterized_flow(method_parqu
     report = two_level_report()
     assessment = assess(report, Method.from_parquet(method_parquet_file))
     frame = assessment.to_dataframe()
-    assert {"flow_iri", "unit", "amount", "score"} <= set(frame.columns)
+    assert {"flow_iri", "unit", "score"} <= set(frame.columns)
     assert len(frame) == len(assessment.by_flow)
+
+
+def test_report_and_assessment_frames_join_on_flow_and_unit(method_parquet_file):
+    """The inventory amount lives on the Report; the score on the Assessment.
+    Keeping them apart is the one-way arrow; joining them is the caller's job,
+    and it has to be possible."""
+    report = two_level_report()
+    assessment = assess(report, Method.from_parquet(method_parquet_file))
+    scores = assessment.to_dataframe()
+    assert {"flow_iri", "unit"} <= set(scores.columns)
 ```
 
 Run: `uv run pytest tests/test_dataframes.py -v` — expect FAIL with
@@ -489,11 +554,11 @@ def _require_pandas():
     return pandas
 ```
 
-The `amount` column in the assessment frame comes from the inventory rather
-than the score, so add it alongside `score` by looking the key up in the
-report's inventory — pass the inventory amount into `by_flow`'s construction in
-Phase 1's `assess` if it is not already reachable, rather than recomputing it
-here.
+The assessment frame carries the **score** per flow, not the inventory amount.
+The amount belongs to the `Report`, and an `Assessment` is a reading of a
+Report rather than a copy of one — widening `by_flow` to carry both would put
+the same number in two places that can drift. A caller who wants both joins
+the two frames on `(flow_iri, unit)`; say so in the docstring.
 
 Run: `uv run pytest tests/test_dataframes.py -v` — expect PASS.
 
@@ -729,16 +794,21 @@ def main(argv: list[str] | None = None) -> int:
 
         assessment = assess(report, Method.from_parquet(args.method))
         print()
-        print(f"score: {assessment.score:g} {assessment.unit}")
-        if assessment.uncharacterized:
-            print(f"uncharacterized flows: {len(assessment.uncharacterized)}")
+        print(assessment.summary())
 
     if args.dynamic:
         from trailrunner.assessment import assess_dynamic
 
         dynamic = assess_dynamic(report, metric=args.dynamic, horizon=args.horizon)
         print()
-        print(f"{dynamic.metric} over {dynamic.horizon} years: {dynamic.total:g} {dynamic.unit}")
+        # cumulative_unit, not unit: total is the integral of the series, and
+        # for radiative forcing those are different dimensions.
+        print(
+            f"{dynamic.metric} over {dynamic.horizon} years: "
+            f"{dynamic.total:g} {dynamic.cumulative_unit}"
+        )
+        # The gaps travel with the number, the same way the static path's do.
+        print(dynamic.summary())
 
     if args.out:
         report.log.to_parquet(args.out)
