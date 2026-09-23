@@ -1,6 +1,6 @@
 # Supply chains as computational models talking to each other
 
-`trailrunner` computes a life cycle inventory by calling computational models instead of looking up fixed coefficients — each one answering, for its own process, what it needs and what it emits.
+`trailrunner` computes a life cycle inventory by calling orchestrating computational models instead of static unit process datasets. Each model answers, for its own process, what it needs and what it emits, dynamically calculated based on parameter or measurement data. 
 
 ## 🧱 The problem
 
