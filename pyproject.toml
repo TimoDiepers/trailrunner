@@ -43,6 +43,12 @@ docs = [
   "mkdocs-autorefs",
   "pymdown-extensions>=10.0",
 ]
+dynamic = [
+  # dynamic_characterization requires >=3.12, so the marker has to match it,
+  # the same way the examples extra matches trailpack's floor.
+  "dynamic_characterization>=1.4; python_version >= '3.12'",
+  "pandas>=2",
+]
 
 [build-system]
 requires = ["hatchling>=1.27"]
