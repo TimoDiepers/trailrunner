@@ -229,3 +229,23 @@ def test_provenance_records_the_location_that_was_asked_for(method_parquet_file)
     factor = method.factor(Flow(iri=CH4_IRI, location="CH"), "kg")
     assert factor.provenance["location_requested"] == "CH"
     assert factor.provenance["location_used"] == "RER"
+
+
+def test_a_row_without_a_cf_names_the_column_and_the_source():
+    """``from_parquet`` pre-checks the columns, so this is the direct
+    construction path -- which was still raising a bare ``KeyError: 'cf'``."""
+    with pytest.raises(MissingColumns) as raised:
+        Method(
+            rows=[{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO"}],
+            unit="kg CO2eq",
+            name="handmade",
+            source="somewhere.parquet",
+        )
+    message = str(raised.value)
+    assert "somewhere.parquet" in message
+    assert "'cf'" in message
+
+
+def test_a_row_without_a_flow_iri_names_the_layout():
+    with pytest.raises(MissingColumns, match="flow_iri"):
+        Method(rows=[{"flow_unit": "kg", "cf": 1.0}], unit="kg CO2eq", name="handmade")
