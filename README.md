@@ -1,9 +1,5 @@
 # sentier-trailrunner
 
-Model-based supply chain traversal for life cycle inventories.
-
-Installs as `sentier-trailrunner`, imports as `trailrunner`.
-
 `trailrunner` computes a life cycle inventory by orchestrating computational
 models instead of static unit-process datasets.
 
