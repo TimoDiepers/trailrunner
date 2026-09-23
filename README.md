@@ -7,8 +7,8 @@ Installs as `sentier-trailrunner`, imports as `trailrunner`.
 `trailrunner` computes a life cycle inventory by orchestrating computational
 models instead of static unit-process datasets.
 
-A *model* stands for one process — most often Python code, but as readily a
-plain measurement, such as metered emissions for this process at this location
+A *model* stands for one process, most often Python code, and as readily a
+plain measurement such as metered emissions for this process at this location
 and time. Given a demand for one of its products it works out what other inputs
 it needs to produce that, and what it emitted, reading its parameters from a
 [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than
@@ -17,7 +17,7 @@ hard-coding them.
 Every flow crossing a model's boundary is an IRI from the hierarchical
 [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can take a
 model's further demands, work out which models produce them, and call those in
-turn — cascading outward until nothing is left open.
+turn, cascading outward until nothing is left open.
 
 ```mermaid
 flowchart TB
@@ -38,12 +38,12 @@ flowchart TB
 
 ## Documentation
 
-- [The 5-minute tour](docs/showcase.md) — one demand carried end to end, with
-  the real output at every step, built from [`examples/showcase.ipynb`](examples/showcase.ipynb)
-- [Core Concepts](docs/content/concepts.md) — the parts above, one at a time
-- [Quick Start](docs/content/getting_started/quickstart.md) — a first calculation
+- [The 5-minute tour](docs/showcase.md), one demand carried end to end with the
+  real output at every step, built from [`examples/showcase.ipynb`](examples/showcase.ipynb)
+- [Core Concepts](docs/content/concepts.md), the parts above one at a time
+- [Quick Start](docs/content/getting_started/quickstart.md), a first calculation
 - [Writing a Model](docs/content/writing_a_model.md) · [Parameters](docs/content/parameters.md) · [Resolution](docs/content/resolution.md) · [Attribution](docs/content/attribution.md) · [Assessment](docs/content/assessment.md)
-- [`examples/dac.ipynb`](examples/dac.ipynb) — the worked example, end to end
+- [`examples/dac.ipynb`](examples/dac.ipynb), the worked example end to end
 
 Design: `docs/superpowers/specs/2026-09-21-trailrunner-design.md`
 
@@ -61,11 +61,11 @@ uv run pytest
 
 ## Writing a model
 
-A model answers one demand. `apply` receives the **full** demanded amount, not
-a unit demand, and must echo it back as production: the same flow, the same
-unit, and an amount that covers what was asked. Nothing downstream rescales,
-so a model that under-produces would silently shrink the inventory; the Runner
-rejects it instead.
+A model answers one demand. `apply` receives the **full** demanded amount, the
+whole thing that was asked for, and must echo it back as production with the
+same flow, the same unit, and an amount that covers the demand. Nothing
+downstream rescales, so a model that under-produces would silently shrink the
+inventory. The Runner rejects one that does.
 
 ```python
 from trailrunner import Demand, Exchange, Flow, Model, Result
