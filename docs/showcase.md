@@ -45,8 +45,10 @@ One demand goes in. Six objects pass it around until the queue is empty.
 flowchart TB
     D([the demand]) --> Q[[Queue]]
     Q -->|pop| C{{ResolutionChain}}
+    C -->|ask model tier: who can offer?| G[(Glossary: available models)]
+    G -->|Offer: model + demand| C
     C -->|nobody offers| X[cutoff, with a reason]
-    C -->|Offer: model + demand| R[Runner]
+    C -->|selected offer| R[Runner]
     R -->|apply| M[Model: your code]
     M -->|Result| R
     R -->|technosphere: what it needs| Q
@@ -60,7 +62,7 @@ flowchart TB
 | --- | --- |
 | [`Demand`](api/flow.md) | an amount and a unit of a `Flow` — *what*, *where*, *when* |
 | [`Queue`](api/queue.md) | the demands still waiting; FIFO unless you hand it a priority |
-| [`ResolutionChain`](api/resolution.md) | who can answer this demand? The first tier that offers wins |
+| [`ResolutionChain`](api/resolution.md) | asks each tier in order; the model tier asks the [`Glossary`](api/glossary.md) for a `(model, demand)` offer, and the first offer wins |
 | [`Model`](api/model.md) | one process, as code: `apply(demand) -> Result` |
 | [`Runner`](api/runner.md) | applies the model and validates the `Result` against the demand |
 | [`Log`](api/log.md) | append-only: every node, edge, cutoff, fallback and rule |

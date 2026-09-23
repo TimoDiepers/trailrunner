@@ -13,8 +13,10 @@ and every flow keeps the date and place it happened at.
 flowchart TB
     D([the demand]) --> Q[[Queue]]
     Q -->|pop| C{{ResolutionChain}}
+    C -->|ask model tier: who can offer?| G[(Glossary: available models)]
+    G -->|Offer: model + demand| C
     C -->|nobody offers| X[cutoff, with a reason]
-    C -->|Offer: model + demand| R[Runner]
+    C -->|selected offer| R[Runner]
     R -->|apply| M[Model: your code]
     M -->|Result| R
     R -->|technosphere: what it needs| Q

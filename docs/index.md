@@ -14,8 +14,10 @@ One demand goes in. Six objects pass it around until the queue is empty.
 flowchart TB
     D([the demand]) --> Q[[Queue]]
     Q -->|pop| C{{ResolutionChain}}
+    C -->|ask model tier: who can offer?| G[(Glossary: available models)]
+    G -->|Offer: model + demand| C
     C -->|nobody offers| X[cutoff, with a reason]
-    C -->|Offer: model + demand| R[Runner]
+    C -->|selected offer| R[Runner]
     R -->|apply| M[Model: your code]
     M -->|Result| R
     R -->|technosphere: what it needs| Q
@@ -29,7 +31,7 @@ flowchart TB
 | --- | --- |
 | [`Demand`](api/flow.md) | an amount and a unit of a `Flow` — *what*, *where*, *when* |
 | [`Queue`](api/queue.md) | the demands still waiting; FIFO unless you hand it a priority |
-| [`ResolutionChain`](api/resolution.md) | who can answer this demand? The first tier that offers wins: a model from the [`Glossary`](api/glossary.md), a [generalised demand](content/resolution.md), a borrowed background dataset |
+| [`ResolutionChain`](api/resolution.md) | who can answer this demand? It asks each tier in order; tier 1 is the [`Glossary`](api/glossary.md), which offers a `(model, demand)` pair to run. If no tier offers, the demand is logged as a cutoff |
 | [`Model`](api/model.md) | one process, as code: `apply(demand) -> Result` |
 | [`Runner`](api/runner.md) | applies the model and validates the [`Result`](api/result.md) against the demand |
 | [`Log`](api/log.md) | append-only: every node, edge, cutoff, fallback and rule, out to one parquet file |
