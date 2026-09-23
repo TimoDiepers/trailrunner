@@ -1,19 +1,22 @@
 # sentier-trailrunner
 
-Model-based supply chain traversal for life cycle inventories.
+Computational models of processes, wired together by what they need and what
+they produce — not a static table of unit-process coefficients.
 
 Installs as `sentier-trailrunner`, imports as `trailrunner`.
 
-Most LCA practice still relies on static inventory models: fixed coefficients,
-often copied into separate datasets for each location, time, or other variant
-of the same physical activity. `trailrunner` treats that as a modeling problem:
-one physical activity should be one model. A model can be parameterized by
-context, do the needed calculations, and then answer one question: *given this
-demand, what did I produce, what do I need from the technosphere, and how did I
-interact with the biosphere?* It reads its parameters from a
-[trailpack](https://github.com/TimoDiepers/trailpack) parquet file and answers
-that contract. The orchestrator walks the resulting demands outward through the
-supply chain and accumulates an inventory.
+A *model* is Python code for one process, called whenever something demands
+one of its products. It reads its parameters from a
+[trailpack](https://github.com/TimoDiepers/trailpack) parquet file and
+answers one question: *given this demand, what did I produce, what do I still
+need, and what did I emit?* Every flow crossing that boundary — products,
+further demands, elementary flows — is identified by an IRI from the
+hierarchical [sentier vocabulary](https://vocab.sentier.dev), not a
+free-text name. Those IRIs are what let the orchestrator work out which
+model to call next for each further demand, cascading through the whole
+supply chain, and what let a demand fall back through the hierarchy — a
+specific process, then a more general one, a coarser location — when no
+model matches exactly.
 
 Design: `docs/superpowers/specs/2026-09-21-trailrunner-design.md`
 

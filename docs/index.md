@@ -1,20 +1,14 @@
-# Supply chains as code with `trailrunner`
+# Supply chains as computational models talking to each other
 
-**`trailrunner` lets a process be Python code instead of a fixed row of coefficients.** A *model* reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file and answers one question: *given this demand, what did I produce, what do I need, and what did I emit?* The orchestrator walks the resulting demands outward through the supply chain and accumulates an inventory.
+**`trailrunner` replaces the static unit-process inventory with computational models that call each other.** A *model* is Python code for one process: given a demand for one of its products, it decides what it produced, what else it needs, and what it emitted — and reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. Every flow that crosses a model's boundary is identified by an IRI from the hierarchical [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can look at a model's further demands, work out which other models produce those flows, and call them in turn — cascading outward through the whole supply chain until nothing is left open.
 
 ## 🧱 The problem
 
-Conventional LCA workflows still depend on static inventory models: fixed
-coefficient sets that get duplicated into separate versions for different
-locations, times, or other context dimensions.
+A classic life cycle inventory is a matrix of fixed coefficients: a static table of unit processes, pre-linked into a fixed graph. Every process is linear and scale-free: ten times the demand is exactly ten times the inputs, and the numbers never depend on where or when the process runs.
 
-That means one physical activity is often represented by many near-duplicate
-datasets. `trailrunner` replaces that with one model per activity. The model is
-parameterized by context, performs the needed calculations, and returns:
+Real processes do not behave like that. A direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient — it has to live in code.
 
-- what it produced,
-- what else it needs from the technosphere, and
-- how it interacts with the biosphere.
+The links between processes are not static either. A vocabulary identifier is hierarchical and semantic, not a free-text name, so `trailrunner` can match a demand to the model that covers it, or — when no model matches exactly — fall back through the hierarchy: a specific process to a more general one, a precise location to a coarser one, depending on what's actually available.
 
 ## ✨ What `trailrunner` does
 
