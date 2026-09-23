@@ -1,6 +1,11 @@
 import pytest
 
-from trailrunner.core.errors import MissingProperty, UnsupportedAttribution
+from trailrunner.core.errors import (
+    MissingProperty,
+    TrailrunnerError,
+    UnallocatedCoProduction,
+    UnsupportedAttribution,
+)
 from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
@@ -173,3 +178,84 @@ def test_a_zero_total_property_is_an_error_not_a_division():
 
     with pytest.raises(MissingProperty, match="mass"):
         runner_for(Massless(), "mass").apply(HEAT_DEMAND)
+
+
+def test_a_negative_property_is_refused_rather_than_partitioned_over():
+    """A share taken over a negative total is not a share.
+
+    With heat at +10 EUR and power at -8 EUR the total is 2, and heat's
+    "share" comes out 5.0 -- the demanded product silently carrying five times
+    the process's own burden, with nothing in the report saying so. A negative
+    price means that output is a waste the process pays to be rid of, which is
+    a different question than co-production, and `economic` is exactly where
+    it turns up.
+    """
+    class WasteHeat(CHP):
+        def apply(self, demand):
+            return Result(
+                production=[
+                    Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ",
+                             properties=(Property("price", 10.0, "EUR"),)),
+                    Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0, unit="MJ",
+                             properties=(Property("price", -8.0, "EUR"),)),
+                ],
+                technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit="MJ")],
+                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit="kg")],
+            )
+
+    with pytest.raises(MissingProperty, match="waste"):
+        runner_for(WasteHeat(), "economic").apply(HEAT_DEMAND)
+
+
+def test_the_total_being_positive_does_not_excuse_a_negative_part():
+    """Caught on the value, not on the total: -8 and +10 sum to a positive 2,
+    so a guard on the total alone lets the 5.0 share straight through."""
+    class Mixed(CHP):
+        def apply(self, demand):
+            result = super().apply(demand)
+            result.production = [
+                Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ",
+                         properties=(Property("mass", 10.0, "kg"),)),
+                Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0, unit="MJ",
+                         properties=(Property("mass", -8.0, "kg"),)),
+            ]
+            return result
+
+    with pytest.raises(MissingProperty, match="'mass'"):
+        runner_for(Mixed(), "mass").apply(HEAT_DEMAND)
+
+
+def test_co_production_under_none_raises_a_trailrunner_error():
+    """`none` is the default, so this is the likeliest refusal a user meets.
+    A bare ValueError put that one refusal outside `except TrailrunnerError`."""
+    with pytest.raises(UnallocatedCoProduction, match="co-product"):
+        runner_for(CHP(), "none").apply(HEAT_DEMAND)
+    assert issubclass(UnallocatedCoProduction, TrailrunnerError)
+    # Still a ValueError as well: code written against the old behaviour keeps
+    # catching it.
+    assert issubclass(UnallocatedCoProduction, ValueError)
+
+
+def test_the_monofunctional_short_circuit_does_not_write_into_the_caller():
+    """A model reusing one provenance dict must not find `attribution` in it.
+
+    The co-product path copies; this path used to mutate and return the
+    caller's own Result, so the run's normative choice was written into
+    whatever the model handed over.
+    """
+    shared: dict = {}
+
+    class Boiler(Model):
+        produces = [HEAT]
+        supports = frozenset({"none", "economic"})
+
+        def apply(self, demand):
+            return Result(
+                production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
+                provenance=shared,
+            )
+
+    model = Boiler()
+    result = runner_for(model, "economic").apply(HEAT_DEMAND)
+    assert result.provenance["attribution"]["share"] == 1.0
+    assert shared == {}

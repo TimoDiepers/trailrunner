@@ -91,11 +91,23 @@ class Offer:
 
 @runtime_checkable
 class Provider(Protocol):
-    def offer(self, demand: Demand) -> Offer | None:
-        """Answer this demand, or decline by returning ``None``."""
+    def offer(self, demand: Demand, exclude: Sequence[Model] = ()) -> Offer | None:
+        """Answer this demand, or decline by returning ``None``.
 
-    def explain(self, demand: Demand) -> tuple[str, str] | None:
+        ``exclude`` names model instances that must not answer, by identity.
+        It carries one piece of context the demand itself cannot: a
+        substitution credit is a demand for what *somebody else* would have
+        made, and a provider that answered it with the very model that minted
+        the credit would let a process credit away its own burden. A provider
+        that reaches a model through another provider has to forward it.
+        """
+
+    def explain(self, demand: Demand, exclude: Sequence[Model] = ()) -> tuple[str, str] | None:
         """Why this tier declined, as ``(reason, detail)``, or ``None``.
+
+        ``exclude`` is the same tuple ``offer`` was given, so that a tier
+        explains the refusal it actually made rather than the one it would
+        have made for an ordinary demand.
 
         Called only after the whole chain has declined, and only to write an
         honest unresolved record. Stateless on purpose: a provider that
@@ -110,14 +122,14 @@ class ResolutionChain:
     def __init__(self, providers: Sequence[Provider]) -> None:
         self._providers = list(providers)
 
-    def offer(self, demand: Demand) -> Offer | None:
+    def offer(self, demand: Demand, exclude: Sequence[Model] = ()) -> Offer | None:
         for provider in self._providers:
-            offer = provider.offer(demand)
+            offer = provider.offer(demand, exclude=exclude)
             if offer is not None:
                 return offer
         return None
 
-    def explain(self, demand: Demand) -> tuple[str, str]:
+    def explain(self, demand: Demand, exclude: Sequence[Model] = ()) -> tuple[str, str]:
         """The most specific reason any tier can give, else no_model_found.
 
         Tier order is reused deliberately: tier 1 knows about coverage misses,
@@ -125,7 +137,7 @@ class ResolutionChain:
         ran out", and the reader who widens the coverage fixes both.
         """
         for provider in self._providers:
-            explanation = provider.explain(demand)
+            explanation = provider.explain(demand, exclude=exclude)
             if explanation is not None:
                 return explanation
         return ("no_model_found", "")

@@ -126,8 +126,10 @@ The split is deliberate:
   `coverage_excluded`, `max_depth`, `max_nodes`.
 - **Unresolvable contracts** raise: [`AmbiguousModelMatch`](../api/errors.md),
   [`ValidationError`](../api/errors.md), [`ParameterNotFound`](../api/errors.md),
-  [`MissingUnit`](../api/errors.md), and [`NoModelFound`](../api/errors.md) when a model is
-  asked for directly.
+  [`MissingUnit`](../api/errors.md), the three [attribution](attribution.md) refusals
+  ([`MissingProperty`](../api/errors.md), [`UnsupportedAttribution`](../api/errors.md),
+  [`UnallocatedCoProduction`](../api/errors.md)), and
+  [`NoModelFound`](../api/errors.md) when a model is asked for directly.
 
 `Orchestrator.calculate` propagates these straight to the caller, so they are importable
 from the package root alongside the types:

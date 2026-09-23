@@ -216,3 +216,81 @@ def test_construction_reaches_the_report_as_two_cutoffs_in_two_years(dac_params,
         if record.demand.flow.iri == DAC_PLANT
     )
     assert years == [2026, 2029]
+
+
+def dac_under(rule, dac_params, fleet):
+    """DAC driven by the run's capital rule, not by a rule of its own."""
+    from trailrunner.core.settings import AttributionSettings, Settings
+
+    settings = Settings(attribution=AttributionSettings(capital=rule))
+    return DirectAirCapture(settings=settings, params=dac_params, fleet=fleet)
+
+
+def test_per_output_spreads_construction_over_the_whole_life(dac_params, fleet):
+    result = dac_under("per_output", dac_params, fleet).apply(demand())
+    by_year = {d.flow.time: d.amount for d in construction(result)}
+    assert by_year[2026] == pytest.approx(11.538462, abs=1e-6)
+    assert by_year[2029] == pytest.approx(38.461538, abs=1e-6)
+    assert sum(by_year.values()) == pytest.approx(50.0)
+
+
+def test_per_year_agrees_with_per_output_on_a_flat_fleet(dac_params, fleet):
+    """Not a coincidence, and not a duplicate test.
+
+    The two rules coincide exactly when output is flat over the life, which
+    every plant in this fleet is. They diverge on an atypical year -- which is
+    the reason the choice exists at all -- so a fleet that made them differ
+    would be testing the fixture, not the wiring.
+    """
+    per_output = {d.flow.time: d.amount for d in construction(
+        dac_under("per_output", dac_params, fleet).apply(demand()))}
+    per_year = {d.flow.time: d.amount for d in construction(
+        dac_under("per_year", dac_params, fleet).apply(demand()))}
+    assert per_year == pytest.approx(per_output)
+    assert per_year[2026] == pytest.approx(11.538462, abs=1e-6)
+    assert per_year[2029] == pytest.approx(38.461538, abs=1e-6)
+
+
+def test_first_life_attributes_no_construction_to_a_year_nothing_was_built_in(
+    dac_params, fleet
+):
+    """2030 is not a build year, so ``first_life`` attributes zero -- all of
+    it was already charged to 2026 and 2029. The spike the rule is named for
+    is visible only in a study that spans the build years."""
+    result = dac_under("first_life", dac_params, fleet).apply(demand())
+    assert [d.amount for d in construction(result)] == [0.0, 0.0]
+
+
+def test_the_capital_rule_that_was_used_reaches_provenance(dac_params, fleet):
+    """The rule is a normative choice, so the result says which one produced
+    these numbers rather than leaving a reader to infer it."""
+    for rule in ("per_output", "per_year", "first_life"):
+        result = dac_under(rule, dac_params, fleet).apply(demand())
+        assert result.provenance["capital_rule"] == rule
+
+
+def test_dac_takes_the_rule_from_the_run_not_from_itself(dac_params, fleet):
+    """The point of the setting: two runs of the same model, two answers."""
+    per_output = dac_under("per_output", dac_params, fleet).apply(demand())
+    first_life = dac_under("first_life", dac_params, fleet).apply(demand())
+    assert sum(d.amount for d in construction(per_output)) == pytest.approx(50.0)
+    assert sum(d.amount for d in construction(first_life)) == 0.0
+
+
+def test_a_shipped_model_traverses_under_an_allocation_rule_it_does_not_need(
+    dac_params, fleet
+):
+    """Every shipped model is monofunctional, so a partitioning rule has
+    nothing to do at one -- but the Runner's gate fires *before* the model
+    runs, so a model that declared only ``none`` would stop a non-``none`` run
+    at its first node for a problem it does not have."""
+    from trailrunner.core.settings import AttributionSettings, Settings
+
+    settings = Settings(attribution=AttributionSettings(allocation="economic"))
+    glossary = Glossary([DirectAirCapture(settings=settings, params=dac_params, fleet=fleet)])
+    report = Orchestrator(glossary, settings=settings).calculate(demand())
+
+    assert [node.model for node in report.nodes] == ["DirectAirCapture"]
+    assert report.attribution[0] == {"allocation": "economic", "share": 1.0, "property": None}
+    # Untouched: with one product there is nothing to partition.
+    assert sum(report.inventory.values()) == pytest.approx(-1000.0)

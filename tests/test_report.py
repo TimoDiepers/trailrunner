@@ -146,3 +146,42 @@ def test_summary_states_the_runs_normative_choices():
 
     report = Report.from_log(Log(), attribution_settings=AttributionSettings(allocation="economic"))
     assert "allocation=economic" in report.summary()
+
+
+def test_the_attribution_record_is_not_reported_as_the_models_provenance():
+    """``report.provenance`` is what the *model* recorded.
+
+    The model never chose the run's allocation rule and cannot see it, so the
+    rule belongs in ``report.attribution``, beside ``resolutions`` and on the
+    same split -- not mixed into the parameter rows the model actually read.
+    """
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            provenance={
+                "location_used": "RER",
+                "attribution": {"allocation": "economic", "share": 0.25},
+            },
+        ),
+    )
+    report = Report.from_log(log)
+    assert report.provenance[node_id] == {"location_used": "RER"}
+    assert report.attribution[node_id] == {"allocation": "economic", "share": 0.25}
+
+
+def test_a_node_whose_only_record_is_its_attribution_has_no_provenance():
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            provenance={"attribution": {"allocation": "none", "share": 1.0}},
+        ),
+    )
+    report = Report.from_log(log)
+    assert node_id not in report.provenance
+    assert node_id in report.attribution

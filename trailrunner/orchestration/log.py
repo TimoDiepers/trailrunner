@@ -15,9 +15,10 @@ LOG_SCHEMA = pa.schema(
         # Which kind of record this row is: "biosphere" (one per biosphere
         # exchange), "node" (a node that emitted none, so it does not vanish),
         # "unresolved" (a cutoff leaf), "provenance" (one per key a node
-        # recorded) or "resolution" (one per key of how a node's demand was
-        # matched). One flat table rather than five files, because the point
-        # is to diff two runs with a single read.
+        # recorded), "resolution" (one per key of how a node's demand was
+        # matched) or "attribution" (one per key of the normative choice
+        # applied to it). One flat table rather than six files, because the
+        # point is to diff two runs with a single read.
         ("kind", pa.string()),
         ("model", pa.string()),
         ("node", pa.int64()),
@@ -48,6 +49,15 @@ pyarrow ``null``-typed and will not merge with ``int64`` or ``string``.
 """
 
 
+ATTRIBUTION_KEY = "attribution"
+"""The one provenance key the orchestration layer writes and owns.
+
+``allocate`` and ``substitute`` leave their record on the Result because that
+is the object the Runner has in hand. It is lifted out here rather than left
+among the model's own keys -- see ``NodeRecord.attribution``.
+"""
+
+
 @dataclass
 class NodeRecord:
     id: int
@@ -68,6 +78,19 @@ class NodeRecord:
     that model was chosen.
     """
 
+    attribution: dict[str, Any] = field(default_factory=dict)
+    """The run's normative choice as applied to this node: the allocation rule,
+    the property partitioned on, the share, the co-products credited.
+
+    Its own field, beside ``resolution``, on the same split. ``allocate`` and
+    ``substitute`` write it into ``Result.provenance`` because that is the
+    object in the Runner's hand, but it is not the model's record: the model
+    never chose the rule and cannot see it. Leaving it there put a key nothing
+    modelled into every node of ``report.provenance``, which is documented as
+    what the model recorded. Lifted here, all three views stay true to their
+    own definition.
+    """
+
 
 @dataclass
 class UnresolvedRecord:
@@ -84,6 +107,53 @@ class UnresolvedRecord:
 class EdgeRecord:
     parent: int
     child: int
+
+
+def _flatten(base: dict, kind: str, record: dict) -> list[dict]:
+    """One row per leaf of ``record``, never a Python repr in a cell.
+
+    A list becomes "<singular>.0", "<singular>.1", ... (``relaxations`` ->
+    ``relaxation.0``, ``co_products`` -> ``co_product.0``) and a nested dict
+    becomes "<key>.<subkey>". Both for the same reason: a value stringified
+    whole lands as a repr the reader has to parse back out, which with one
+    relaxation is ugly and with a whole attribution record -- rule, property,
+    share and every credited co-product in one cell -- is unusable. The run is
+    supposed to be reproducible from the committed parquet, and a column a
+    reader cannot filter on is not.
+    """
+    rows: list[dict] = []
+    for key, value in record.items():
+        if isinstance(value, list):
+            singular = key[:-1] if key.endswith("s") else key
+            for index, item in enumerate(value):
+                rows.append(
+                    {
+                        **base,
+                        "kind": kind,
+                        "key": f"{singular}.{index}",
+                        "value": None if item is None else str(item),
+                    }
+                )
+        elif isinstance(value, dict):
+            for subkey, item in value.items():
+                rows.append(
+                    {
+                        **base,
+                        "kind": kind,
+                        "key": f"{key}.{subkey}",
+                        "value": None if item is None else str(item),
+                    }
+                )
+        else:
+            rows.append(
+                {
+                    **base,
+                    "kind": kind,
+                    "key": str(key),
+                    "value": None if value is None else str(value),
+                }
+            )
+    return rows
 
 
 @dataclass
@@ -117,6 +187,7 @@ class Log:
                 parent=parent,
                 model=model,
                 resolution=dict(resolution or {}),
+                attribution=dict(result.provenance.get(ATTRIBUTION_KEY) or {}),
             )
         )
         if parent is not None:
@@ -141,8 +212,9 @@ class Log:
         self.warnings.append((message, node))
 
     def to_parquet(self, path: str | Path) -> None:
-        """Write the whole log — nodes, biosphere exchanges, cutoff leaves and
-        provenance — one row each, tagged by ``kind``.
+        """Write the whole log — nodes, biosphere exchanges, cutoff leaves,
+        provenance, resolution and attribution — one row each, tagged by
+        ``kind``.
 
         Everything the Log holds goes out, because the unresolved list and the
         provenance are as much a part of the answer as the numbers are: two
@@ -180,6 +252,12 @@ class Log:
                 # in the graph; without this row it would vanish from the file.
                 rows.append({**base, "kind": "node"})
             for key, value in node.result.provenance.items():
+                if key == ATTRIBUTION_KEY:
+                    # Written below, flattened, under its own kind: it is the
+                    # orchestrator's record, not the model's, and a nested
+                    # dict in one cell is exactly the Python repr the
+                    # resolution branch flattens to avoid.
+                    continue
                 rows.append(
                     {
                         **base,
@@ -188,33 +266,8 @@ class Log:
                         "value": None if value is None else str(value),
                     }
                 )
-            for key, value in node.resolution.items():
-                if isinstance(value, list):
-                    # One row per item, keyed "<singular>.0", "<singular>.1",
-                    # ... (e.g. "relaxations" -> "relaxation.0") -- a list
-                    # stringified whole lands as a Python repr a reader has to
-                    # parse back out. With one relaxation that is ugly; with
-                    # several (a node can carry more than one, in this
-                    # phase) it is unusable.
-                    singular = key[:-1] if key.endswith("s") else key
-                    for index, item in enumerate(value):
-                        rows.append(
-                            {
-                                **base,
-                                "kind": "resolution",
-                                "key": f"{singular}.{index}",
-                                "value": None if item is None else str(item),
-                            }
-                        )
-                else:
-                    rows.append(
-                        {
-                            **base,
-                            "kind": "resolution",
-                            "key": str(key),
-                            "value": None if value is None else str(value),
-                        }
-                    )
+            rows.extend(_flatten(base, "resolution", node.resolution))
+            rows.extend(_flatten(base, ATTRIBUTION_KEY, node.attribution))
 
         for record in self.unresolved_records:
             rows.append(

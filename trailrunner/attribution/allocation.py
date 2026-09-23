@@ -8,7 +8,7 @@ silently answers a different question.
 
 from dataclasses import replace
 
-from trailrunner.core.errors import MissingProperty
+from trailrunner.core.errors import MissingProperty, UnallocatedCoProduction
 from trailrunner.core.flow import Demand
 from trailrunner.core.result import Result
 
@@ -28,11 +28,27 @@ def allocate(demand: Demand, result: Result, rule: str, model_name: str) -> Resu
     others = [e for e in result.production if e.flow.iri != demand.flow.iri]
 
     if not others:
-        result.provenance["attribution"] = {"allocation": rule, "share": 1.0, "property": None}
-        return result
+        # Copied, not returned as it came in. The short-circuit still has to
+        # record the rule, and writing that into the caller's provenance dict
+        # would reach back into whatever the model handed over -- a model that
+        # reuses one provenance dict across calls would find ``attribution``
+        # appearing in shared state. The co-product path below already copies;
+        # this is the same contract, not a special case.
+        untouched = Result(
+            production=list(result.production),
+            technosphere=list(result.technosphere),
+            biosphere=list(result.biosphere),
+            provenance=dict(result.provenance),
+        )
+        untouched.provenance["attribution"] = {
+            "allocation": rule,
+            "share": 1.0,
+            "property": None,
+        }
+        return untouched
 
     if rule == "none":
-        raise ValueError(
+        raise UnallocatedCoProduction(
             f"{model_name} returned co-products "
             f"({', '.join(e.flow.iri for e in others)}) but the run's allocation "
             "rule is 'none'; model it monofunctionally or choose a rule"
@@ -50,6 +66,17 @@ def allocate(demand: Demand, result: Result, rule: str, model_name: str) -> Resu
             raise MissingProperty(
                 f"{model_name} produced {exchange.flow.iri} without a {key!r} "
                 f"property, which the {rule!r} allocation rule partitions on"
+            )
+        if prop.value < 0:
+            raise MissingProperty(
+                f"{model_name} declares a {key!r} of {prop.value} for "
+                f"{exchange.flow.iri}; a negative {key} means that output is a "
+                f"waste the process pays to be rid of, not a co-product, and the "
+                f"{rule!r} rule cannot partition over it. Shares taken over a "
+                "negative value are not shares -- one product's can exceed 1 and "
+                "another's go below 0, so a co-product silently carries more than "
+                "the whole process's burden. Model the waste as a treatment "
+                "demand, or choose 'substitution'"
             )
         units.add(prop.unit)
         values[exchange.flow.iri] = values.get(exchange.flow.iri, 0.0) + prop.value
@@ -96,6 +123,12 @@ def substitute(demand: Demand, result: Result, model_name: str) -> Result:
     answer is subtracted. This is the only rule that reaches the traversal
     rather than the arithmetic, which is why the Runner calls it instead of
     ``allocate``.
+
+    Pure arithmetic all the same: it mints the negative demands and records
+    which product IRIs they are for under ``"substituted"``, and stops there.
+    *Who* may answer a credit is a resolution question, and the Orchestrator
+    answers it from this key plus the model that offered — so nothing in this
+    module needs to know a Glossary exists.
     """
     demanded = [e for e in result.production if e.flow.iri == demand.flow.iri]
     others = [e for e in result.production if e.flow.iri != demand.flow.iri]

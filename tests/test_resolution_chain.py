@@ -28,11 +28,11 @@ class AlwaysOffers:
         self.tier = tier
         self.model = Boiler()
 
-    def offer(self, demand):
+    def offer(self, demand, exclude=()):
         return Offer(model=self.model, demand=demand, tier=self.tier,
                      resolution={"tier": self.tier})
 
-    def explain(self, demand):
+    def explain(self, demand, exclude=()):
         return None
 
 
@@ -102,10 +102,10 @@ class TierOnlyOffer:
     naturally take.
     """
 
-    def offer(self, demand):
+    def offer(self, demand, exclude=()):
         return Offer(model=Boiler(), demand=demand, tier="mystery")
 
-    def explain(self, demand):
+    def explain(self, demand, exclude=()):
         return None
 
 

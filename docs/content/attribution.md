@@ -33,7 +33,7 @@ after every `Model.apply()` call — the model never sees the rule.
 
 | rule | what it does |
 |---|---|
-| `none` | refuses co-production outright; a model returning more than one product raises `ValueError`. The only rule that does not partition anything, and the default. |
+| `none` | refuses co-production outright; a model returning more than one product raises `UnallocatedCoProduction`. The only rule that does not partition anything, and the default. |
 | `mass` | partitions technosphere and biosphere in proportion to each product's `mass` property |
 | `economic` | partitions in proportion to each product's `price` property |
 | `energy` | partitions in proportion to each product's `energy` property |
@@ -45,6 +45,27 @@ exchanges is not double-counted), and scale technosphere and biosphere by
 `demanded_total / grand_total`. `substitution` is the odd one out — it changes what gets
 *traversed*, not the arithmetic on what already came back — which is why the `Runner`
 calls a different function (`substitute()`) for it instead.
+
+Every model in a run declares which of the five rules it can honour, in `supports`. Every
+model that ships with `trailrunner` is monofunctional and so declares all five: with one
+product there is nothing to partition, and the answer is the same under every rule. The
+`Model` base class still defaults to `frozenset({"none"})`, because a model says nothing
+about multifunctionality until its author has thought about it.
+
+### Who may answer a credit
+
+A credit is a demand for what *somebody else* would have made. If the process that just
+produced the co-product were allowed to answer its own credit, it would answer by producing
+its co-product again, crediting itself again, and — for a process that is the only producer
+of its co-product — its entire burden would cancel to zero while the report still showed an
+inventory entry.
+
+So the credit carries one piece of context with it for exactly one hop: the model that
+minted it, which resolution then drops. The exclusion is by **instance identity**, not by
+class — a CH plant and an FR plant of the same class are different processes, and each
+stays a candidate for the other's credits. If nobody else makes the co-product, the credit
+becomes a visible cutoff (`no_model_found`, counted in `summary()` as being on a credit
+branch), which is the honest answer: this credit has no counterfactual in the model set.
 
 ### Worked example: the same CHP, two different numbers
 
@@ -73,12 +94,28 @@ runnable versions of this example.
 
 ### When a model can't honour the rule
 
+All three of these propagate straight out of `Orchestrator.calculate`, so they are
+importable from the package root: `from trailrunner import MissingProperty,
+UnsupportedAttribution, UnallocatedCoProduction`.
+
 **`MissingProperty`** — the model produced its co-products without the property the
 rule partitions on (`mass`, `price` or `energy`), or its co-products disagree on the
-property's unit, or the property sums to zero and there is nothing to partition. Fix it
-in the model: give every co-product the missing property, in one consistent unit, with a
-value that is not uniformly zero. There is no default trailrunner can fall back to — a
-fabricated price would be an invisible value judgement.
+property's unit, or the property sums to zero and there is nothing to partition, or one of
+them is **negative**. Fix it in the model: give every co-product the missing property, in
+one consistent unit, with a value that is not uniformly zero. There is no default
+trailrunner can fall back to — a fabricated price would be an invisible value judgement.
+
+A negative value is refused for a different reason than the others. A share taken over a
+negative value is not a share: with heat at +10 EUR and power at −8 EUR, heat's "share"
+comes out at **5.0**, and the demanded product silently carries five times the process's own
+burden. A negative price means that output is a waste the process pays to be rid of, not a
+co-product — model it as a treatment demand, or choose `substitution`.
+
+**`UnallocatedCoProduction`** — a model returned co-products under `none`, which is the
+default rule and so the likeliest refusal a user meets. Model the process
+monofunctionally, or choose a rule. A `TrailrunnerError`, so `except TrailrunnerError`
+around a calculation catches it like every other refusal; also a `ValueError`, which is
+what it was before it had a class of its own.
 
 **`UnsupportedAttribution`** — the run asked for a rule that is not in the model's
 `supports`. A model's author, not the run, decides how far a model reaches; if
@@ -105,6 +142,14 @@ two rules different answers:
 | `per_output` | `capital * demanded_output / lifetime_output` | spread over everything the asset will ever make — a lean year carries only its own share |
 | `per_year` | `capital / lifetime_years * demanded_output / annual_output` | one equal share per year of life — a lean year still carries a full year's construction |
 | `first_life` | `capital * demanded_output / annual_output` if `demand_year == build_year`, else `0.0` | all of it lands in the year the asset was built, at the cost of a spike |
+
+The spike is visible only if the study year *is* a build year. Ask `first_life` for any
+other year and it attributes **zero** capital — not a small share, none at all — because by
+then the construction has already been charged to the year it happened in. A 2030 study of a
+fleet built in 2026 and 2029 therefore shows no construction whatsoever: that is the rule
+working, not a fleet that failed to load. Only a study spanning the build years sees the
+spike the name promises. A demand with no year at all is refused under `first_life` rather
+than silently falling on the zero side of the comparison.
 
 The first two agree exactly when output is flat (`lifetime_output == annual_output *
 lifetime_years`), which is the common case, not a bug. They diverge precisely when a
@@ -135,10 +180,12 @@ deliberate, not an oversight — do not treat its presence as a working feature.
 ## Reading `report.attribution`
 
 `Report.attribution` is a `dict[int, dict]` keyed by node id, filled from each node's
-`result.provenance["attribution"]` — the record `allocate()` or `substitute()` leaves
-behind. A node with a single product still gets an entry (`{"share": 1.0, ...}`) so a
-reader never has to special-case "no co-production happened here" against "the
-attribution key is simply missing".
+`NodeRecord.attribution` — the record `allocate()` or `substitute()` leaves behind on the
+Result, lifted onto the node beside `resolution`. It is deliberately *not* part of
+`report.provenance`: provenance is what the **model** recorded, and the model neither chose
+the run's allocation rule nor saw it. A node with a single product still gets an entry
+(`{"share": 1.0, ...}`) so a reader never has to special-case "no co-production happened
+here" against "the attribution key is simply missing".
 
 ```python
 report = Orchestrator(glossary, settings=settings).calculate(demand)
