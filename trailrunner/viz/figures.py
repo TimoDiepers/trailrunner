@@ -18,6 +18,12 @@ TIER_COLOURS = {
     "background": "#868e96",
 }
 TRANSPARENT = "rgba(0,0,0,0)"
+# Plotly's default link colour is a translucent white, which on the transparent
+# canvas these figures set renders as white-on-white in a light theme and as a
+# glare that swamps the nodes in a dark one. A mid grey from the same family as
+# the asset builder's GRID reads on both, and lets the tier colours on the nodes
+# stay the only colour that carries meaning.
+LINK_COLOUR = "rgba(134,142,150,0.45)"
 
 
 def _plotly():
@@ -72,6 +78,16 @@ def sankey(report, assessment: Any | None = None):
     Link width is the child's cumulative contribution when an assessment is
     given, and 1.0 otherwise — an unweighted diagram still shows the shape of
     the chain, which is most of what it is for.
+
+    **Width is the magnitude, not the sign.** A Sankey ribbon has no way to be
+    negative, so a credit branch — a substituted co-product, traversed as a
+    negative demand — draws exactly as wide as a burden of the same size. Read
+    the sign off ``assessment.cumulative_by_node`` or the contributions chart,
+    not off this figure.
+
+    The links are drawn in one neutral grey rather than plotly's default
+    translucent white, which is invisible against a light background: colour
+    here belongs to the nodes, where it names the tier that answered each one.
     """
     go = _plotly()
     index = {node.id: position for position, node in enumerate(report.nodes)}
@@ -92,7 +108,7 @@ def sankey(report, assessment: Any | None = None):
     figure = go.Figure(
         go.Sankey(
             node=dict(label=labels, color=colours, pad=18, thickness=14),
-            link=dict(source=sources, target=targets, value=values),
+            link=dict(source=sources, target=targets, value=values, color=LINK_COLOUR),
         )
     )
     _layout(figure, "Supply chain traversal")

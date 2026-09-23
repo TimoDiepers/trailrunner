@@ -207,8 +207,8 @@ the same shape as `Assessment.uncharacterized` — `(Flow, unit, amount)`, one e
 so "how much did this leave out" is the same question with the same kind of answer everywhere:
 
 - **`uncharacterized`** — exchanges whose flow no characterization function covers (by default,
-  the IPCC AR6 functions for fossil CO2, biogenic CO2 uptake, fossil CH4, N2O and CO — see
-  `default_functions()`). Pass your own `functions` mapping to extend it.
+  the IPCC AR6 functions for fossil CO2, CO2 captured from air, biogenic CO2 uptake, fossil CH4,
+  N2O and CO — see `default_functions()`). Pass your own `functions` mapping to extend it.
 - **`wrong_unit`** — exchanges whose flow *is* covered, but not in the unit the exchange is
   denominated in. See below.
 - **`undated`** — exchanges with no `flow.time`. A dynamic assessment has nowhere on the axis to
@@ -222,6 +222,21 @@ so "how much did this leave out" is the same question with the same kind of answ
 
 `assess_dynamic` also carries `truncated`, `unresolved` and `proxies` over from the `Report`, the
 same way `assess` does, and `summary()` names all of them alongside the four lists.
+
+### Two sign conventions for removals, one stated per flow
+
+`default_functions()` covers two ways of writing a removal down, and pairs each with the function
+that matches it:
+
+- `flows/co2-from-air` — what `DirectAirCapture` emits, **already negative** — gets the ordinary
+  `characterize_co2`. The minus sign is in the inventory, so nothing should apply a second one.
+- `flows/co2-uptake` gets `characterize_co2_uptake`, which negates: that flow's convention is a
+  **positive** amount meaning uptake.
+
+Crossing them is silent and total: `characterize_co2_uptake` applied to an already-negative amount
+turns a removal into warming of the same size, with an empty `uncharacterized` list and nothing
+anywhere saying it happened. A model emitting a removal therefore has to use the convention of the
+IRI it emits on.
 
 ### Characterization functions are keyed on `(IRI, unit)`
 

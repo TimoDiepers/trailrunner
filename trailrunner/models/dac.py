@@ -37,6 +37,14 @@ ELECTRICITY = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_
 # products at this granularity). Left as the invented IRI it always was --
 # see the step-0 report for what was searched.
 DAC_PLANT = "https://vocab.sentier.dev/products/direct-air-capture-plant"
+# **This flow is emitted with a negative amount** (see ``apply``): a removal
+# written as a negative CO2 exchange, not as a positive uptake. That is the
+# convention ``assessment/dynamic.py`` characterizes it under — it maps
+# ``co2-from-air`` to the ordinary ``characterize_co2``, because the minus sign
+# is already here. The *other* removal IRI in that table, ``co2-uptake``, takes
+# the opposite convention: a positive amount, negated by
+# ``characterize_co2_uptake``. Repointing this constant at that IRI, or dropping
+# the minus below, silently inverts every dynamic curve this model appears in.
 CO2_AIR = "https://vocab.sentier.dev/flows/co2-from-air"
 
 REFERENCE_TEMPERATURE = 10.0  # degC, the temperature the parquet figures assume

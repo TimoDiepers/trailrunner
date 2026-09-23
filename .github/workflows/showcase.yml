@@ -23,7 +23,12 @@ jobs:
       - run: uv run pytest -q
 
   showcase:
-    name: Execute the showcase notebook, offline
+    # "without a token", not "offline": this job proves the notebook runs with
+    # no PYST_AUTH_TOKEN in the environment, which is what makes a network call
+    # structurally impossible here (PystTaxonomy is constructed with
+    # client=None). It does not sandbox the runner's network, so naming it
+    # "offline" would assert more than it tests.
+    name: Execute the showcase notebook, without a token
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
