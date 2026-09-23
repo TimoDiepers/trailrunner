@@ -118,7 +118,8 @@ stops quickly. Raise them freely.
 
 The underlying [`Log`](../api/log.md) can go to a single parquet file, one row per record,
 tagged by `kind` — `biosphere`, `node` (a node that emitted nothing, so it does not vanish),
-`unresolved`, and `provenance`:
+`unresolved`, `provenance`, and `resolution` (how a node's demand was matched — which tier
+answered and what, if anything, was relaxed to get there):
 
 ```python
 from trailrunner.orchestration.log import Log
@@ -128,6 +129,6 @@ log = Log()
 log.to_parquet("run.parquet")
 ```
 
-One flat table under one explicit schema, rather than four files, because the point is to
+One flat table under one explicit schema, rather than five files, because the point is to
 diff two runs with a single read: runs that differ only in which cutoffs they hit or which
 parameter fallbacks they took differ on disk too.
