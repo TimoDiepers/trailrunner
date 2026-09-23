@@ -19,6 +19,9 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = ["pyarrow>=15"]
 
+[project.scripts]
+trailrunner = "trailrunner.cli:main"
+
 [project.urls]
 source = "https://github.com/TimoDiepers/trailrunner"
 homepage = "https://github.com/TimoDiepers/trailrunner"
