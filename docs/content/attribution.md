@@ -25,6 +25,13 @@ rule it cannot honour gets `UnsupportedAttribution` rather than a silently wrong
 | `capital` | when an asset outlives the year it was built in, how its construction is spread over what it makes |
 | `reuse` | *(validated, not yet consumed — see [below](#reuse-is-validated-but-unconsumed))* |
 
+!!! tip "See it run"
+
+    [`examples/coproduction.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/coproduction.ipynb)
+    takes the 5-minute tour's cement demand, puts a co-producing CHP behind its
+    steam, and runs the same demand under `none`, `economic` and
+    `substitution` — the refusal, the two scores, and what the node recorded.
+
 ## Allocation: `none`, `mass`, `economic`, `energy`, `substitution`
 
 [`allocate()`](../api/attribution.md) and `substitute()` live in

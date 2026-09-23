@@ -6,7 +6,13 @@ tags:
 
 # Example Models
 
-Two worked examples, each in code for a different reason.
+Worked examples, each in code for a different reason.
+
+## Cement
+
+Kiln fuel is not a fixed coefficient - raw meal arrives from the quarry with water in it, and every kilogram of that has to be boiled off before any limestone calcines. Two classes live here, declaring the same product with `Coverage` ranges that do not overlap: `CementPlant` computes, `MeteredCementPlant` reads a stack monitor, and the year on the demand decides which one answers. This is the model the [5-minute tour](../showcase.md) walks.
+
+::: trailrunner.models.cement
 
 ## Direct air capture
 

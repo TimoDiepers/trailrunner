@@ -36,4 +36,4 @@ Most users touch four things: a [`Model`](model.md) subclass, a
 
 ## Models
 
-- [`models`](models.md) — the direct air capture worked example.
+- [`models`](models.md) — the cement, direct air capture and electricity worked examples.
