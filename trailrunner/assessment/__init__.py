@@ -6,5 +6,6 @@ and characterization is a separate reading of it.
 """
 
 from trailrunner.assessment.method import CharacterizationFactor, Method
+from trailrunner.assessment.static import Assessment, assess
 
-__all__ = ["CharacterizationFactor", "Method"]
+__all__ = ["Assessment", "CharacterizationFactor", "Method", "assess"]
