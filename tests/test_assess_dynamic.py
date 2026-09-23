@@ -335,3 +335,115 @@ def test_two_units_of_one_flow_with_different_functions_is_refused():
             horizon=20,
             functions=functions,
         )
+
+
+def test_a_wrong_unit_exchange_does_not_drag_the_anchor_back():
+    """The anchor must come from the exchanges that actually enter the frame.
+
+    A 2010 exchange in grams is reported and never characterized -- but if it
+    is allowed to set the anchor, the fixed horizon ends in 2030, the one
+    genuinely characterizable emission falls past it, and the total comes back
+    0.0 with nothing anywhere saying a characterized exchange was discarded.
+    """
+    alone = assess_dynamic(
+        report_with([(2030, 10.0, "kg")]), horizon=20, fixed_time_horizon=True
+    )
+    with_noise = assess_dynamic(
+        report_with([(2010, 1.0, "g"), (2030, 10.0, "kg")]),
+        horizon=20,
+        fixed_time_horizon=True,
+    )
+    assert with_noise.time_horizon_start == datetime(2030, 1, 1)
+    assert with_noise.total == pytest.approx(alone.total)
+    assert with_noise.total != 0.0
+    assert len(with_noise.wrong_unit) == 1
+
+
+def test_an_uncharacterized_exchange_does_not_drag_the_anchor_back():
+    """Same for a flow no function covers: reported, never in the frame, and
+    therefore never the thing the horizon is anchored to."""
+    log = Log()
+    unknown = "https://vocab.sentier.dev/flows/unobtainium"
+    early = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2010), amount=1.0, unit="kg")
+    log.write(
+        early,
+        Result(
+            production=[Exchange(flow=early.flow, amount=1.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=unknown, location="CH", time=2010), amount=1.0, unit="kg")],
+        ),
+        model="Mystery",
+    )
+    late = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit="kg")
+    log.write(
+        late,
+        Result(
+            production=[Exchange(flow=late.flow, amount=1.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=2030), amount=10.0, unit="kg")],
+        ),
+        model="DirectAirCapture",
+    )
+    assessment = assess_dynamic(Report.from_log(log), horizon=20, fixed_time_horizon=True)
+    alone = assess_dynamic(
+        report_with([(2030, 10.0, "kg")]), horizon=20, fixed_time_horizon=True
+    )
+    assert assessment.time_horizon_start == datetime(2030, 1, 1)
+    assert assessment.total == pytest.approx(alone.total)
+
+
+def test_an_emission_past_the_horizon_is_reported_not_silently_dropped():
+    """It entered the frame, it was characterizable, and its characterized
+    rows did not survive. A reader told nothing would read the total as though
+    that emission had been counted."""
+    assessment = assess_dynamic(
+        report_with([(2030, 10.0), (2300, 10.0)]), horizon=20, fixed_time_horizon=True
+    )
+    assert assessment.beyond_horizon == [
+        (Flow(iri=CO2_IRI, location="CH", time=2300), "kg", 10.0)
+    ]
+    assert assessment.uncharacterized == []
+    assert assessment.wrong_unit == []
+    assert "1 beyond-horizon exchange" in assessment.summary()
+
+
+def test_nothing_is_beyond_the_horizon_when_everything_fits():
+    assessment = assess_dynamic(
+        report_with([(2030, 10.0), (2035, 10.0)]), horizon=20, fixed_time_horizon=True
+    )
+    assert assessment.beyond_horizon == []
+
+
+def test_the_dynamic_assessment_carries_the_inventorys_own_gaps():
+    log = Log()
+    demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit="kg")
+    log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=2030), amount=10.0, unit="kg")],
+        ),
+        model="DirectAirCapture",
+    )
+    log.unresolved(
+        Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=5.0, unit="kg"),
+        reason="max_depth",
+        parent=0,
+    )
+    report = Report.from_log(log, truncated=True)
+    assessment = assess_dynamic(report, horizon=20)
+    assert assessment.truncated is True
+    assert assessment.unresolved == 1
+    assert assessment.proxies == len(report.proxies)
+    summary = assessment.summary()
+    assert "1 unresolved" in summary
+    assert "truncated" in summary
+
+
+def test_a_legacy_iri_keyed_functions_mapping_is_rejected_by_name():
+    """``ValueError: too many values to unpack`` names neither the argument
+    nor the key shape it wanted."""
+    with pytest.raises(ValueError, match="functions"):
+        assess_dynamic(
+            report_with([(2030, 10.0)]),
+            horizon=20,
+            functions={CO2_IRI: lambda *args, **kwargs: None},
+        )

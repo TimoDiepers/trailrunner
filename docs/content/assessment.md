@@ -166,6 +166,9 @@ assessment.unit             # "W/m2" — the unit of `series`
 assessment.curve            # DataFrame: date, amount — the cumulative integral, for plotting
 assessment.total            # that integral at the end of the horizon
 assessment.cumulative_unit  # "W·yr/m2" — the unit of `curve` and `total`
+assessment.truncated        # the traversal hit max_depth or max_nodes
+assessment.unresolved       # how many demands it could not resolve
+assessment.proxies          # how many nodes were answered by something other than a model
 print(assessment.summary())
 ```
 
@@ -199,7 +202,7 @@ capture year's emissions begin theirs. The construction pulse shows up on the ti
 the capture years, because it happened before them; a static, single-year characterization has no
 way to represent that at all.
 
-`assess_dynamic` reports three lists rather than silently dropping anything, and all three have
+`assess_dynamic` reports four lists rather than silently dropping anything, and all four have
 the same shape as `Assessment.uncharacterized` — `(Flow, unit, amount)`, one entry per exchange —
 so "how much did this leave out" is the same question with the same kind of answer everywhere:
 
@@ -211,6 +214,14 @@ so "how much did this leave out" is the same question with the same kind of answ
 - **`undated`** — exchanges with no `flow.time`. A dynamic assessment has nowhere on the axis to
   put them, so it says so rather than guessing a year. An exchange that is both undated and
   uncharacterized appears in both lists, because each answers its own question.
+- **`beyond_horizon`** — exchanges that *did* enter the characterization but contributed no dated
+  row to `series`. Under `fixed_time_horizon=True` every horizon ends at the same date, so an
+  emission past that date gets a zero-length horizon and comes back undated; it cannot go on the
+  curve. Dropping it in silence would leave you with a total that reads as though it had been
+  counted, so it is named instead.
+
+`assess_dynamic` also carries `truncated`, `unresolved` and `proxies` over from the `Report`, the
+same way `assess` does, and `summary()` names all of them alongside the four lists.
 
 ### Characterization functions are keyed on `(IRI, unit)`
 
@@ -291,18 +302,26 @@ a 2030 emission with `horizon=20` silently gets about 16 years of horizon instea
 emission past the wall-clock horizon's end comes back as a single undated row.
 
 `trailrunner` derives the anchor from the report instead and passes it explicitly: **the earliest
-dated biosphere emission in the report, as 1 January of that year.** That is the study's own
-start, it is reproducible, and it does not depend on when the code runs. The value actually used
-is recorded on the result:
+emission that actually enters the characterization, as 1 January of that year.** That is the
+study's own start, it is reproducible, and it does not depend on when the code runs. The value
+actually used is recorded on the result:
 
 ```python
 assessment = assess_dynamic(report, horizon=20, fixed_time_horizon=True)
 assessment.time_horizon_start   # datetime(2030, 1, 1) — what the horizon was anchored to
 ```
 
+"Actually enters the characterization" is load-bearing, and it is the difference between a
+reported gap and a silent zero. An exchange in the wrong unit, or one whose flow no function
+covers, is reported and never reaches the frame. If such an exchange were allowed to set the
+anchor — a stray 2010 entry in grams, say — the shared horizon would end in 2030, and a perfectly
+characterizable 2030 emission would fall past it and come back empty. The total would be `0.0`,
+with nothing in `uncharacterized`, `wrong_unit` or `undated` to explain it. So the anchor comes
+from the rows that are going to be characterized, and nothing else.
+
 Pass `time_horizon_start=` yourself when the study has a better anchor than its own first
-emission — a functional unit dated before any emission, most obviously. The field is recorded on
-every result, including conventional-convention ones, where it is inert: with
+characterized emission — a functional unit dated before any emission, most obviously. The field
+is recorded on every result, including conventional-convention ones, where it is inert: with
 `fixed_time_horizon=False` each emission starts its own horizon and the anchor changes nothing.
 
 ## The Brightway converter: an offline escape hatch

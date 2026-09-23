@@ -75,6 +75,7 @@ class Method:
                     row.get("location"),
                     row.get("time"),
                 )
+                value = row["cf"]
             except KeyError as exc:
                 raise self._layout_error(source) from exc
             if key in self._rows:
@@ -87,7 +88,7 @@ class Method:
                     f"time={key[3]!r}) in {source or name}; a method file states "
                     "each factor once"
                 )
-            self._rows[key] = row["cf"]
+            self._rows[key] = value
 
     @staticmethod
     def _layout_error(source: str | None) -> MissingColumns:
