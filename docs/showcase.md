@@ -5,43 +5,83 @@ tags:
 
 # The 5-minute tour
 
-One demand, carried end to end:
+One demand, carried end to end.
 
-**1000 kg of CO<sub>2</sub> captured from the air — in Switzerland, in 2030.**
+**1000 kg of CO<sub>2</sub> captured from the air, in Switzerland, in 2030.**
 
-The usual way to answer that is to multiply a column of fixed coefficients. You
-know what that looks like, and you know where it stops: the column says the same
-thing in Iceland as in Switzerland, in 2045 as in 2030.
+Ordinary practice answers that by looking the process up in a dataset and
+multiplying. `trailrunner` asks a model, and the model answers for the demand it
+was actually given, in the place and the year it was given. Everything on this
+page follows from that one change.
 
-`trailrunner` answers it by *running* the supply chain instead. So this page is
-mostly about the machine — what the pieces are, which piece holds which
-decision, and what the run leaves behind. The demand itself is not the words
-above but an IRI, `…/BONSAI2025.1/fi_2811_21`, which the
-[sentier vocabulary](https://vocab.sentier.dev) calls *Carbon dioxide*. Every number and every block of output
-came out of
+Every number and every block of output came out of
 [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb),
-which runs offline, from committed files alone.
-
-??? note "Presenter note (running order)"
-    Beats 1, 2, 3 and 6 are the argument: the architecture, and the one thing
-    the architecture buys that a matrix cannot. They must be read whatever
-    happens to the clock, and they come to about **4:00**. Beat 4 is where
-    `GasCHP` and `DacPlantConstruction` arrive, and without them beat 6's
-    construction pulse is unintelligible — so if the clock allows exactly one
-    more beat, it is 4, not 5.
-
-    Timed at a conference-realistic **130 words a minute** — a reading pace is
-    faster than a speaking one — with a beat of silence on each block of output,
-    all seven beats run about **7:15**. Five minutes therefore means cutting,
-    and the cuts are: **beat 7 first** (−0:25), then 5 (−1:05), then the second
-    half of 4 (−0:45). Decide which cut you are making before you start, not at
-    minute four.
+which runs offline from committed files.
 
 ---
 
-## 1. The shape of the run
+## 1. A process is something you run
 
-One demand goes in. A handful of objects pass it around until the queue is empty.
+A [`Model`](api/model.md) has one method. It takes a [`Demand`](api/flow.md) and
+returns a [`Result`](api/result.md), answering three questions at once. What did
+I make, what do I need, what did I emit.
+
+```python
+answer = plant.apply(DEMAND)  # no orchestrator involved, a model is callable on its own
+```
+
+```text
+   production    1000.0 kg   Carbon dioxide                   @CH/2030
+ technosphere    5000.0 MJ   heat from main producers of heat @CH/2030
+ technosphere     400.0 kWh  electricity                      @CH/2030
+    biosphere   -1000.0 kg   co2-from-air                     @CH/2030
+   provenance  {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
+```
+
+Three lists, three destinations. `production` is checked against the demand that
+triggered the run and then dropped. `technosphere` goes back on the queue, and
+is where the traversal comes from. `biosphere` accumulates into the inventory.
+`provenance` records which parameter row the model read and which fallbacks it
+took.
+
+The demand arrives as an argument, so the answer can depend on it. Inside
+`DirectAirCapture` the regeneration heat responds to the air the plant is
+breathing, because colder and drier air carries less CO<sub>2</sub> and less
+water to the sorbent per unit of air moved.
+
+```python
+penalty = ambient_penalty(row["temperature"], row["humidity"])
+heat = row["heat_demand"] * penalty * demand.amount
+```
+
+The same 1000 kg, asked for in four different places and years.
+
+```text
+ where   when   degC     RH   penalty   heat [MJ]
+    CH   2020    9.0   0.75     0.995      5970.0
+    CH   2030   10.0   0.70     1.000      5000.0
+   RER   2020   11.0   0.68     0.996      6573.6
+   RER   2030   12.0   0.65     0.995      5472.5
+```
+
+`apply` receives the **full** demanded amount, the whole thing that was asked
+for, and nothing downstream rescales what comes back. A model whose response
+bends with scale can say so.
+
+A model can also compute nothing at all. Where a process has been measured, the
+same `Result` carries metered emissions for that place and that year, read from
+the same parquet any other parameter comes from.
+
+---
+
+## 2. Models find each other through a vocabulary
+
+Every flow is identified by an IRI from the hierarchical
+[sentier vocabulary](https://vocab.sentier.dev). A `Demand` for
+`…/BONSAI2025.1/fi_1730_9` finds whoever declared that same IRI in `produces`,
+with no name matching and no unit guessing in between. That is what lets two
+models written by two people compose at all, and it is what the orchestrator
+uses to walk outward.
 
 ```mermaid
 flowchart TB
@@ -60,138 +100,15 @@ flowchart TB
     L --> P([Report])
 ```
 
-| Part | Its one job |
-| --- | --- |
-| [`Demand`](api/flow.md) | an amount and a unit of a `Flow` — *what*, *where*, *when* |
-| [`Queue`](api/queue.md) | the demands still waiting; FIFO unless you hand it a priority |
-| [`ResolutionChain`](api/resolution.md) | asks each tier in order; the model tier asks the [`Glossary`](api/glossary.md) for a `(model, demand)` offer, and the first offer wins |
-| [`Model`](api/model.md) | one process, as code: `apply(demand) -> Result` |
-| [`Runner`](api/runner.md) | applies the model and validates the `Result` against the demand |
-| [`Log`](api/log.md) | append-only: every node, edge, cutoff, fallback and rule |
-
-**Every flow is keyed on an IRI from the
-[sentier vocabulary](https://vocab.sentier.dev)** — not a free-text name, and
-not a database row id. That is what lets two models written by two people meet
-at all: a `Demand` for `…/BONSAI2025.1/fi_1730_9` finds whoever declared that
-same IRI in `produces`, with no name matching and no unit guessing in between.
-
-And the vocabulary is *semantic and hierarchical*, which buys two more things
-this page then spends. A concept knows its own `skos:prefLabel` — so the output
-below reads in words rather than in identifiers, and those words come from the
-vocabulary, not from the notebook:
-
-```python
-VOCAB = PystLabels(EXAMPLES / "pyst_labels.json", client=None)  # cached: no network, no token
-VOCAB.label(DEMAND.flow.iri)  # -> 'Carbon dioxide'
-```
-
-And a concept knows its `skos:broader` parent, which is what beat 4 walks when
-nobody produces the exact concept that was asked for.
-
-The seams are the point. The traversal never learns how a process works, and a
-process never learns what else is in the supply chain: a model *returns*
-demands rather than looking anything up, so it cannot reach into the graph and
-does not know whether anyone will answer it. The rest of this page is those
-objects, one beat at a time.
-
-??? note "Presenter note (0:50)"
-    Say: there is no matrix in this picture, and no solver. There is a queue and
-    a loop. Trace the cycle with a finger — pop, resolve, apply, the technosphere
-    goes *back* on the queue — and say "that arrow is the supply chain". Then
-    the vocabulary, in one breath: every flow is an IRI from vocab.sentier.dev,
-    which is how two people's models meet, where the names in the output come
-    from, and — in beat 4 — what we climb when nobody matches. Then the seam
-    sentence: a model returns demands, it never looks anything up.
-    Do not read the table aloud; it is there for the person who photographs the
-    slide.
-
----
-
-## 2. A process is a function from `Demand` to `Result`
-
-That is the whole model contract. `apply` receives the demand — the **full**
-amount, never a unit demand — and answers three questions at once: what did I
-make, what do I need, what did I emit?
-
-```python
-answer = plant.apply(DEMAND)  # no orchestrator involved: a model is callable on its own
-```
-
-```text
-   production    1000.0 kg   Carbon dioxide                   @CH/2030
- technosphere    5000.0 MJ   heat from main producers of heat @CH/2030
- technosphere     400.0 kWh  electricity                      @CH/2030
-    biosphere   -1000.0 kg   co2-from-air                     @CH/2030
-   provenance  {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
-```
-
-Three lists, three destinations, and the orchestrator needs to know nothing else
-about direct air capture:
-
-- `production` is checked against the demand that triggered the run and then
-  dropped — it is an answer, not an input to anything;
-- `technosphere` goes back on the queue, and is where the traversal comes from;
-- `biosphere` is added to the inventory.
-
-`provenance` is the model's own record of which parameter row it read and which
-fallbacks it took, and rides along to the report.
-
-Three of those four lines are printed with the vocabulary's own name for the
-concept. The fourth, `co2-from-air`, is an IRI `trailrunner` invented for itself
-and the vocabulary has never heard of — so there is no label to print and the
-identifier stands. Nothing marks it specially; it simply cannot be dressed up.
-
-Why the demand is an argument to a function rather than a multiplier on a
-column: the numbers inside `DirectAirCapture` depend on where and when it is
-asked.
-
-```python
-def ambient_penalty(temperature: float, humidity: float) -> float:
-    temperature_term = TEMPERATURE_SENSITIVITY * (REFERENCE_TEMPERATURE - temperature)
-    humidity_term = HUMIDITY_SENSITIVITY * (REFERENCE_HUMIDITY - humidity)
-    return 1.0 + temperature_term + humidity_term
-```
-
-The same 1000 kg, asked for in four different places and years:
-
-```text
- where   when   degC     RH   penalty   heat [MJ]
-    CH   2020    9.0   0.75     0.995      5970.0
-    CH   2030   10.0   0.70     1.000      5000.0
-   RER   2020   11.0   0.68     0.996      6573.6
-   RER   2030   12.0   0.65     0.995      5472.5
-```
-
-Nothing downstream rescales a `Result`, so a model whose response is *not*
-proportional to the amount does not have to pretend it is.
-
-**The process is the code.**
-
-??? note "Presenter note (1:00)"
-    Say: one method, three lists, and the names of the lists *are* the
-    architecture — production is checked, technosphere is queued, biosphere is
-    accumulated. Point at the arrow in the diagram the technosphere list feeds.
-    Then the ambient function, briefly: the coefficient cannot depend on where
-    and when; a function can. Do not explain the sorbent chemistry, and do not
-    claim this model is nonlinear in the amount — it is not. What is not a
-    coefficient here is the ambient response.
-
----
-
-## 3. The loop
-
 `Orchestrator.calculate` is a `while queue:` and little else. Pop a demand, ask
-the chain who can answer it, hand the offer to the `Runner`, push the `Result`'s
-technosphere demands back on, write everything to the `Log`.
-
-Every seam in that sentence is an object you can replace — which also makes the
-loop easy to watch. Subclass the chain, print each demand it is asked about, and
-the traversal narrates itself. Only the four shipped models are registered here.
+the chain who can answer it, hand the offer to the [`Runner`](api/runner.md),
+push the `Result`'s technosphere demands back on, write everything to the
+[`Log`](api/log.md). Every seam in that sentence is an object you can replace,
+which also makes the loop easy to watch. Subclass the chain, print each demand
+it is asked about, and the traversal narrates itself.
 
 ```python
 class Narrating(ResolutionChain):
-    """A chain that says what it was asked. The Orchestrator takes any chain."""
-
     def offer(self, demand, exclude=()):
         offer = super().offer(demand, exclude=exclude)
         who = type(offer.model).__name__ if offer else "cutoff (nobody offered)"
@@ -199,8 +116,7 @@ class Narrating(ResolutionChain):
         return offer
 
 
-tier1 = ModelProvider(Glossary(MODELS))
-first = Orchestrator(Narrating([tier1])).calculate(DEMAND)
+first = Orchestrator(Narrating([ModelProvider(Glossary(MODELS))])).calculate(DEMAND)
 ```
 
 ```text
@@ -214,20 +130,17 @@ pop     49.42 MJ   Natural gas, liquefied or in th… -> cutoff (nobody offered)
 ```
 
 Seven pops, breadth-first, and every pop after the first is a demand some
-earlier model returned. Three found a model; four found nobody.
+earlier model returned. The supply chain assembled itself from four registered
+models and one starting demand.
 
-Two lines still read as identifiers — `electricity-wind`, `electricity-hydro` —
-because those IRIs are `trailrunner`'s own invention and the vocabulary has no
-concept, and so no label, for them. Worth noticing now: they are exactly the
-demands beat 4 will *not* be able to generalise either.
+The names come from the vocabulary as well. Each concept carries a
+`skos:prefLabel`, read here from a committed cache, so the run prints in words.
+Two lines still show identifiers, because `electricity-wind` and
+`electricity-hydro` are `trailrunner`'s own invented IRIs and the vocabulary has
+no concept for them. Beat 3 returns to that.
 
-Nothing was dropped and nothing was quietly zero — the misses are cutoff leaves
-in the report, each with a reason and a parent, and `tree()` is the log read
-back as the graph it recorded, named the same way:
-
-```python
-print(first.tree(labels=VOCAB.label))  # the vocabulary's names, where it has one
-```
+Three pops found a model. Four found nobody, and those four are in the report
+with a reason and a parent.
 
 ```text
 3 nodes, 2 inventory entries
@@ -244,67 +157,38 @@ attribution: allocation=none, capital=per_output
   5000 MJ heat from main producers of heat @CH/2030  [cutoff: no_model_found]
 ```
 
-A loop in the supply chain is bounded, not solved: every visit is its own node,
-nodes are never merged, and `max_depth` and `max_nodes` stop a cycle and set
-`report.truncated`. A truncated tree with an honest cutoff list beats a
-converged number nobody can check.
-
-The same walk from the command line, no notebook involved:
-
-```bash
-uv run trailrunner run \
-  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_2811_21" \
-  --amount 1000 --unit kg --location CH --year 2030 \
-  --models examples/showcase_models.py
-```
-
-**Every node says how honestly it was answered.**
-
-??? note "Presenter note (0:50)"
-    Say: this is the loop from beat 1, printing itself — the trace is the queue
-    order, not a summary written afterwards. If anyone is reading closely, the
-    two lines still showing identifiers are our own invented IRIs — the
-    vocabulary has no name for them because it has no concept for them. Read
-    one cutoff line out loud, then
-    say: a matrix gives you a number here and no list of what was missing from
-    it; this gives you both. The heat cutoff at 5000 MJ is the biggest of them,
-    and it is the next beat.
+A gap in the supply chain is data in the answer. Every line says how honestly it
+was reached, and a cutoff hangs under the node that asked for it.
 
 ---
 
-## 4. When nobody answers: the chain, tier by tier
+## 3. A demand nobody answers is relaxed along the vocabulary
 
-`ResolutionChain` is a list of providers, asked in order, first offer wins. Tier
-1 is the models. Every later tier is a concession — and the tier that made it
-writes what it conceded into the node's resolution, so a proxy number is never
-mistaken for an exact one. The order is yours to declare: no library default
-decides whether a widened region beats a borrowed dataset.
+[`ResolutionChain`](api/resolution.md) is a list of providers, asked in order,
+and the first offer wins. Tier 1 is the models. Every later tier is a
+concession, and the tier that made it writes what it conceded into the node's
+resolution.
 
-```python
-CHAIN = ResolutionChain([tier1, tier2, BackgroundProvider(pack)])
-report = Orchestrator(CHAIN, settings=settings).calculate(DEMAND)
+**Tier 2 generalises the demand.** Nothing produces `fi_1730_9`, "heat from main
+producers of heat". One `skos:broader` step up sits `fi_1730`, "Steam and hot
+water", a real BONSAI concept read from a committed cache. A gas CHP registered
+at the parent can answer the relaxed demand, and the report says in words how
+far the demand travelled.
+
+```text
+       model: GasCHP
+ relaxations: ['product: fi_1730_9 -> fi_1730']
+       asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9 @CH/2030
+    answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730 @CH/2030
+        tier: generalising
+
+   asked, in words: heat from main producers of heat
+answered, in words: Steam and hot water
 ```
 
-**Tier 2 generalises the demand**, and this is what a *hierarchical*
-vocabulary buys. Nothing produces `fi_1730_9`, "heat from main producers of
-heat". One `skos:broader` step up sits `fi_1730`, "Steam and hot water" — a real
-BONSAI concept with a real parent link, read from the committed
-`examples/pyst_cache.json`: no network, no token. A gas CHP registered at the
-parent answers the relaxed demand. The concession is a walk up the vocabulary,
-not a guess at a similar-sounding name.
-
 **Tier 3 borrows a dataset.** Given its `Fleet`, `DirectAirCapture` demands each
-plant's construction **in the year that plant was built**. A construction model
-turns that into steel and aluminium, borrowed from the background pack.
-
-**Two of the models below are written on this page, not shipped.** Nothing in
-this repository produces `fi_1730`, and nothing in it co-produces — so there was
-no target for the generalisation tier to find, and nothing for beat 5 to
-allocate. `GasCHP` and `DacPlantConstruction` exist so those mechanisms have
-something to bite on. Their efficiencies, prices and material intensities are
-invented. Everything around them is not: the `skos:broader` walk, the pack
-lookup, the completeness flag, the credit traversal and the construction pulse
-are the library, and every block of output below is what it actually printed.
+plant's construction in the year that plant was built, and a construction model
+turns that into steel and aluminium taken from a curated background pack.
 
 ```text
 10 nodes, 6 inventory entries
@@ -328,81 +212,44 @@ attribution: allocation=economic, capital=per_output
     57.6923 kg aluminium-primary @CH/2029  [background: unit_process, incomplete]
 ```
 
-The same walk as beat 3 — ten nodes now instead of three — and the tag on each
-line says which tier put it there. `report.proxies` holds the long form of
-every non-exact answer:
-
-```text
-       model: GasCHP
- relaxations: ['product: fi_1730_9 -> fi_1730']
-       asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9 @CH/2030
-    answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730 @CH/2030
-        tier: generalising
-
-   asked, in words: heat from main producers of heat
-answered, in words: Steam and hot water
-```
-
-The record keeps the IRIs, because those are what was matched; the names are
-there so a reader can see, in one line, exactly how much was conceded — *heat
-from main producers of heat*, answered with *steam and hot water*.
-
 ![The traversal, coloured by the tier that answered each node](assets/showcase/sankey.svg)
 
-The borrowed rows say `incomplete` because the pack holds each dataset's
-*direct* exchanges only: their upstream is missing, and the report says so.
+Ten nodes now, and the tag on each line says which tier put it there. The
+borrowed rows carry `incomplete` because the pack holds each dataset's direct
+exchanges only, so their own upstream is missing and the report says so.
 
-**We concede on purpose, along a declared hierarchy, and we log it.**
+Every concession is deliberate, ordered by the practitioner, and written down.
 
 !!! warning "What this beat does not claim"
 
-    - `direct-air-capture-plant` is **not** a vocabulary concept — the service
-      answers 404 for it — so the product dimension cannot generalise it, and
-      nothing here pretends otherwise. It is also why that line, and the
-      borrowed `steel-low-alloyed` and `aluminium-primary` under it, print as
-      identifiers: no concept, no `skos:prefLabel`, no name.
-    - `electricity-wind`, `electricity-hydro` and `electricity-natural-gas` are
-      likewise `trailrunner`'s own invented IRIs. They stay cutoffs.
-    - The background pack has **no electricity dataset, on purpose**: a grid-mix
+    - `GasCHP` and `DacPlantConstruction` are written in the notebook rather
+      than shipped, because nothing in this repository produces `fi_1730` and
+      nothing in it co-produces. Their efficiencies, prices and material
+      intensities are invented. The `skos:broader` walk, the pack lookup, the
+      completeness flag and the construction pulse are the library.
+    - `direct-air-capture-plant`, `electricity-wind`, `electricity-hydro` and
+      `electricity-natural-gas` are `trailrunner`'s own IRIs. The vocabulary
+      answers 404 for them, which is why they have no printed name and why the
+      product dimension can never relax them. They stay cutoffs.
+    - The background pack holds no electricity dataset, deliberately. A grid-mix
       unit process delegates its combustion upstream, so borrowing one would
-      answer a kilowatt hour with a plausible-looking near-zero. A visible
-      cutoff is better than that.
-
-??? note "Presenter note (1:45)"
-    Say: the chain is a list, and you wrote the list — that is the whole tier
-    mechanism. Then the two concessions: we asked for less, one `skos:broader`
-    step up a published vocabulary, from a file in the repo; and we borrowed a
-    dataset somebody else made. Read the proxy tag aloud, then the two "in
-    words" lines — heat from main producers of heat, answered with steam and hot
-    water. That pair is the clearest thing on the page about what a proxy costs. Point at the word `incomplete`
-    and say: that is a borrowed row whose own upstream we do not have, and it is
-    labelled, not laundered. If asked about the electricity cutoffs, use the box
-    above — it is the strongest thing on the page. Read the "written on this
-    page, not shipped" paragraph out loud **before** the output, not after it
-    and not only if challenged: said first it is the argument, said last it is
-    an excuse.
+      answer a kilowatt hour with a plausible looking near-zero. A visible
+      cutoff is worth more.
 
 ---
 
-## 5. Where a value judgement enters the loop
+## 4. The judgement calls stay with the practitioner
 
-The CHP makes heat *and* electricity. How its burden splits between them is not
-a measurement, it is a choice — and `trailrunner` will not make it for you. The
-place it refuses is a specific one: the `Runner`, between applying the model and
-validating what came back. The model neither makes the choice nor sees it, which
-is why the rule lands in `report.attribution` and never in the model's
-provenance.
-
-```python
-try:
-    walk("none")
-except UnallocatedCoProduction as refusal:
-    print("allocation='none' ->", refusal)
-```
+The CHP makes heat and electricity. How its burden splits between them is a
+choice, and `trailrunner` will not make it for you. The refusal happens in the
+`Runner`, between applying the model and validating what came back, so the model
+neither makes the choice nor sees it.
 
 ```text
 allocation='none' -> GasCHP returned co-products (https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100) but the run's allocation rule is 'none'; model it monofunctionally or choose a rule
 ```
+
+Choose a rule and the run proceeds, carrying the rule with it.
 
 ```text
      economic:    -580.6 kg CO2-eq   (4 unresolved (generalisation_exhausted: 4))
@@ -414,39 +261,28 @@ what the CHP node recorded under substitution:
   substituted: ['https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100']
 ```
 
-Same model, same 1000 kg: 581 kg of CO<sub>2</sub>-eq removed under one rule,
-311 kg under the other. And the credit is not a subtraction at the end — it goes
-back on the queue as a *negative* demand, is answered by someone other than the
-CHP, and its own cutoffs are counted separately.
+Same model, same 1000 kg, and 581 kg of CO<sub>2</sub>-eq removed under one rule
+against 311 kg under the other. Under `substitution` the credit goes back on the
+queue as a negative demand, is answered by someone other than the CHP, and has
+its own cutoffs counted separately.
 
-The gap between 581 and 311 is set by `GasCHP`'s invented heat and electricity
-prices — economic allocation partitions by revenue. What is demonstrated is that
-the rule moves the answer and that the report records which rule ran, not that
-either number is right for a real CHP.
-
-**The rule is on the report, next to the number it produced.**
-
-??? note "Presenter note (1:05)"
-    Say: the library refuses to run until you choose, and the refusal happens in
-    the Runner, not in the model. Show the refusal, then the two numbers. Say
-    "581 or 311, and neither is wrong" — that is the line. Mention that the
-    credit re-enters the queue; it is the one place the loop runs backwards.
-    Do not get drawn into which rule is correct.
+The gap between the two numbers is set by `GasCHP`'s invented prices, since
+economic allocation partitions by revenue. What the run demonstrates is that the
+rule moves the answer and that the report records which rule ran.
 
 ---
 
-## 6. Time rides along
+## 5. Time rides along
 
-Nothing in the loop ever had to be told about time. A `Flow` carries its year the
-way it carries its location, so every demand pushed, every emission accumulated
-and every node logged is already dated. The plants doing the capturing were built
-in 2026 and 2029; the capture, and the gas heat driving it, are in 2030. So the
-inventory *is* a time series, and can be characterized as one.
+Nothing in the loop was ever told about time. A [`Flow`](api/flow.md) carries its
+year the way it carries its location, so every demand pushed, every emission
+accumulated and every node logged is already dated. The plants doing the
+capturing were built in 2026 and 2029. The capture, and the gas heat driving it,
+happen in 2030.
+
+So the inventory is a time series, and can be characterized as one.
 
 ```python
-# No characterization table is passed: default_functions() maps the DAC uptake
-# flow to the ordinary CO2 function, because the model emits it as an already
-# negative CO2 exchange and nothing should negate it a second time.
 dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 ```
 
@@ -460,50 +296,22 @@ horizon anchored at: 2026-01-01
 0 beyond-horizon exchanges
 4 unresolved
 5 proxies
-
-marginal radiative forcing, first years [W/m2]:
-date
-2027    5.054518e-14
-2028    9.235309e-14
-2029    4.282174e-14
-2030    1.684839e-13
-2031   -9.756895e-13
-2032   -1.776486e-12
 ```
 
 ![Marginal and cumulative radiative forcing over 100 years](assets/showcase/curve.svg)
 
-The faint bars are the per-year forcing; the red line is its running total. It
-starts **above** zero — those are the plants built in 2026 and 2029 — and only
-turns down once the capture lands in 2030. Four warming years, then a century of
-payback, because of *when* each kilogram happened and not only how much of it
-there was. A static score gives one number for all of that.
+The faint bars are the per-year forcing and the red line is its running total.
+It starts above zero, where the plants were built, and turns down once the
+capture lands in 2030. Four warming years, then a century of payback, because of
+*when* each kilogram happened as much as how much of it there was. A static
+score gives one number for all of that.
 
-No matrix was rebuilt, no second model was written, and no step in the traversal
-knew this was coming: characterization is a separate reading of an inventory
-whose dates were never lost. The pulse's size is `DacPlantConstruction`'s
-illustrative intensities; the shape — warming first, cooling later — is what the
-traversal produced from the dates it carried.
-
-**`bw_temporalis` and `bw_timex` get here too — from a matrix. This got here
-because nothing in the architecture ever had to drop the date.**
-
-??? note "Presenter note (1:20)"
-    This is the beat, and it is the payoff for beat 1. Slow down. Say: the
-    traversal has no notion of time anywhere in it — the flows carried their
-    years, so the inventory came out dated for free. Trace the curve with a
-    finger: up here, turning here. Then say the punchline and stop talking. The
-    punchline names `bw_temporalis` and `bw_timex` on purpose: someone in the
-    room knows they do this, and conceding it first is what buys the second half
-    of the sentence.
+No matrix was rebuilt and no second model was written. Characterization is a
+separate reading of an inventory whose dates were never lost.
 
 ---
 
-## 7. The record
-
-The `Report` is a reading of the `Log`, not a replacement for it. The log goes
-to one parquet file under one schema, so two runs can be diffed with a single
-read.
+## 6. The run leaves a record
 
 ```python
 print(report.summary())
@@ -522,17 +330,47 @@ kinds: ['attribution', 'biosphere', 'node', 'provenance', 'resolution', 'unresol
 
 ![Contribution to the GWP100 score by node](assets/showcase/contributions.svg)
 
-Every node, every cutoff, every parameter fallback, every proxy, and the rule
-that made the number — one row each.
+Every node, every cutoff, every parameter fallback, every proxy and the rule
+that made the number, one row each. Parameters arrive as parquet and the whole
+run leaves as parquet, so two studies can be diffed with a single read.
 
-**Parquet in, parquet out, every choice on the record.**
+---
 
-??? note "Presenter note (0:25)"
-    Say: the run is a file, and the file includes what the run could not do.
-    Then give the two links and stop.
+## What this changes
+
+- **A process can depend on its demand.** Location, year, scale and ambient
+  conditions live in the model, where a physical dependency belongs.
+- **A model can be a measurement.** Metered data for one place and year enters
+  the same way computed data does.
+- **The supply chain assembles itself.** Models declare vocabulary IRIs, and the
+  orchestrator finds who answers what.
+- **Missing data is visible.** Cutoffs carry a reason and a position in the
+  chain, so a reader can see what a number excludes.
+- **Concessions are declared and recorded.** A generalised demand or a borrowed
+  dataset is tagged at the node, with what was asked and what answered it.
+- **Normative choices are the study's.** A co-producing model waits for the
+  allocation rule, and the rule travels with the result.
+- **Inventories are time-explicit by construction.** Dates survive the
+  traversal, so dynamic characterization needs no second model.
+- **The run is a file.** One parquet holds the graph, the gaps and the choices.
+
+??? note "Presenting this"
+
+    Beats 1, 2 and 5 are the argument and should be read whatever happens to the
+    clock. They come to roughly three minutes. Beat 3 is where `GasCHP` and
+    `DacPlantConstruction` arrive, so cutting it also costs beat 5's construction
+    pulse its explanation.
+
+    Cut in this order. Beat 6 first, then beat 4, then the second half of beat 3.
+
+    Two lines are worth saying aloud rather than reading. On beat 2, after the
+    pop trace, that a matrix gives you a number here and no list of what was
+    missing from it. On beat 3, that a borrowed row whose upstream is missing is
+    labelled rather than laundered. Read the disclaimer in beat 3 before the
+    output rather than after it.
 
 ---
 
 - The notebook this page is made of: [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)
-- The same pieces, in reference form: [Core Concepts](content/concepts.md)
+- The same pieces in reference form: [Core Concepts](content/concepts.md)
 - [Installation](content/installation.md)
