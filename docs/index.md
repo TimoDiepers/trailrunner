@@ -1,14 +1,20 @@
 # Supply chains as code with `trailrunner`
 
-**`trailrunner` lets a process be a computational model instead of a fixed row of coefficients.** A *model* stands for one process — most often Python code, but it can just as well be a plain measurement, such as metered emissions for this process at this location and time. It is called whenever something demands one of its products, and it answers by working out *what other inputs it needs to produce that demand, and what it emitted* — reading its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. The orchestrator walks the resulting demands outward through the supply chain and accumulates an inventory.
+`trailrunner` computes a life cycle inventory by orchestrating computational models instead of static unit-process datasets. Each model answers, for its own process, what it needs and what it emits — calculated from parameter or measurement data, for the demand actually asked of it.
 
 ## 🧱 The problem
 
-A classic life cycle inventory is a matrix of fixed coefficients: every process linear and scale-free, and the numbers the same wherever and whenever it runs. Real processes are not. A direct air capture plant needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient — it has to live in code, which means the calculation has to *run* the supply chain rather than invert it.
+A classic life cycle inventory is a matrix of fixed coefficients: one row of numbers per process, and a separate dataset for every location, year, or technology variant of the same physical activity, because a fixed coefficient can't adapt to context on its own. The catalog grows by duplication instead of by parameterization, and the links between datasets are frozen in at build time — nothing adapts when better data becomes available, or when a demand falls just outside what was modeled.
+
+A direct air capture plant, for instance, needs more regeneration heat in cold, dry air, because less CO<sub>2</sub> and less water reach the sorbent per unit of air moved. That dependency cannot live in a coefficient; it has to live in the model — which means the calculation has to *run* the supply chain rather than invert it.
 
 ## ⚙️ How it works
 
-One demand goes in. A handful of objects pass it around until the queue is empty.
+`trailrunner` replaces the static unit-process inventory with computational models that call each other. A *model* is a computational model (e.g., Python code) for one process: given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted — and reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. Not every model computes anything, either: it can just as well be a plain measurement, such as metered emissions for this process at this location and time, read straight from the same trailpack parquet file.
+
+Every flow that crosses a model's boundary is identified by an IRI from the hierarchical [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can look at a model's further demands, work out which other models produce those flows, and call them in turn — cascading outward through the whole supply chain until nothing is left open.
+
+That cascade is the loop below: one demand goes in, and a handful of objects pass it around until the queue is empty.
 
 ```mermaid
 flowchart TB
@@ -44,7 +50,7 @@ flowchart TB
 
 **You get** a [`Report`](api/report.md): an aggregated biosphere inventory, an explicit list of everything that stayed *unresolved*, which tier answered each node, and the provenance of every parameter fallback taken along the way.
 
-**Every flow is keyed on an IRI from the [sentier vocabulary](https://vocab.sentier.dev)**, not a free-text name: a `Demand` for a product IRI finds whoever declared that same IRI in `produces`, which is what lets two people's models meet at all. The vocabulary is semantic and hierarchical, so a concept also carries its own `skos:prefLabel` — the name [`Report.tree()`](api/report.md) prints when given one — and its `skos:broader` parent, which is the ladder the [generalising tier](content/resolution.md) climbs when nobody produces the exact concept asked for.
+An IRI rather than a free-text name is what lets two people's models meet at all, and it keeps paying after the match: the same concept carries its own `skos:prefLabel` — the name [`Report.tree()`](api/report.md) prints when given one — and its `skos:broader` parent, which is the ladder the [generalising tier](content/resolution.md) climbs when nobody produces the exact concept asked for.
 
 The seams are deliberate. The traversal never learns how a process works, and a process never learns what else is in the supply chain: a model *returns* demands rather than looking anything up, so it cannot reach into the graph and does not know whether anyone will answer it. And because a [`Flow`](api/flow.md) carries its year the way it carries its location, the inventory comes out dated without any step of the walk knowing about time.
 

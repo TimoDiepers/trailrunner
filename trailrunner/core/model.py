@@ -1,4 +1,4 @@
-"""The Model base class: Python code for one process."""
+"""The Model base class: one process, as a computational model."""
 
 from collections.abc import Sequence
 from typing import Any
@@ -14,6 +14,12 @@ class Model:
 
     A process is any activity that turns demands into products: a technology,
     a service, a transport leg.
+
+    A model is most often Python code, but nothing here requires it to compute
+    anything: ``apply`` may just as well return a plain measurement -- metered
+    emissions for this process at this location and time, read from the same
+    ``ParameterSet`` parquet any other number comes from. What makes something
+    a model is that it answers a demand, not that it calculates one.
 
     Subclasses declare which product IRIs they ``produces``, optionally
     restrict their validity with ``coverage``, and implement ``apply``.

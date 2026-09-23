@@ -4,17 +4,19 @@ Model-based supply chain traversal for life cycle inventories.
 
 Installs as `sentier-trailrunner`, imports as `trailrunner`.
 
-A life cycle inventory is usually a matrix of fixed coefficients. `trailrunner`
-computes one by *traversing* a supply chain of computational models instead —
-one per process, most often Python code but as readily a plain measurement —
-each answering *what other inputs it needs to produce this demand, and what it
-emitted*. So a process can depend on its demand, its location and its year, and
-every flow keeps the date and place it happened at.
+A life cycle inventory is usually a matrix of fixed coefficients: one row per
+process, and a separate dataset for every location, year and technology variant
+of the same activity, because a coefficient cannot adapt to context on its own.
+`trailrunner` replaces those static datasets with computational models that call
+each other — one per process, most often Python code but as readily a plain
+measurement, each working out what it needs to meet *this* demand and what it
+emitted, from parameters read out of a
+[trailpack](https://github.com/TimoDiepers/trailpack) parquet file.
 
-Every flow is keyed on an IRI from the semantic, hierarchical
-[sentier vocabulary](https://vocab.sentier.dev): that is how two people's models
-meet, where the names in a printed report come from (`skos:prefLabel`), and what
-a demand nobody matches exactly is generalised along (`skos:broader`).
+Every flow crossing a model's boundary is an IRI from the hierarchical
+[sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can take a
+model's further demands, work out which models produce them, and call those in
+turn — cascading outward until nothing is left open.
 
 ```mermaid
 flowchart TB
