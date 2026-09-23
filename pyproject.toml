@@ -54,12 +54,6 @@ brightway = [
   # an existing Brightway project. trailrunner itself never imports bw2data.
   "bw2data>=4.0; python_version >= '3.12'",
 ]
-pyst = [
-  # pyst-client requires >=3.12, so the marker has to match it. The product
-  # dimension of the generalising tier is the only thing that needs it; time
-  # and location relax without any network at all.
-  "pyst-client>=1.2; python_version >= '3.12'",
-]
 
 [build-system]
 requires = ["hatchling>=1.27"]

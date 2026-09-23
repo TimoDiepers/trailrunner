@@ -1,3 +1,6 @@
+import pytest
+
+from trailrunner.core.errors import AmbiguousModelMatch
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
@@ -141,3 +144,60 @@ def test_explain_is_silent_when_no_budget_was_available():
     demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
     settings = ProxySettings(order=(), max_steps={})
     assert provider([], settings=settings).explain(demand) is None
+
+
+def test_budget_counts_attempts_not_successes():
+    """A step is spent on every candidate tried, not only on ones that match.
+
+    HIERARCHY runs CH -> RER -> GLO; this model covers only GLO, the second
+    hop. A budget of 1 is spent trying RER (which fails) and never reaches
+    GLO. ``test_location_budget_is_respected`` uses ``max_steps=0``, which the
+    outer ``budget <= 0`` guard catches before the inner per-step comparison
+    ever runs -- it cannot tell "0 attempts" apart from "1 attempt that
+    failed." This does.
+    """
+
+    class GloOnlyBoiler(Model):
+        produces = [HEAT]
+        coverage = Coverage(locations=frozenset({"GLO"}))
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+
+    one_step = ProxySettings(order=("location",), max_steps={"location": 1})
+    assert provider([GloOnlyBoiler()], settings=one_step).offer(demand) is None
+
+    two_steps = ProxySettings(order=("location",), max_steps={"location": 2})
+    offer = provider([GloOnlyBoiler()], settings=two_steps).offer(demand)
+    assert isinstance(offer.model, GloOnlyBoiler)
+    assert offer.demand.flow.location == "GLO"
+
+
+def test_ambiguous_match_reached_through_relaxation_is_not_swallowed():
+    """Two models matching the *relaxed* demand are a data error, not a decline.
+
+    ``Glossary.resolve`` already raises ``AmbiguousModelMatch`` for two
+    candidates at tier 1; the generalising tier must let that propagate
+    rather than catching it and reporting "no offer", which would hide a real
+    modelling conflict behind an ordinary cutoff.
+    """
+
+    class BoilerA(Model):
+        produces = [HEAT]
+        coverage = Coverage(locations=frozenset({"RER"}))
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    class BoilerB(Model):
+        produces = [HEAT]
+        coverage = Coverage(locations=frozenset({"RER"}))
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    with pytest.raises(AmbiguousModelMatch):
+        provider([BoilerA(), BoilerB()]).offer(demand)

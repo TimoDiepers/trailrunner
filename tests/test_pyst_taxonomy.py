@@ -1,6 +1,8 @@
 import json
+import urllib.request
 
-from trailrunner.resolution import PystTaxonomy
+from trailrunner.resolution import PystTaxonomy, default_client
+from trailrunner.resolution.pyst import SKOS_BROADER
 
 GREEN_TRUCK = "https://vocab.sentier.dev/products/truck-green"
 TRUCK = "https://vocab.sentier.dev/products/truck"
@@ -75,3 +77,47 @@ def test_the_cache_file_is_plain_readable_json(tmp_path):
     path = tmp_path / "cache.json"
     PystTaxonomy(path, client=StubClient({GREEN_TRUCK: [TRUCK]})).broader(GREEN_TRUCK)
     assert json.loads(path.read_text())[GREEN_TRUCK] == [TRUCK]
+
+
+class FakeHttpResponse:
+    """Stands in for the ``http.client.HTTPResponse`` ``urlopen`` returns.
+
+    Only what ``PystHttpClient.concept_get`` uses: a context manager whose
+    ``read()`` gives raw bytes.
+    """
+
+    def __init__(self, payload: dict) -> None:
+        self._body = json.dumps(payload).encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def read(self) -> bytes:
+        return self._body
+
+
+def test_the_real_clients_broader_key_is_a_full_uri(tmp_path, monkeypatch):
+    """The live service answers JSON-LD keyed by full predicate URIs, not
+    prefixed names -- ``skos:broader`` lives under
+    ``http://www.w3.org/2004/02/skos/core#broader``. No network call is made:
+    ``urlopen`` itself is stubbed."""
+    payload = {"@id": GREEN_TRUCK, SKOS_BROADER: [{"@id": TRUCK}, {"@id": VEHICLE}]}
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda request, *a, **kw: FakeHttpResponse(payload)
+    )
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=default_client())
+    assert taxonomy.broader(GREEN_TRUCK) == [TRUCK, VEHICLE]
+
+
+def test_a_concept_with_no_broader_key_has_no_parents(tmp_path, monkeypatch):
+    """A top concept's response simply omits the ``broader`` key entirely --
+    that is normal, not an error, and must not raise."""
+    payload = {"@id": VEHICLE, "@type": "skos:Concept"}
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda request, *a, **kw: FakeHttpResponse(payload)
+    )
+    taxonomy = PystTaxonomy(tmp_path / "cache.json", client=default_client())
+    assert taxonomy.broader(VEHICLE) == []
