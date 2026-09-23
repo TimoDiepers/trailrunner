@@ -45,6 +45,14 @@ schema metadata, columns' units and IRIs read out of `resources[].schema.fields`
 | `flow_unit` | the unit the factor applies to — string equality, no conversion |
 | `location` | where the factor holds; widened through a [`LocationHierarchy`](../api/location.md) the same way a `ParameterSet` row is |
 | `cf` | the characterization factor itself |
+| `time` | *optional.* A year, for a method whose factors change over time |
+
+`time` is read only if the column is present, and matched **exactly** — a lookup for year 2031
+against a row written for 2030 misses, and falls through to a row with no `time` at all if one
+exists. There is no interpolation between two years' CFs, on purpose: a `ParameterSet` row is a
+measured or projected quantity, and interpolating between two of those years is a reasonable
+estimate of a third; a CF is a modelling convention agreed on for a given horizon, and
+interpolating between two conventions produces neither one.
 
 The method's *name* comes from the datapackage's `name`; its *score unit* comes from the `cf`
 column's declared `unit.name` — the same rule `ParameterSet.unit_of` follows, and for the same

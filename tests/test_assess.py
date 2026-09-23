@@ -85,3 +85,60 @@ def test_an_empty_report_assesses_to_zero(method_parquet_file):
     assessment = assess(Report.from_log(Log()), Method.from_parquet(method_parquet_file))
     assert assessment.score == 0.0
     assert assessment.uncharacterized == []
+
+
+def branching_report() -> Report:
+    """Root emits 10 kg CO2 and has *two* children, each characterized on its
+    own: one emits 2 kg CH4, the other 5 kg CO2. Every other fixture in this
+    file is a linear chain (root -> one child), which cannot catch a
+    cumulative walk that overwrites a running total instead of accumulating
+    into it -- with one child, `total = cumulative(child)` and
+    `total += cumulative(child)` give the same answer. This is the one
+    fixture where they diverge."""
+    log = Log()
+    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
+    child_a_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit="MJ")
+    child_b_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=2000.0, unit="MJ")
+    root = log.write(
+        root_demand,
+        Result(
+            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+        ),
+        model="DirectAirCapture",
+    )
+    log.write(
+        child_a_demand,
+        Result(
+            production=[Exchange(flow=child_a_demand.flow, amount=5000.0, unit="MJ")],
+            biosphere=[Exchange(flow=Flow(iri=CH4_IRI, location="GLO"), amount=2.0, unit="kg")],
+        ),
+        depth=1,
+        parent=root,
+        model="GasBoiler",
+    )
+    log.write(
+        child_b_demand,
+        Result(
+            production=[Exchange(flow=child_b_demand.flow, amount=2000.0, unit="MJ")],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=5.0, unit="kg")],
+        ),
+        depth=1,
+        parent=root,
+        model="ElectricHeater",
+    )
+    return Report.from_log(log)
+
+
+def test_a_roots_cumulative_contribution_accumulates_across_every_child(method_parquet_file):
+    """Guards against a cumulative walk that overwrites the running total with
+    the last child's contribution instead of summing across siblings -- a bug
+    every other fixture here, being a single-child chain, is structurally
+    unable to catch."""
+    assessment = assess(branching_report(), Method.from_parquet(method_parquet_file))
+    direct_root = 10.0 * 1.0
+    child_a = 2.0 * 29.8
+    child_b = 5.0 * 1.0
+    assert assessment.cumulative_by_node[0] == direct_root + child_a + child_b
+    assert assessment.cumulative_by_node[1] == child_a
+    assert assessment.cumulative_by_node[2] == child_b
