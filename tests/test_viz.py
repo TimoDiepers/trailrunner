@@ -108,3 +108,25 @@ def test_figures_set_no_opaque_background():
     """The docs render in light and dark; a white canvas is a bug in one of them."""
     figure = sankey(two_level_report())
     assert figure.layout.paper_bgcolor in (None, "rgba(0,0,0,0)")
+
+
+def _channels(colour: str) -> tuple[int, int, int]:
+    """The r, g, b of an ``rgb()``/``rgba()`` string."""
+    numbers = colour[colour.index("(") + 1 : colour.index(")")].split(",")
+    return tuple(int(float(part)) for part in numbers[:3])
+
+
+def test_the_sankey_states_a_link_colour_that_reads_on_both_themes():
+    """Plotly's fallback link colour is a translucent white.
+
+    On the transparent canvas ``_layout`` sets, that renders white-on-white in
+    the docs' light theme -- the figure loses its ribbons entirely and reduces
+    to disconnected bars. A stated colour is the fix, and it must be neither
+    pure white nor pure black, since one of those disappears on each theme.
+    """
+    figure = sankey(two_level_report())
+    colour = figure.data[0].link.color
+    assert colour, "the Sankey must state its link colour, not inherit plotly's white"
+    red, green, blue = _channels(colour)
+    assert (red, green, blue) != (255, 255, 255), "white links vanish on the light theme"
+    assert (red, green, blue) != (0, 0, 0), "black links vanish on the dark theme"

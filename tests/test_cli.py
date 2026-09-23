@@ -100,3 +100,34 @@ def test_an_unknown_allocation_is_rejected_before_anything_runs(models_file, cap
     ])
     assert code == 2
     assert "vibes" in capsys.readouterr().err
+
+
+def test_the_method_flag_prints_a_score(models_file, method_parquet_file, capsys):
+    code = main([
+        "run", HEAT, "--amount", "100", "--unit", "MJ",
+        "--location", "GLO", "--year", "2030", "--models", str(models_file),
+        "--method", str(method_parquet_file),
+    ])
+    out = capsys.readouterr().out
+    assert code == 0
+    # 100 MJ * 0.05 kg CO2/MJ * 1.0 kg CO2eq/kg
+    assert "5" in out and "kg CO2eq" in out
+
+
+def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
+    """The headline is an integral, so it must be labelled as one.
+
+    ``W·yr/m2``, not ``W/m2``: the CLI prints ``dynamic.cumulative_unit`` and
+    printing ``dynamic.unit`` there would be wrong by a dimension. Pinned here
+    because 'correct by inspection' is how it was wrong before.
+    """
+    pytest.importorskip("dynamic_characterization")
+    code = main([
+        "run", HEAT, "--amount", "100", "--unit", "MJ",
+        "--location", "GLO", "--year", "2030", "--models", str(models_file),
+        "--dynamic", "radiative_forcing", "--horizon", "20",
+    ])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "radiative_forcing over 20 years:" in out
+    assert "W·yr/m2" in out

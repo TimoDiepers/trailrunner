@@ -14,11 +14,17 @@ Seven beats. Every number and every block of output below came out of
 which runs offline, from committed files alone.
 
 ??? note "Presenter note (running order)"
-    Beats 1, 2 and 6 are the argument and must be read whatever happens to the
-    clock; 3, 4, 5 and 7 are the craft that makes it believable. Cut from the
-    back: drop 7, then 5, then 3. Read at about 145 words a minute and leave a
-    beat of silence on each block of output — that lands the whole page at just
-    over five minutes.
+    Beats 1, 2, 4 and 6 are the argument and must be read whatever happens to
+    the clock. Beat 4 is where `GasCHP` and `DacPlantConstruction` arrive, and
+    without them beat 6's construction pulse is unintelligible — it is not
+    optional scenery. Beats 3, 5 and 7 are the craft that makes it believable.
+
+    Timed at a conference-realistic **130 words a minute** — a reading pace is
+    faster than a speaking one — with a beat of silence on each block of output,
+    all seven beats run about **7:30**. Five minutes therefore means cutting,
+    and the cuts are: **beat 7 first** (−0:30), then 5 (−1:10), then 3 (−0:40).
+    Beats 1, 2, 4 and 6 alone come to about **5:05**. Decide which cut you are
+    making before you start, not at minute four.
 
 ---
 
@@ -50,7 +56,7 @@ one in Swiss spring air.
 
 **Real processes depend on where and when. That cannot live in a number.**
 
-??? note "Presenter note (30s)"
+??? note "Presenter note (0:40)"
     Say: this is the state of the art, and it is a table. Point at the three
     identical numbers. Do not apologise for the example being simple — its being
     simple is the point. Move on fast; beat 6 is where the time is needed.
@@ -87,7 +93,7 @@ have to pretend it is.
 
 **The process is the code.**
 
-??? note "Presenter note (45s)"
+??? note "Presenter note (0:50)"
     Say: the coefficient cannot depend on where and when; a function can. Show
     the two Swiss heat numbers, 5970 against 5000. Say "full demand, not unit
     demand" once and move on. Do not explain the sorbent chemistry, and do not
@@ -129,10 +135,11 @@ list with a reason, hanging under the node that asked for them.
 
 **Every node says how honestly it was answered.**
 
-??? note "Presenter note (45s)"
+??? note "Presenter note (0:40)"
     Say: one command, no notebook. Read the tag on the last line out loud —
-    `[cutoff: no_model_found]`. Say: most tools would have given you a number
-    here. This one gives you a to-do list. That heat cutoff is the next beat.
+    `[cutoff: no_model_found]`. Say: a matrix gives you a number here and no
+    list of what was missing from it. This one gives you both. That heat cutoff
+    is the next beat.
 
 ---
 
@@ -148,6 +155,15 @@ no token. A gas CHP registered there answers the relaxed demand.
 **Borrow.** Given its `Fleet`, `DirectAirCapture` demands each plant's
 construction **in the year that plant was built**. A construction model turns
 that into steel and aluminium, borrowed from the background pack.
+
+**Two of the models below are written on this page, not shipped.** Nothing in
+this repository produces `fi_1730`, and nothing in it co-produces — so there was
+no target for the generalisation tier to find, and nothing for beat 5 to
+allocate. `GasCHP` and `DacPlantConstruction` exist so those mechanisms have
+something to bite on. Their efficiencies, prices and material intensities are
+invented. Everything around them is not: the `skos:broader` walk, the pack
+lookup, the completeness flag, the credit traversal and the construction pulse
+are the library, and every block of output below is what it actually printed.
 
 ```python
 CHAIN = ResolutionChain([tier1, tier2, BackgroundProvider(pack)])
@@ -202,17 +218,16 @@ The borrowed rows say `incomplete` because the pack holds each dataset's
       unit process delegates its combustion upstream, so borrowing one would
       answer a kilowatt hour with a plausible-looking near-zero. A visible
       cutoff is better than that.
-    - `GasCHP` and `DacPlantConstruction` are written in the notebook, and their
-      efficiencies, prices and material intensities are illustrative. The
-      resolution around them is not.
 
-??? note "Presenter note (45s)"
+??? note "Presenter note (1:55)"
     Say: nothing matched, so we asked for less — one level up a published
     vocabulary, from a file in the repo. Read the proxy tag aloud. Then point at
     the word `incomplete` and say: that is a borrowed row whose own upstream we
     do not have, and it is labelled, not laundered. If asked about the
     electricity cutoffs, use the box above — it is the strongest thing on the
-    page.
+    page. Read the "written on this page, not shipped" paragraph out loud
+    before the output, not after it and not only if challenged: said first it is
+    the argument, said last it is an excuse.
 
 ---
 
@@ -242,13 +257,18 @@ what the CHP node recorded under substitution:
   substituted: ['https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100']
 ```
 
-Same plant, same physics, same 1000 kg: 581 kg of CO<sub>2</sub>-eq removed under
-one rule, 311 kg under the other. The credit is traversed as a *negative* demand,
-answered by someone other than the CHP, and counted separately.
+Same model, same 1000 kg: 581 kg of CO<sub>2</sub>-eq removed under one rule,
+311 kg under the other. The credit is traversed as a *negative* demand, answered
+by someone other than the CHP, and counted separately.
+
+The gap between 581 and 311 is set by `GasCHP`'s invented heat and electricity
+prices — economic allocation partitions by revenue. What is demonstrated is that
+the rule moves the answer and that the report records which rule ran, not that
+either number is right for a real CHP.
 
 **The rule is on the report, next to the number it produced.**
 
-??? note "Presenter note (45s)"
+??? note "Presenter note (1:10)"
     Say: the library refuses to run until you choose. Show the refusal, then the
     two numbers. Say "581 or 311, and neither is wrong" — that is the line.
     Do not get drawn into which rule is correct; the point is that the answer
@@ -263,12 +283,10 @@ capturing were built in 2026 and 2029; the capture, and the gas heat driving it,
 are in 2030. So the inventory *is* a time series, and can be characterized as one.
 
 ```python
-# The DAC model's uptake flow is denominated like any other CO2 exchange and is
-# already negative, so the ordinary CO2 function is the right one for it.
-functions = {**default_functions(), (dac.CO2_AIR, "kg"): ipcc_ar6.characterize_co2}
-
-dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100,
-                         functions=functions)
+# No characterization table is passed: default_functions() maps the DAC uptake
+# flow to the ordinary CO2 function, because the model emits it as an already
+# negative CO2 exchange and nothing should negate it a second time.
+dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 ```
 
 ```text
@@ -300,13 +318,21 @@ turns down once the capture lands in 2030. Four warming years, then a century of
 payback, because of *when* each kilogram happened and not only how much of it
 there was. A static score gives one number for all of that.
 
-**Nothing else produces this without rebuilding a matrix.**
+The pulse's size is `DacPlantConstruction`'s illustrative intensities; the
+shape — warming first, cooling later — is what the traversal produced from the
+dates it carried.
 
-??? note "Presenter note (60s)"
+**`bw_temporalis` and `bw_timex` get here too — from a matrix. This got here
+because the traversal never lost the date.**
+
+??? note "Presenter note (1:25)"
     This is the beat. Slow down. Say: no second model, no second database, no
     matrix — the traversal already kept the year on every flow, so this is a
     reading of the inventory you already have. Trace the curve with a finger:
-    up here, turning here. Then say the punchline and stop talking.
+    up here, turning here. Then say the punchline and stop talking. The
+    punchline names `bw_temporalis` and `bw_timex` on purpose: someone in the
+    room knows they do this, and conceding it first is what buys the second
+    half of the sentence.
 
 ---
 
@@ -334,7 +360,7 @@ that made the number — one row each.
 
 **Parquet in, parquet out, every choice on the record.**
 
-??? note "Presenter note (20s)"
+??? note "Presenter note (0:30)"
     Say: the run is a file, and the file includes what the run could not do.
     Then give the two links and stop.
 
