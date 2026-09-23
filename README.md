@@ -19,8 +19,8 @@ flowchart TB
     C -->|selected offer| R[Runner]
     R -->|apply| M[Model: your code]
     M -->|Result| R
-    R -->|technosphere: what it needs| Q
-    R -->|biosphere: what it emitted| I[(inventory)]
+    R -->|Result.technosphere: what it needs| Q
+    R -->|Result.biosphere: what it emitted| I[(inventory)]
     X --> L[(Log)]
     R --> L
     L --> P([Report])
