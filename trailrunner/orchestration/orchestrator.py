@@ -3,6 +3,7 @@
 from collections.abc import Callable
 
 from trailrunner.core.flow import Demand
+from trailrunner.core.settings import Settings
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.log import Log
 from trailrunner.orchestration.queue import Queue, QueueItem
@@ -33,6 +34,7 @@ class Orchestrator:
         max_depth: int = 10,
         max_nodes: int = 1000,
         priority: Callable[[Demand], float] | None = None,
+        settings: Settings | None = None,
     ) -> None:
         # A bare Glossary is still a valid argument: it is the one-tier chain,
         # and every v1 caller passes one.
@@ -45,9 +47,9 @@ class Orchestrator:
         # self.glossary can be None here (a chain with no ModelProvider). That
         # is safe today because the Orchestrator always passes
         # model=offer.model into runner.apply below, so the Runner never
-        # consults its own glossary; a later phase will change the Runner's
-        # constructor so this can't be relied on by accident.
-        self.runner = runner if runner is not None else Runner(self.glossary)
+        # consults its own glossary.
+        self.settings = settings if settings is not None else Settings()
+        self.runner = runner if runner is not None else Runner(self.glossary, settings=self.settings)
         self.max_depth = max_depth
         self.max_nodes = max_nodes
         self.priority = priority
