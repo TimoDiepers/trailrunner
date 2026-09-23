@@ -1,6 +1,6 @@
 # Supply chains as code with `trailrunner`
 
-**`trailrunner` lets a process be Python code instead of a fixed row of coefficients.** A *model* reads its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file and answers one question: *given this demand, what did I produce, what do I need, and what did I emit?* The orchestrator walks the resulting demands outward through the supply chain and accumulates an inventory.
+**`trailrunner` lets a process be a computational model instead of a fixed row of coefficients.** A *model* stands for one process — most often Python code, but it can just as well be a plain measurement, such as metered emissions for this process at this location and time. It is called whenever something demands one of its products, and it answers by working out *what other inputs it needs to produce that demand, and what it emitted* — reading its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. The orchestrator walks the resulting demands outward through the supply chain and accumulates an inventory.
 
 ## 🧱 The problem
 

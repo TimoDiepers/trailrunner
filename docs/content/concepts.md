@@ -53,9 +53,11 @@ demand = Demand(flow=flow, amount=5000.0, unit="MJ")
 
 ## Model
 
-A [`Model`](../api/model.md) is Python code for one process. It declares the product IRIs
-it `produces`, optionally restricts its validity with a [`Coverage`](../api/coverage.md),
-and implements `apply(demand) -> Result`.
+A [`Model`](../api/model.md) stands for one process — most often Python code, but it can
+just as well be a plain measurement, such as metered emissions for this process at this
+location and time, read from the same parquet file any other parameter comes from. It
+declares the product IRIs it `produces`, optionally restricts its validity with a
+[`Coverage`](../api/coverage.md), and implements `apply(demand) -> Result`.
 
 `apply` receives the **full** demand amount, never a unit demand. This is the whole point:
 a plant at ten times the scale is not ten times the plant, and nothing downstream rescales

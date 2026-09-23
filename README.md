@@ -5,9 +5,11 @@ Model-based supply chain traversal for life cycle inventories.
 Installs as `sentier-trailrunner`, imports as `trailrunner`.
 
 A life cycle inventory is usually a matrix of fixed coefficients. `trailrunner`
-computes one by *traversing* a supply chain of models instead — Python code, one
-per process — so a process can depend on its demand, its location and its year,
-and every flow keeps the date and place it happened at.
+computes one by *traversing* a supply chain of computational models instead —
+one per process, most often Python code but as readily a plain measurement —
+each answering *what other inputs it needs to produce this demand, and what it
+emitted*. So a process can depend on its demand, its location and its year, and
+every flow keeps the date and place it happened at.
 
 Every flow is keyed on an IRI from the semantic, hierarchical
 [sentier vocabulary](https://vocab.sentier.dev): that is how two people's models
