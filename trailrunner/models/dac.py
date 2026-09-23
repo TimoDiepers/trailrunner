@@ -21,9 +21,21 @@ from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
 
-CO2_CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
-HEAT = "https://vocab.sentier.dev/products/heat"
-ELECTRICITY = "https://vocab.sentier.dev/products/electricity"
+# Real BONSAI vocabulary concepts (verified live against
+# https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
+# .superpowers/sdd/2026-09-22-phase-4-surfaces-and-showcase/step-0-report.md
+# for how each was found). The plain "co2-captured"/"heat"/"electricity"
+# IRIs these constants used to hold were invented, not vocabulary concepts:
+# the concepts endpoint answered 404 for them, so skos:broader never had
+# anything to walk and the product-generalisation dimension relaxed nothing.
+CO2_CAPTURED = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_2811_21"  # "Carbon dioxide"
+HEAT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9"  # "heat from main producers of heat"
+ELECTRICITY = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100"  # "electricity"
+# DAC_PLANT has no real vocabulary concept: the concepts endpoint answers 404
+# for it, and no BONSAI search turned up a direct-air-capture-plant concept
+# (BONSAI's product classification does not carry capital-good infrastructure
+# products at this granularity). Left as the invented IRI it always was --
+# see the step-0 report for what was searched.
 DAC_PLANT = "https://vocab.sentier.dev/products/direct-air-capture-plant"
 CO2_AIR = "https://vocab.sentier.dev/flows/co2-from-air"
 

@@ -155,6 +155,20 @@ ELEMENTARY_FLOW_MAP: dict[str, tuple[str, str]] = {
 
 PRODUCTS = "https://vocab.sentier.dev/products/"
 
+# Real BONSAI vocabulary concepts, verified live against
+# https://vocab.sentier.dev (see dev/warm_pyst_cache.py and
+# .superpowers/sdd/2026-09-22-phase-4-surfaces-and-showcase/step-0-report.md).
+# These match trailrunner/models/electricity.py's ELECTRICITY and
+# NATURAL_GAS constants -- the plain PRODUCTS + "electricity"/"natural-gas"
+# IRIs below were invented, not vocabulary concepts. Every other
+# ``PRODUCTS + "..."`` entry in DATASETS (hard-coal, copper,
+# transport-freight-rail, transport-natural-gas-pipeline-long-distance,
+# clinker, pig-iron, steel-low-alloyed, aluminium-primary) has not been
+# checked against the vocabulary and keeps its invented IRI unchanged.
+BONSAI = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/"
+ELECTRICITY_IRI = BONSAI + "fi_17100"  # "electricity"
+NATURAL_GAS_IRI = BONSAI + "fi_12020"  # "Natural gas, liquefied or in the gaseous state"
+
 # Datasets actually found in the corpus by searching for their reference
 # product name (not guessed by UUID), and confirmed -- by running this
 # script's own parser over them -- to carry at least one of the three mapped
@@ -173,20 +187,20 @@ DATASETS: list[dict[str, Any]] = [
         "file": "process_b29c2511-45c2-33b2-b08e-39580e0fe346.xml",
         "expected_name": "Electricity, high voltage, at grid",
         "expected_location": "CH",
-        "product_iri": PRODUCTS + "electricity",
+        "product_iri": ELECTRICITY_IRI,
     },
     {
         # Same shape, same rejection -- see the CH entry above.
         "file": "process_5c40be39-7138-3b60-8d16-54298bca1926.xml",
         "expected_name": "Electricity, high voltage, at grid",
         "expected_location": "RER",
-        "product_iri": PRODUCTS + "electricity",
+        "product_iri": ELECTRICITY_IRI,
     },
     {
         "file": "process_ede67f01-b29c-3537-8678-5c36efd1bad2.xml",
         "expected_name": "Natural gas, at consumer",
         "expected_location": "US",
-        "product_iri": PRODUCTS + "natural-gas",
+        "product_iri": NATURAL_GAS_IRI,
     },
     {
         "file": "process_d265b9fd-31e7-35ba-80a8-4751e833d113.xml",

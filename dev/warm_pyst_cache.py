@@ -34,11 +34,16 @@ moment someone is looking.
 
 from trailrunner.resolution import PystTaxonomy, default_client
 
+# The real BONSAI vocabulary concepts the shipped models now use --
+# trailrunner/models/dac.py's CO2_CAPTURED/HEAT/ELECTRICITY and
+# trailrunner/models/electricity.py's ELECTRICITY/NATURAL_GAS. See
+# .superpowers/sdd/2026-09-22-phase-4-surfaces-and-showcase/step-0-report.md
+# for how each was found and verified against the live service.
 IRIS = [
-    "https://vocab.sentier.dev/products/co2-captured",
-    "https://vocab.sentier.dev/products/heat",
-    "https://vocab.sentier.dev/products/electricity",
-    "https://vocab.sentier.dev/products/natural-gas",
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_2811_21",  # co2-captured: "Carbon dioxide"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9",  # heat: "heat from main producers of heat"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100",  # electricity: "electricity"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020",  # natural-gas: "Natural gas, liquefied or in the gaseous state"
 ]
 
 
