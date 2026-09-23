@@ -25,6 +25,7 @@ parsed ecoinvent corpus.
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
+from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 
 TRANSPORT = "https://vocab.sentier.dev/products/natural-gas-transport-offshore-pipeline-long-distance"
@@ -80,6 +81,17 @@ class NaturalGasOffshorePipelineTransport(Model):
 
     produces = [TRANSPORT]
     coverage = Coverage(locations=DOCUMENTED_LOCATIONS)
+
+    supports = ALLOCATION_RULES
+    """Every rule, because this model is monofunctional.
+
+    Monofunctionality is a fact about the model, not a value judgement: with a
+    single product there is nothing to partition, so ``allocate`` takes its
+    no-op short-circuit and ``substitute`` mints no credits, and the answer is
+    the same under all five rules. Declaring only ``none`` would have made the
+    Runner's gate refuse this model at the first node of any non-``none`` run,
+    for a co-production problem it does not have.
+    """
 
     def apply(self, demand: Demand) -> Result:
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)

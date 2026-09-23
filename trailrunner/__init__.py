@@ -5,10 +5,13 @@ from trailrunner.core.errors import (
     DuplicateBackgroundEntry,
     DuplicateFactor,
     MissingColumns,
+    MissingProperty,
     MissingUnit,
     NoModelFound,
     ParameterNotFound,
     TrailrunnerError,
+    UnallocatedCoProduction,
+    UnsupportedAttribution,
     ValidationError,
 )
 from trailrunner.core.flow import Demand, Exchange, Flow, Property
@@ -30,15 +33,21 @@ __version__ = "0.1.0"
 __all__ = [
     # Errors. Orchestrator.calculate propagates AmbiguousModelMatch,
     # ValidationError and ParameterNotFound straight to the caller, so they
-    # belong here rather than behind trailrunner.core.errors.
+    # belong here rather than behind trailrunner.core.errors. The three
+    # attribution errors reach the caller by exactly the same route -- the
+    # docs tell a reader to handle them -- so they are exported on the same
+    # criterion rather than left for an import from trailrunner.core.errors.
     "AmbiguousModelMatch",
     "DuplicateBackgroundEntry",
     "DuplicateFactor",
     "MissingColumns",
+    "MissingProperty",
     "MissingUnit",
     "NoModelFound",
     "ParameterNotFound",
     "TrailrunnerError",
+    "UnallocatedCoProduction",
+    "UnsupportedAttribution",
     "ValidationError",
     # Types and components.
     "AttributionSettings",

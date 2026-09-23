@@ -78,3 +78,21 @@ def test_per_year_and_per_output_agree_on_flat_output_with_a_fractional_lifetime
     assert amortize(rule="per_year", demanded_output=1000.0, **FRACTIONAL_LIFETIME) == pytest.approx(
         amortize(rule="per_output", demanded_output=1000.0, **FRACTIONAL_LIFETIME)
     )
+
+
+def test_first_life_refuses_a_demand_with_no_year():
+    """``None == build_year`` is False, so the silent answer would be zero
+    capital for a demand that never said which year it was asking about --
+    indistinguishable from the honest zero of a year nothing was built in."""
+    with pytest.raises(ValueError, match="no year"):
+        amortize(rule="first_life", demanded_output=1000.0, **dict(FLAT, demand_year=None))
+
+
+def test_the_rules_that_never_read_the_year_accept_a_demand_without_one():
+    yearless = dict(FLAT, demand_year=None)
+    assert amortize(rule="per_output", demanded_output=1000.0, **yearless) == pytest.approx(
+        100_000.0
+    )
+    assert amortize(rule="per_year", demanded_output=1000.0, **yearless) == pytest.approx(
+        100_000.0
+    )

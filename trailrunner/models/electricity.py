@@ -17,6 +17,7 @@ from trailrunner.core.errors import ValidationError
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
+from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 
 ELECTRICITY = "https://vocab.sentier.dev/products/electricity"
@@ -65,6 +66,17 @@ class GridElectricity(Model):
 
     produces = [ELECTRICITY]
     coverage = Coverage(time_range=(2000, 2050))
+
+    supports = ALLOCATION_RULES
+    """Every rule, because this model is monofunctional.
+
+    Monofunctionality is a fact about the model, not a value judgement: with a
+    single product there is nothing to partition, so ``allocate`` takes its
+    no-op short-circuit and ``substitute`` mints no credits, and the answer is
+    the same under all five rules. Declaring only ``none`` would have made the
+    Runner's gate refuse this model at the first node of any non-``none`` run,
+    for a co-production problem it does not have.
+    """
 
     def apply(self, demand: Demand) -> Result:
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
@@ -117,6 +129,17 @@ class GasPower(Model):
 
     produces = [ELECTRICITY_GAS]
     coverage = Coverage(time_range=(2000, 2050))
+
+    supports = ALLOCATION_RULES
+    """Every rule, because this model is monofunctional.
+
+    Monofunctionality is a fact about the model, not a value judgement: with a
+    single product there is nothing to partition, so ``allocate`` takes its
+    no-op short-circuit and ``substitute`` mints no credits, and the answer is
+    the same under all five rules. Declaring only ``none`` would have made the
+    Runner's gate refuse this model at the first node of any non-``none`` run,
+    for a co-production problem it does not have.
+    """
 
     def apply(self, demand: Demand) -> Result:
         if demand.unit != ELECTRICITY_UNIT:

@@ -17,18 +17,23 @@ HEAT_DEMAND = Demand(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ"
 
 
 class CHP(Model):
-    # `produces` only tells the Glossary which *direct* demands this model
-    # may be resolved for; POWER is a co-product returned by `apply` below,
-    # not something CHP should be asked to make on its own. Declaring it here
-    # too would make CHP and Grid both candidates for the POWER credit demand,
-    # which `Glossary.resolve` correctly treats as an unresolvable ambiguity
-    # (two producers of the same flow is a data error, never silent
-    # precedence) rather than something substitution should paper over.
-    produces = [HEAT]
+    # Both products are declared, because the plant really does make both and
+    # a glossary that hid one would be lying about the technology. It is the
+    # *credit* that must not come back here: the Orchestrator marks a
+    # substitution credit with the model that minted it, and resolution drops
+    # that instance, so CHP is not a candidate for its own avoided burden
+    # while Grid still is. Narrowing `produces` to hide the co-product was the
+    # old way of getting these tests to pass, and it hid the bug: with both
+    # declared and no exclusion, a sole producer answers its own credit until
+    # `max_depth` and the inventory cancels to exactly zero.
+    produces = [HEAT, POWER]
     supports = frozenset({"none", "economic", "substitution"})
 
     def apply(self, demand: Demand) -> Result:
-        scale = abs(demand.amount) / 100.0
+        # Scaled against whichever product was asked for, so the plant can
+        # honestly answer a demand for its power as well as one for its heat.
+        reference = 100.0 if demand.flow.iri == HEAT else 50.0
+        scale = abs(demand.amount) / reference
         return Result(
             production=[
                 Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0 * scale, unit="MJ",
@@ -140,3 +145,104 @@ def test_substitution_under_a_different_rule_does_not_create_credits():
     settings = Settings(attribution=AttributionSettings(allocation="economic"))
     report = Orchestrator(Glossary([CHP(), Grid()]), settings=settings).calculate(HEAT_DEMAND)
     assert all(node.demand.amount > 0 for node in report.nodes)
+
+
+def test_a_credit_is_not_answered_by_the_model_that_minted_it():
+    """The regression test for the self-substitution loop.
+
+    With ``produces = [HEAT, POWER]`` and no exclusion, both CHP and Grid are
+    candidates for the -50 MJ credit and ``Glossary.resolve`` raises
+    ``AmbiguousModelMatch``; with CHP excluded, exactly one candidate is left
+    and it is the displaced grid, which is what a credit means.
+    """
+    settings = Settings(attribution=AttributionSettings(allocation="substitution"))
+    chp, grid = CHP(), Grid()
+    report = Orchestrator(Glossary([chp, grid]), settings=settings).calculate(HEAT_DEMAND)
+    credits = [node for node in report.nodes if node.demand.amount < 0]
+    assert [node.model for node in credits] == ["Grid"]
+    assert sum(report.inventory.values()) == pytest.approx(7.0)
+
+
+def test_a_sole_producer_does_not_credit_its_own_burden_away():
+    """CHP is the only model that makes POWER, so its credit has no answer.
+
+    Before the exclusion, the credit resolved straight back to CHP, which
+    answered it by producing -100 MJ of heat and crediting +50 MJ of power,
+    and so on until ``max_depth``: ten nodes, eight loop warnings, and an
+    inventory summing to exactly 0.0 -- the process credited away its entire
+    burden. The honest answer is one node and a visible cutoff.
+    """
+    settings = Settings(attribution=AttributionSettings(allocation="substitution"))
+    report = Orchestrator(Glossary([CHP()]), settings=settings).calculate(HEAT_DEMAND)
+
+    assert len(report.nodes) == 1
+    assert not report.truncated
+    assert report.warnings == []
+    assert sum(report.inventory.values()) == pytest.approx(12.0)
+
+    [cutoff] = report.unresolved
+    assert cutoff.demand.flow.iri == POWER
+    assert cutoff.demand.amount == -50.0
+    assert cutoff.reason == "no_model_found"
+
+
+def test_a_forgone_credit_is_counted_as_one_in_the_summary():
+    """A forgone credit overstates the impact; a forgone burden understates it.
+
+    One bucket for both tells the reader neither, so the summary splits them.
+    """
+    settings = Settings(attribution=AttributionSettings(allocation="substitution"))
+    report = Orchestrator(Glossary([CHP()]), settings=settings).calculate(HEAT_DEMAND)
+    assert "1 unresolved (no_model_found: 1, of which 1 on a credit branch)" in report.summary()
+
+
+class TwinPlant(Model):
+    """One class, two sites. What each instance makes is instance state.
+
+    The CH plant cogenerates; the FR plant next door is a power station. They
+    are the same class, so excluding by class rather than by identity would
+    take both out and turn the CH plant's credit into a cutoff.
+    """
+
+    supports = frozenset({"none", "substitution"})
+
+    def __init__(self, produces, co2_per_mj):
+        super().__init__()
+        self.produces = list(produces)
+        self.co2_per_mj = co2_per_mj
+
+    def apply(self, demand: Demand) -> Result:
+        if demand.flow.iri == HEAT:
+            scale = demand.amount / 100.0
+            return Result(
+                production=[
+                    Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0 * scale, unit="MJ"),
+                    Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0 * scale, unit="MJ"),
+                ],
+                biosphere=[
+                    Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0 * scale, unit="kg")
+                ],
+            )
+        return Result(
+            production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
+            biosphere=[
+                Exchange(
+                    flow=Flow(iri=CO2, location="CH"),
+                    amount=self.co2_per_mj * demand.amount,
+                    unit="kg",
+                )
+            ],
+        )
+
+
+def test_two_instances_of_one_class_answer_each_others_credits():
+    """Exclusion is by instance identity, not by class."""
+    settings = Settings(attribution=AttributionSettings(allocation="substitution"))
+    cogen = TwinPlant([HEAT, POWER], co2_per_mj=0.1)
+    neighbour = TwinPlant([POWER], co2_per_mj=0.2)
+    report = Orchestrator(Glossary([cogen, neighbour]), settings=settings).calculate(HEAT_DEMAND)
+
+    assert report.unresolved == []
+    # The neighbour answered, at its own 0.2 kg/MJ, not the cogen's 0.1:
+    # 12 kg from the plant, minus 0.2 * 50 credited.
+    assert sum(report.inventory.values()) == pytest.approx(12.0 - 10.0)

@@ -17,6 +17,7 @@ from trailrunner.attribution import amortize
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
+from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
 
@@ -55,6 +56,17 @@ class DirectAirCapture(Model):
     produces = [CO2_CAPTURED]
     coverage = Coverage(time_range=(2020, 2050))
     fleet: Fleet | None = None
+
+    supports = ALLOCATION_RULES
+    """Every rule, because this model is monofunctional.
+
+    Monofunctionality is a fact about the model, not a value judgement: with a
+    single product there is nothing to partition, so ``allocate`` takes its
+    no-op short-circuit and ``substitute`` mints no credits, and the answer is
+    the same under all five rules. Declaring only ``none`` would have made the
+    Runner's gate refuse this model at the first node of any non-``none`` run,
+    for a co-production problem it does not have.
+    """
 
     def __init__(self, settings=None, params=None, fleet: Fleet | None = None) -> None:
         super().__init__(settings=settings, params=params)
@@ -118,6 +130,13 @@ class DirectAirCapture(Model):
 
         which, with one lifetime across the fleet, sums to ``amount /
         lifetime`` — one lifetime's worth of capture buys one fleet.
+
+        Under ``first_life`` the answer is zero for every plant whose build
+        year is not the demanded year, so a study year with no construction in
+        it demands no construction at all. That is the rule, not a missing
+        fleet. ``demand.flow.time`` may be ``None`` — a demand that is not
+        time-specific — and :func:`amortize` refuses that under ``first_life``
+        rather than letting ``None != build_year`` quietly zero the capital.
         """
         if self.fleet is None:
             return [], {}

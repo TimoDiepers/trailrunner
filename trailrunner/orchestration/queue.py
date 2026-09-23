@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from trailrunner.core.flow import Demand
+from trailrunner.core.model import Model
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,18 @@ class QueueItem:
     depth: int = 0
     parent: int | None = None
     path: tuple[str, ...] = field(default=())
+    exclude: tuple[Model, ...] = field(default=())
+    """Models that must not answer this demand, by identity.
+
+    The one context a demand cannot carry by itself: a substitution credit is
+    a demand for what *somebody else* would have made, and the process that
+    minted it is exactly the one answer that would be wrong. Set for one hop,
+    by the Orchestrator, from the node that produced the credit; the credit's
+    own children carry nothing, because they are ordinary demands again.
+
+    Frozen stays frozen: ``Model`` hashes by identity, and the priority heap
+    never compares two ``QueueItem``s (a counter breaks the tie first).
+    """
 
 
 class Queue:

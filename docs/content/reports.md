@@ -44,7 +44,9 @@ long unresolved list is an incomplete inventory, and the report says so out loud
 
 Per node id, whatever that node's model recorded — for models that pass their parameter row
 through, which location and year were actually used and whether a fallback or interpolation
-happened:
+happened. The model's record and nothing else: how the model was *chosen* is in
+`resolutions`, and the run's normative choices are in `attribution`, because the model
+neither made nor saw them:
 
 ```python
 for node_id, entries in report.provenance.items():
@@ -74,6 +76,17 @@ the chain it happened, not under the root.
 
 `summary()` is nodes, inventory size, unresolved counts broken down by reason, proxy count, and
 whether the traversal was truncated — the numbers to check before trusting the inventory.
+
+Under `substitution` both the unresolved and the proxy line also split out what happened on
+a **credit branch** — a negative demand, an avoided burden being traversed:
+
+```text
+1 unresolved (no_model_found: 1, of which 1 on a credit branch)
+```
+
+The sign is the point. A forgone burden *understates* the impact; a forgone credit
+*overstates* it. One bucket counting both tells the reader neither. Under any rule but
+`substitution` nothing negative is ever demanded, so the clause never prints.
 
 ```python
 print(report.tree())
@@ -122,8 +135,9 @@ stops quickly. Raise them freely.
 
 The underlying [`Log`](../api/log.md) can go to a single parquet file, one row per record,
 tagged by `kind` — `biosphere`, `node` (a node that emitted nothing, so it does not vanish),
-`unresolved`, `provenance`, and `resolution` (how a node's demand was matched — which tier
-answered and what, if anything, was relaxed to get there):
+`unresolved`, `provenance`, `resolution` (how a node's demand was matched — which tier
+answered and what, if anything, was relaxed to get there) and `attribution` (the normative
+choice applied to it):
 
 ```python
 from trailrunner.orchestration.log import Log
@@ -133,6 +147,11 @@ log = Log()
 log.to_parquet("run.parquet")
 ```
 
-One flat table under one explicit schema, rather than five files, because the point is to
+One flat table under one explicit schema, rather than six files, because the point is to
 diff two runs with a single read: runs that differ only in which cutoffs they hit or which
 parameter fallbacks they took differ on disk too.
+
+Nothing nested goes into a cell. A `resolution` or `attribution` record is flattened one
+row per leaf — `relaxation.0`, `allocation`, `property`, `share`, `co_product.0`,
+`co_product.1` — because a list or a dict stringified whole lands as a Python repr a reader
+has to parse back out, and a column nobody can filter on is not a reproducible record.

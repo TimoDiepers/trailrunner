@@ -61,6 +61,22 @@ class MissingProperty(TrailrunnerError):
     """
 
 
+class UnallocatedCoProduction(TrailrunnerError, ValueError):
+    """A model returned co-products under the ``none`` allocation rule.
+
+    ``none`` is the default rule, so this is the likeliest refusal a user
+    meets: the first multifunctional model in a run that has not chosen a
+    rule stops it here. A bare ``ValueError`` put that one refusal outside
+    ``TrailrunnerError``, so the ``except TrailrunnerError`` a caller wraps a
+    calculation in caught every other refusal and missed this one.
+
+    Still a ``ValueError`` as well, because that is what it was raised as
+    before this class existed: code already catching ``ValueError`` around a
+    calculation keeps working, and the fix is additive rather than a silent
+    change in which exception escapes.
+    """
+
+
 class UnsupportedAttribution(TrailrunnerError):
     """A model cannot honour the run's attribution setting.
 

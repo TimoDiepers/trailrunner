@@ -11,12 +11,13 @@ preference order is a second normative choice, and inventing one silently is
 the thing this module exists to prevent. Deferred, not forgotten.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from itertools import islice
 from typing import Protocol
 
 from trailrunner.core.flow import Demand
+from trailrunner.core.model import Model
 from trailrunner.core.settings import ProxySettings
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution.chain import Offer, describe
@@ -64,13 +65,20 @@ class GeneralisingProvider:
         self.hierarchy = hierarchy if hierarchy is not None else LocationHierarchy()
         self.taxonomy = taxonomy
 
-    def offer(self, demand: Demand) -> Offer | None:
+    def offer(self, demand: Demand, exclude: Sequence[Model] = ()) -> Offer | None:
+        """Relax, then re-ask tier 1 — carrying ``exclude`` with the demand.
+
+        Forwarding it is not optional. A relaxed demand is still the same
+        credit, so a generalised offer that dropped ``exclude`` would land the
+        credit right back on the model that minted it, one hop later and
+        wearing a proxy label.
+        """
         for dimension in self.settings.order:
             budget = self.settings.steps_allowed(dimension)
             if budget <= 0:
                 continue
             for candidate, note in self._candidates(demand, dimension, budget):
-                inner_offer = self.inner.offer(candidate)
+                inner_offer = self.inner.offer(candidate, exclude=exclude)
                 if inner_offer is None:
                     continue
                 return Offer(
@@ -86,7 +94,7 @@ class GeneralisingProvider:
                 )
         return None
 
-    def explain(self, demand: Demand) -> tuple[str, str] | None:
+    def explain(self, demand: Demand, exclude: Sequence[Model] = ()) -> tuple[str, str] | None:
         """``generalisation_exhausted``, but only if anything was ever tryable.
 
         Counted, not assumed. Deciding this from ``ProxySettings`` alone made

@@ -231,3 +231,98 @@ def test_parquet_writes_one_resolution_row_per_relaxation(tmp_path):
         "relaxation.1": "time: 2030 -> 2025",
     }
     assert all("[" not in value and "]" not in value for value in relaxation_rows.values())
+
+
+def test_the_attribution_record_is_flattened_not_a_python_repr(tmp_path):
+    """The run is supposed to be reproducible from the committed parquet.
+
+    Written whole, the nested attribution dict landed in one cell as a Python
+    repr a reader has to parse back out -- exactly what the resolution branch
+    flattens lists to avoid. One row per field, one per credited co-product.
+    """
+    log = Log()
+    demand = a_demand()
+    log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            provenance={
+                "location_used": "RER",
+                "attribution": {
+                    "allocation": "economic",
+                    "property": "price",
+                    "share": 0.25,
+                    "co_products": [HEAT, CO2],
+                },
+            },
+        ),
+    )
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+
+    attribution = {row["key"]: row["value"] for row in rows_of_kind(path, "attribution")}
+    assert attribution == {
+        "allocation": "economic",
+        "property": "price",
+        "share": "0.25",
+        "co_product.0": HEAT,
+        "co_product.1": CO2,
+    }
+    assert not any("{" in (row["value"] or "") for row in pq.read_table(path).to_pylist())
+
+
+def test_the_attribution_record_does_not_double_as_the_models_provenance(tmp_path):
+    """Provenance is what the model recorded. The model neither chose the
+    allocation rule nor saw it, so it is written under its own kind."""
+    log = Log()
+    demand = a_demand()
+    log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            provenance={"location_used": "RER", "attribution": {"allocation": "none"}},
+        ),
+    )
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    assert {row["key"] for row in rows_of_kind(path, "provenance")} == {"location_used"}
+
+
+def test_the_node_record_carries_the_attribution_beside_the_resolution():
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            provenance={"attribution": {"allocation": "substitution", "share": 1.0}},
+        ),
+    )
+    assert log.nodes[node_id].attribution == {"allocation": "substitution", "share": 1.0}
+
+
+def test_a_node_with_no_attribution_carries_an_empty_one():
+    log = Log()
+    demand = a_demand()
+    node_id = log.write(demand, a_result(demand))
+    assert log.nodes[node_id].attribution == {}
+
+
+def test_a_nested_record_is_flattened_key_by_key(tmp_path):
+    """The guarantee is structural: no container reaches a cell, whether it is
+    a list or a dict, in a resolution or in an attribution."""
+    log = Log()
+    demand = a_demand()
+    log.write(
+        demand,
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        resolution={"tier": "background", "window": {"earliest": 2020, "latest": 2030}},
+    )
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    resolution = {row["key"]: row["value"] for row in rows_of_kind(path, "resolution")}
+    assert resolution == {
+        "tier": "background",
+        "window.earliest": "2020",
+        "window.latest": "2030",
+    }

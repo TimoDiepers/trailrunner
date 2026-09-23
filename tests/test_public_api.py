@@ -12,6 +12,11 @@ def test_the_exceptions_a_calculation_can_raise_are_importable_from_the_top():
         "AmbiguousModelMatch",
         "ValidationError",
         "ParameterNotFound",
+        # The attribution refusals reach the caller by the same route, and the
+        # docs tell a reader to handle them by name.
+        "MissingProperty",
+        "UnsupportedAttribution",
+        "UnallocatedCoProduction",
     ):
         assert name in trailrunner.__all__
         assert issubclass(getattr(trailrunner, name), Exception)
@@ -24,6 +29,9 @@ def test_every_exported_error_is_a_trailrunner_error():
         "ValidationError",
         "ParameterNotFound",
         "MissingUnit",
+        "MissingProperty",
+        "UnsupportedAttribution",
+        "UnallocatedCoProduction",
     ):
         assert issubclass(getattr(trailrunner, name), trailrunner.TrailrunnerError)
 
