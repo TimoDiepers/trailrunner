@@ -9,7 +9,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from trailrunner.core.errors import UnknownUnit
+from trailrunner.core.errors import TrailrunnerError, UnknownUnit
 from trailrunner.core.flow import Demand, Flow, Property
 from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
 from trailrunner.core.time import infer_standard, short
@@ -187,6 +187,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"time {args.time} read as {short(standard)}")
     demand = Demand(flow=flow, amount=args.amount, unit=unit)
 
+    method = None
+    if args.method:
+        from trailrunner.assessment import Method
+
+        # Read before the run, so a method file naming a unit the vocabulary
+        # does not confirm (UnknownUnit) or a time with no standard
+        # (MissingTimeStandard) is a message and exit 2, not a traceback after
+        # the traversal has already been paid for.
+        try:
+            method = Method.from_parquet(args.method)
+        except TrailrunnerError as exc:
+            print(f"{args.method}: {exc}", file=sys.stderr)
+            return 2
+
     tier1 = ModelProvider(Glossary(models))
     providers = [tier1]
     if context_tolerance:
@@ -203,10 +217,10 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(report.tree())
 
-    if args.method:
-        from trailrunner.assessment import Method, assess
+    if method is not None:
+        from trailrunner.assessment import assess
 
-        assessment = assess(report, Method.from_parquet(args.method))
+        assessment = assess(report, method)
         print()
         print(assessment.summary())
 

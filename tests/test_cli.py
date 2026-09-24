@@ -117,6 +117,34 @@ def test_the_method_flag_prints_a_score(models_file, method_parquet_file, capsys
     assert "5" in out and "kg" in out
 
 
+def test_a_method_file_with_a_unit_the_vocabulary_does_not_confirm_exits_2(
+    models_file, tmp_path, capsys
+):
+    """A method parquet still saying ``flow_unit: "kg"`` is a message, not a traceback."""
+    from trailrunner.core.units import KG
+
+    from .conftest import CO2_IRI, write_method_parquet
+
+    path = tmp_path / "old.parquet"
+    write_method_parquet(
+        path,
+        [{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0}],
+        [
+            {"name": "flow_iri", "type": "string", "unit": None, "iri": None},
+            {"name": "flow_unit", "type": "string", "unit": None, "iri": None},
+            {"name": "location", "type": "string", "unit": None, "iri": None},
+            {"name": "cf", "type": "number", "unit": KG, "iri": None},
+        ],
+    )
+    code = main([
+        "run", HEAT, "--amount", "100", "--unit", "MJ",
+        "--models", str(models_file), "--method", str(path),
+    ])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "'kg'" in err
+
+
 def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
     """The headline is an integral, so it must be labelled as one.
 
