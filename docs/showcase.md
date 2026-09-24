@@ -14,6 +14,13 @@ multiplying. `trailrunner` asks a model, and the model answers for the demand it
 was actually given, in the place and the year it was given. Everything on this
 page follows from that one change.
 
+Every flow crossing a model's boundary — what it makes, what it needs, what it
+emits — is a real concept from the hierarchical
+[sentier vocabulary](https://vocab.sentier.dev). That is what lets two models
+meet at all, and it is what the rest of this page is built on: models find each
+other by IRI (beat 2), and a demand nobody answers exactly can still be relaxed
+one step up that same hierarchy (beat 3).
+
 Every number and every block of output came out of
 [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb),
 which runs offline from committed files.
@@ -40,6 +47,9 @@ answer = plant.apply(DEMAND)  # no orchestrator involved, a model is callable on
     biosphere     138.6 kg   co2-fossil                                   @DK/2030
    provenance  {'location_requested': 'DK', 'location_used': 'DK', 'location_fallback': False, 'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False, 'source': 'modelled'}
 ```
+
+Every name printed there — `Quicklime, slaked lime and hydraulic lime`,
+`co2-fossil` — is the vocabulary's label for a real concept.
 
 Three lists, three destinations. `production` is checked against the demand that
 triggered the run and then dropped. `technosphere` goes back on the queue, and
