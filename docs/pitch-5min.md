@@ -46,12 +46,7 @@ fuel = row["fuel_demand"] * clinker * penalty
 ```
 
 !!! info "trailpack"
-    `row` ← [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet —
-    units & vocab IRIs travel with the column, not hardcoded in the model.
-    `.at()`: exact match → widen location → interpolate years, all stamped
-    in `provenance`.
-
-    Born at BrightCon 2025's hackathon.
+    Params from [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet — units & vocab IRIs embedded per column. BrightCon 2025 hackathon project.
 
 **Measured beats modelled, when it exists.** Same product, disjoint
 coverage — year on the demand picks meter vs. model:
@@ -118,15 +113,7 @@ wellhead Nm3 and route tkm and placed both **at the origin**, so the pipeline
 model priced the leg on the Norwegian shelf, at its low-leakage tier.
 
 !!! info "Where the pipeline model comes from"
-    Not invented — reverse-engineered from the BAFU-2026 ecoinvent export
-    (11,947 raw EcoSpold files) plus the original LCI report behind it
-    (Bussa et al. 2025).
-
-    - Leakage & compressor energy from the report's **two-tier regional
-      classification** (Tab. 4.4/4.6), not one number per country
-    - Gas composition from Tab. 3.1 → 7 biosphere flows derived, not stored
-    - Cross-checked against the 14 country-specific processes in the raw corpus
-    - Trail: `dev/reverse-engineering of BAFU pipeline transport datasets/`
+    Reverse-engineered from BAFU-2026 ecoinvent EcoSpold data and the Bussa et al. 2025 LCI report — not invented.
 
 ---
 
