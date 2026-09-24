@@ -13,7 +13,7 @@ tags:
 
 ---
 
-## A model is one method
+## Models instead of unit processes
 
 ```python
 answer = cement_model.apply(DEMAND)
@@ -72,7 +72,7 @@ Meter sees one plume. Model knows which kg came from where.
 
 ---
 
-## Models find each other — no wiring
+## Orchestrating multiple models
 
 ```mermaid
 %%{init: {'layout': 'elk'}}%%
@@ -120,7 +120,7 @@ the Norwegian shelf, at its low-leakage tier.
 
 ---
 
-## Nothing answers? Relax along the vocabulary — deliberately
+## Finding fallback models
 
 Tier 1 = models. Every later tier = **concession**, written at the node.
 That last cutoff — 10 kg of lime — retried:
@@ -156,7 +156,7 @@ attribution: allocation=none, capital=per_output
 
 ---
 
-## Time rides along, for free
+## Tracing time and place for free
 
 `Flow` carries its year like it carries its location. Inventory = time series:
 
@@ -172,7 +172,7 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 
 ---
 
-## Why it matters
+## Why we want this
 
 - **Supply chain assembles itself** — vocabulary IRIs, not wiring
 - **Missing data is visible** — every cutoff carries a reason and a position
