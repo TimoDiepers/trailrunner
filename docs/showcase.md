@@ -92,8 +92,8 @@ coverage = Coverage(time_range=(2026, 2050))  # CementPlant
            138.6 kg
 ```
 
-Two exchanges in 2030, one in 2023, and that difference is the point. The
-model knows which kilogram came from the limestone and which from the flame,
+Look at the biosphere flows above: 2023 has one, 2030 has two. The model
+knows which kilogram came from the limestone and which from the flame,
 because it computed them separately. The meter does not: a stack monitor sees
 one plume and cannot tell you what made it.
 
