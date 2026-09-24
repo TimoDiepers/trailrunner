@@ -93,19 +93,60 @@ flowchart TB
 `Orchestrator.calculate` = `while queue:`, little else. Same IRI in
 `produces` → found; everything else logged as a cutoff with a reason:
 
+Pop a demand, ask who can answer it, push what comes back:
+
 ```text
-1000 kg Portland cement …                       [model: CementPlant]
-  2475 MJ Natural gas …                          [model: NaturalGasSupply]
-    68.75 Nm3 natural-gas-at-production @NO       [model: NaturalGasExtraction]
-    50.53 tkm gas-transport-pipeline @NO          [model: …PipelineTransport]
-      0.013 Nm3 natural-gas-at-production @NO      [model: NaturalGasExtraction]
-      16.54 MJ gas-burned-in-gas-turbine @NO       [cutoff: no_model_found]
-  100 kWh electricity                            [model: GridElectricity]
-    8.47 kWh electricity-natural-gas              [model: GasPower]
-      49.16 MJ Natural gas …                      [model: NaturalGasSupply]
-    84.66 kWh electricity-wind                    [cutoff: no_model_found]
-  1125 kg Gypsum; limestone flux; …               [cutoff: no_model_found]
-  10 kg Quicklime, slaked lime …                  [cutoff: no_model_found]
+pop      1000 kg   Portland cement, aluminous ceme… -> CementPlant
+pop      1125 kg   Gypsum; anhydrite; limestone fl… -> cutoff (nobody offered)
+pop      2475 MJ   Natural gas, liquefied or in th… -> NaturalGasSupply
+pop        10 kg   Quicklime, slaked lime and hydr… -> cutoff (nobody offered)
+pop       100 kWh  electricity                      -> GridElectricity
+pop     68.75 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop     50.53 tkm  natural-gas-transport-offshore-… -> NaturalGasOffshorePipelineTransport
+pop     8.466 kWh  electricity-natural-gas          -> GasPower
+pop     84.66 kWh  electricity-wind                 -> cutoff (nobody offered)
+pop      12.7 kWh  electricity-hydro                -> cutoff (nobody offered)
+pop 8.995e-08 unit pipeline-natural-gas-long-dista… -> cutoff (nobody offered)
+pop   0.01306 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop     16.54 MJ   natural-gas-burned-in-gas-turbi… -> cutoff (nobody offered)
+pop 5.862e-06 tkm  transport-freight-lorry-16t-32t  -> cutoff (nobody offered)
+pop 5.862e-05 kg   disposal-used-mineral-oil-10-pe… -> cutoff (nobody offered)
+pop     49.16 MJ   Natural gas, liquefied or in th… -> NaturalGasSupply
+pop     1.365 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop     1.004 tkm  natural-gas-transport-offshore-… -> NaturalGasOffshorePipelineTransport
+pop 1.786e-09 unit pipeline-natural-gas-long-dista… -> cutoff (nobody offered)
+pop 0.0002594 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop    0.3285 MJ   natural-gas-burned-in-gas-turbi… -> cutoff (nobody offered)
+pop 1.164e-07 tkm  transport-freight-lorry-16t-32t  -> cutoff (nobody offered)
+pop 1.164e-06 kg   disposal-used-mineral-oil-10-pe… -> cutoff (nobody offered)
+```
+
+The graph that walk leaves behind:
+
+```text
+1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+      0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+      8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
+      16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
+      5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
+      5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
+  100 kWh electricity @DK/2030  [model: GridElectricity]
+    8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
+      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+        1.36542 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+        1.00358 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+          0.00025943 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+          1.78638e-09 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
+          0.328503 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
+          1.16416e-07 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
+          1.16416e-06 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
+    84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
+    12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
+  1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  [cutoff: no_model_found]
+  10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [cutoff: no_model_found]
 ```
 
 Nobody wired that gas chain. The kiln asked for MJ; supply converted them to
