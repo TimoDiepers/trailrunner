@@ -162,7 +162,7 @@ flowchart TB
 
     CP -->|"2475 MJ natural gas"| NGS["NaturalGasSupply<br/>DK · 2030"]
     CP -->|"100 kWh electricity"| GE["GridElectricity<br/>DK · 2030"]
-    CP -->|"10 kg lime"| BS["BinderSupply<br/>DK · 2030<br/>asked fi_37420, answered fi_374"]
+    CP -->|"10 kg lime"| BS["BinderSupply<br/>DK · 2030<br/>tier 2 · asked fi_37420, answered fi_374"]
     CP -->|"8.33 kg/yr kiln line"| K26["CementKilnConstruction<br/>DK · 2026"]
     CP -->|"16.7 kg/yr kiln line"| K29["CementKilnConstruction<br/>DK · 2029"]
     CP -.->|"1125 kg limestone"| XG["cutoff<br/>DK · 2030"]
@@ -176,8 +176,8 @@ flowchart TB
     GE -.->|"84.66 kWh wind · 12.7 kWh hydro"| XE["2 cutoffs<br/>DK · 2030"]
     GP -->|"49.16 MJ natural gas"| NGS
 
-    K26 -->|"0.1 kg steel · 6.7 g aluminium"| B26["background dataset<br/>DK · 2026 · incomplete"]
-    K29 -->|"0.2 kg steel · 13 g aluminium"| B29["background dataset<br/>DK · 2029 · incomplete"]
+    K26 -->|"0.1 kg steel · 6.7 g aluminium"| B26["background dataset<br/>DK · 2026<br/>tier 3 · incomplete"]
+    K29 -->|"0.2 kg steel · 13 g aluminium"| B29["background dataset<br/>DK · 2029<br/>tier 3 · incomplete"]
 
     CP -->|"536.1 kg CO2"| INV[("inventory")]
     BS -->|"9 kg CO2"| INV
@@ -187,6 +187,14 @@ flowchart TB
     B26 -->|"18 mg CO2"| INV
     B29 -->|"36 mg CO2"| INV
 
+    subgraph LEGEND ["how the demand was answered"]
+      direction LR
+      L1["tier 1<br/>a model"]
+      L2["tier 2<br/>generalised up the vocabulary"]
+      L3["tier 3<br/>borrowed background dataset"]
+      L4["no tier answered<br/>cutoff"]
+    end
+
     classDef t1 fill:#f59e0b22,stroke:#f59e0b
     classDef t2 fill:#3b82f622,stroke:#3b82f6
     classDef t3 fill:#14b8a622,stroke:#14b8a6
@@ -195,7 +203,11 @@ flowchart TB
     class CP,NGS,NGE,PT,GE,GP,K26,K29 t1
     class BS t2
     class B26,B29 t3
-    class XG,XP,XE gap
+    class XG,XP,XE,L4 gap
+    class L1 t1
+    class L2 t2
+    class L3 t3
+    style LEGEND fill:none,stroke:#94a3b8,stroke-dasharray:3 3
     class INV record
 
     linkStyle 3 stroke:#3b82f6
@@ -204,9 +216,8 @@ flowchart TB
     linkStyle 16,17,18,19,20,21,22 stroke:#8b5cf6
 ```
 
-*Amber answered as itself · blue was generalised up the vocabulary · teal is a
-borrowed background dataset · red dashed is a cutoff · violet are the
-elementary flows landing in the inventory.*
+*Arrows: black is a demand a model answered, red dashed is a cutoff, violet
+are the elementary flows landing in the inventory.*
 
 Read the years. The kilns were built in **2026** and **2029**, so their
 construction and the background steel behind it are dated there; the cement
