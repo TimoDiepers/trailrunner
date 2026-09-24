@@ -1,12 +1,12 @@
 import pytest
 
 from trailrunner.assessment import Method
-from trailrunner.core.errors import DuplicateFactor, MissingColumns, MissingUnit
+from trailrunner.core.errors import DuplicateFactor, MissingColumns, MissingUnit, UnknownUnit
 from trailrunner.core.flow import Flow
 from trailrunner.params.location import LocationHierarchy
 
 from .conftest import CH4_IRI, CO2_IRI, write_method_parquet
-from trailrunner.core.units import KG, TONNE
+from trailrunner.core.units import GRAM, KG, M3, TONNE
 
 
 def test_exact_factor_is_found(method_parquet_file):
@@ -43,10 +43,10 @@ def test_a_flow_with_no_factor_returns_none(method_parquet_file):
     assert method.factor(Flow(iri="https://vocab.sentier.dev/flows/sox"), KG) is None
 
 
-def test_a_factor_for_a_different_unit_does_not_match(method_parquet_file):
-    """String equality, no conversion: a CF per kg says nothing about tonnes."""
+def test_a_factor_for_a_different_kind_does_not_match(method_parquet_file):
+    """A CF per kg converts to tonnes (same kind) but says nothing about m3."""
     method = Method.from_parquet(method_parquet_file)
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO"), TONNE) is None
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO"), M3) is None
 
 
 def test_a_flow_without_a_location_matches_the_root_row(method_parquet_file):
@@ -250,3 +250,48 @@ def test_a_row_without_a_cf_names_the_column_and_the_source():
 def test_a_row_without_a_flow_iri_names_the_layout():
     with pytest.raises(MissingColumns, match="flow_iri"):
         Method(rows=[{"flow_unit": KG, "cf": 1.0}], unit=KG, name="handmade")
+
+
+def _method(rows):
+    return Method(rows=rows, unit=KG, name="gwp")
+
+
+def test_a_factor_per_kg_scores_a_flow_in_tonnes():
+    method = _method([{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0}])
+    cf = method.factor(Flow(iri=CO2_IRI), TONNE)
+    assert cf.value == pytest.approx(1000.0)
+    assert cf.provenance["unit_used"] == KG
+
+
+def test_an_exact_unit_row_wins_over_a_convertible_one():
+    method = _method([
+        {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0},
+        {"flow_iri": CO2_IRI, "flow_unit": GRAM, "location": "GLO", "cf": 0.002},
+    ])
+    assert method.factor(Flow(iri=CO2_IRI), GRAM).value == pytest.approx(0.002)
+
+
+def test_another_kind_stays_uncharacterized():
+    method = _method([{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0}])
+    assert method.factor(Flow(iri=CO2_IRI), M3) is None
+
+
+def test_a_flow_unit_that_is_not_a_vocabulary_iri_is_refused():
+    """A method file still written with ``flow_unit: "kg"`` would otherwise
+    match nothing silently: every flow would go uncharacterized and the score
+    would be a quiet 0. Refusing at construction catches it immediately."""
+    with pytest.raises(UnknownUnit, match="kg"):
+        Method(
+            rows=[{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0}],
+            unit=KG,
+            name="handmade",
+        )
+
+
+def test_a_cf_unit_that_is_not_a_vocabulary_iri_is_refused():
+    with pytest.raises(UnknownUnit, match="kg CO2eq"):
+        Method(
+            rows=[{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0}],
+            unit="kg CO2eq",
+            name="handmade",
+        )

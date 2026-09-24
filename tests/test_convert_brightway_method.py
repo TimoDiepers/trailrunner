@@ -15,7 +15,7 @@ from trailrunner.assessment import Method
 from trailrunner.core.errors import DuplicateFactor
 
 from .conftest import write_method_parquet
-from trailrunner.core.units import KG
+from trailrunner.core.units import KG, KWH, M3, MJ, TONNE
 
 SCRIPT = Path(__file__).resolve().parent.parent / "dev" / "convert_brightway_method.py"
 
@@ -54,27 +54,59 @@ def test_a_flow_with_no_compartment_keeps_the_bare_slug():
     )
 
 
-def test_brightway_unit_spellings_are_normalised_to_what_models_emit():
-    """Matching is string equality, so a method written for ``"kilogram"``
-    against models that emit ``"kg"`` matches nothing at all — an honest but
-    guaranteed-empty score on first use."""
+def test_brightway_unit_spellings_are_normalised_to_vocabulary_iris():
+    """``Method`` refuses to construct on a ``flow_unit`` that is not a
+    vocabulary IRI it can confirm, so a method written for Brightway's
+    ``"kilogram"`` needs the IRI, not the short form ``"kg"``."""
     unknown: set[str] = set()
-    assert converter.normalise_unit("kilogram", unknown) == "kg"
-    assert converter.normalise_unit("cubic meter", unknown) == "m3"
-    assert converter.normalise_unit("megajoule", unknown) == "MJ"
-    assert converter.normalise_unit("kilowatt hour", unknown) == "kWh"
-    assert converter.normalise_unit("square meter", unknown) == "m2"
-    assert converter.normalise_unit("ton", unknown) == "tonne"
-    assert converter.normalise_unit("metric ton", unknown) == "tonne"
+    assert converter.normalise_unit("kilogram", unknown) == KG
+    assert converter.normalise_unit("cubic meter", unknown) == M3
+    assert converter.normalise_unit("megajoule", unknown) == MJ
+    assert converter.normalise_unit("kilowatt hour", unknown) == KWH
+    assert converter.normalise_unit("square meter", unknown) == converter.SQUARE_METRE
+    assert converter.normalise_unit("ton", unknown) == TONNE
+    assert converter.normalise_unit("metric ton", unknown) == TONNE
     assert unknown == set()
 
 
-def test_an_unrecognised_unit_is_left_alone_and_named():
-    """Guessing at it is how a factor of 1000 gets into a score; the operator
-    gets told instead."""
+def test_an_unrecognised_unit_is_left_unmapped_and_named():
+    """Recorded rather than translated, so ``check_units`` can fail the whole
+    conversion in one message naming every spelling it did not recognise."""
     unknown: set[str] = set()
     assert converter.normalise_unit("becquerel", unknown) == "becquerel"
     assert unknown == {"becquerel"}
+
+
+def test_an_unrecognised_unit_fails_the_conversion_instead_of_being_written():
+    """Guessing at it is how a factor of 1000 gets into a score; the operator
+    gets told instead, and nothing is written."""
+    with pytest.raises(ValueError, match="becquerel"):
+        converter.check_units({"becquerel"})
+
+
+def test_no_unrecognised_units_is_not_an_error():
+    converter.check_units(set())
+
+
+def test_the_score_unit_defaults_to_kg_for_a_co2_eq_metadata_unit():
+    assert converter.resolve_score_unit(None, "kg CO2-Eq") == KG
+    assert converter.resolve_score_unit(None, "kg CO2eq") == KG
+
+
+def test_an_explicit_unit_argument_must_be_an_iri():
+    with pytest.raises(ValueError, match="IRI"):
+        converter.resolve_score_unit("kg", "kg CO2-Eq")
+
+
+def test_an_explicit_unit_argument_is_used_as_is():
+    assert converter.resolve_score_unit(KG, "anything") == KG
+
+
+def test_a_non_co2_eq_metadata_unit_without_unit_argument_fails():
+    """No default guess for a unit that is not a known CO2-eq mass -- a wrong
+    guess here would silently mislabel every score the method produces."""
+    with pytest.raises(ValueError, match="--unit"):
+        converter.resolve_score_unit(None, "kg NMVOC-Eq")
 
 
 def test_two_rows_with_one_key_raise_rather_than_last_wins(tmp_path):
