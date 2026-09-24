@@ -20,13 +20,14 @@ answer = cement_model.apply(DEMAND)
 ```
 
 ```text
-   production    1000.0 kg   Portland cement, aluminous cement, slag cem… @DK/2030
- technosphere    1125.0 kg   Gypsum; anhydrite; limestone flux; limeston… @DK/2030
- technosphere    2475.0 MJ   Natural gas, liquefied or in the gaseous st… @DK/2030
- technosphere      10.0 kg   Quicklime, slaked lime and hydraulic lime    @DK/2030
- technosphere     100.0 kWh  electricity                                  @DK/2030
-    biosphere     397.5 kg   co2-fossil                                   @DK/2030
-    biosphere     138.6 kg   co2-fossil                                   @DK/2030
+                 amount unit flow                                         where  when
+   production    1000.0 kg   Portland cement, aluminous cement, slag cem… DK     2030
+ technosphere    1125.0 kg   Gypsum; anhydrite; limestone flux; limeston… DK     2030
+ technosphere    2475.0 MJ   Natural gas, liquefied or in the gaseous st… DK     2030
+ technosphere      10.0 kg   Quicklime, slaked lime and hydraulic lime    DK     2030
+ technosphere     100.0 kWh  electricity                                  DK     2030
+    biosphere     397.5 kg   co2-fossil                                   DK     2030
+    biosphere     138.6 kg   co2-fossil                                   DK     2030
 ```
 
 - Takes a `Demand`, returns a `Result`: made, needed, emitted
@@ -96,29 +97,30 @@ flowchart TB
 Pop a demand, ask who can answer it, push what comes back:
 
 ```text
-pop      1000 kg   Portland cement, aluminous ceme… -> CementPlant
-pop      1125 kg   Gypsum; anhydrite; limestone fl… -> cutoff (nobody offered)
-pop      2475 MJ   Natural gas, liquefied or in th… -> NaturalGasSupply
-pop        10 kg   Quicklime, slaked lime and hydr… -> cutoff (nobody offered)
-pop       100 kWh  electricity                      -> GridElectricity
-pop     68.75 Nm3  natural-gas-at-production        -> NaturalGasExtraction
-pop     50.53 tkm  natural-gas-transport-offshore-… -> NaturalGasOffshorePipelineTransport
-pop     8.466 kWh  electricity-natural-gas          -> GasPower
-pop     84.66 kWh  electricity-wind                 -> cutoff (nobody offered)
-pop      12.7 kWh  electricity-hydro                -> cutoff (nobody offered)
-pop 8.995e-08 unit pipeline-natural-gas-long-dista… -> cutoff (nobody offered)
-pop   0.01306 Nm3  natural-gas-at-production        -> NaturalGasExtraction
-pop     16.54 MJ   natural-gas-burned-in-gas-turbi… -> cutoff (nobody offered)
-pop 5.862e-06 tkm  transport-freight-lorry-16t-32t  -> cutoff (nobody offered)
-pop 5.862e-05 kg   disposal-used-mineral-oil-10-pe… -> cutoff (nobody offered)
-pop     49.16 MJ   Natural gas, liquefied or in th… -> NaturalGasSupply
-pop     1.365 Nm3  natural-gas-at-production        -> NaturalGasExtraction
-pop     1.004 tkm  natural-gas-transport-offshore-… -> NaturalGasOffshorePipelineTransport
-pop 1.786e-09 unit pipeline-natural-gas-long-dista… -> cutoff (nobody offered)
-pop 0.0002594 Nm3  natural-gas-at-production        -> NaturalGasExtraction
-pop    0.3285 MJ   natural-gas-burned-in-gas-turbi… -> cutoff (nobody offered)
-pop 1.164e-07 tkm  transport-freight-lorry-16t-32t  -> cutoff (nobody offered)
-pop 1.164e-06 kg   disposal-used-mineral-oil-10-pe… -> cutoff (nobody offered)
+       amount unit flow                             where  when  -> answered by
+pop      1000 kg   Portland cement, aluminous ceme… DK     2030  -> CementPlant
+pop      1125 kg   Gypsum; anhydrite; limestone fl… DK     2030  -> cutoff (nobody offered)
+pop      2475 MJ   Natural gas, liquefied or in th… DK     2030  -> NaturalGasSupply
+pop        10 kg   Quicklime, slaked lime and hydr… DK     2030  -> cutoff (nobody offered)
+pop       100 kWh  electricity                      DK     2030  -> GridElectricity
+pop     68.75 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
+pop     50.53 tkm  natural-gas-transport-offshore-… NO     2030  -> NaturalGasOffshorePipelineTransport
+pop     8.466 kWh  electricity-natural-gas          DK     2030  -> GasPower
+pop     84.66 kWh  electricity-wind                 DK     2030  -> cutoff (nobody offered)
+pop      12.7 kWh  electricity-hydro                DK     2030  -> cutoff (nobody offered)
+pop 8.995e-08 unit pipeline-natural-gas-long-dista… NO     2030  -> cutoff (nobody offered)
+pop   0.01306 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
+pop     16.54 MJ   natural-gas-burned-in-gas-turbi… NO     2030  -> cutoff (nobody offered)
+pop 5.862e-06 tkm  transport-freight-lorry-16t-32t  NO     2030  -> cutoff (nobody offered)
+pop 5.862e-05 kg   disposal-used-mineral-oil-10-pe… NO     2030  -> cutoff (nobody offered)
+pop     49.16 MJ   Natural gas, liquefied or in th… DK     2030  -> NaturalGasSupply
+pop     1.365 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
+pop     1.004 tkm  natural-gas-transport-offshore-… NO     2030  -> NaturalGasOffshorePipelineTransport
+pop 1.786e-09 unit pipeline-natural-gas-long-dista… NO     2030  -> cutoff (nobody offered)
+pop 0.0002594 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
+pop    0.3285 MJ   natural-gas-burned-in-gas-turbi… NO     2030  -> cutoff (nobody offered)
+pop 1.164e-07 tkm  transport-freight-lorry-16t-32t  NO     2030  -> cutoff (nobody offered)
+pop 1.164e-06 kg   disposal-used-mineral-oil-10-pe… NO     2030  -> cutoff (nobody offered)
 ```
 
 The graph that walk leaves behind:
