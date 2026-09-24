@@ -115,8 +115,18 @@ flowchart TB
 
 Nobody wired that gas chain. The kiln asked for MJ; supply converted them to
 wellhead Nm3 and route tkm and placed both **at the origin**, so the pipeline
-model — reverse-engineered from BAFU/ecoinvent datasets — priced the leg on
-the Norwegian shelf, at its low-leakage tier.
+model priced the leg on the Norwegian shelf, at its low-leakage tier.
+
+!!! info "Where the pipeline model comes from"
+    Not invented — reverse-engineered from the BAFU-2026 ecoinvent export
+    (11,947 raw EcoSpold files) plus the original LCI report behind it
+    (Bussa et al. 2025).
+
+    - Leakage & compressor energy from the report's **two-tier regional
+      classification** (Tab. 4.4/4.6), not one number per country
+    - Gas composition from Tab. 3.1 → 7 biosphere flows derived, not stored
+    - Cross-checked against the 14 country-specific processes in the raw corpus
+    - Trail: `dev/reverse-engineering of BAFU pipeline transport datasets/`
 
 ---
 
