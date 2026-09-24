@@ -51,7 +51,13 @@ IRIS = [
     # this entry is what lets the beat resolve with no network.
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440",  # cement: "Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers"
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_15200",  # limestone: "Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement"
-    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_6",  # steam: "heat from electric boilers"
+    # The lime the works takes as a minor constituent, and the two rungs above
+    # it. Nothing produces fi_37420, and the first skos:broader step reaches a
+    # concept spelled identically -- it is the *second* step, to fi_374, that
+    # buys an answer. Beat 3 walks exactly that, so both rungs have to be here
+    # or the relaxation stops one short with no network to ask.
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420",  # lime: "Quicklime, slaked lime and hydraulic lime"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_3742",  # its parent, same label
 ]
 
 

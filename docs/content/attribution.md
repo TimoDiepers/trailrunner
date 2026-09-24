@@ -29,7 +29,7 @@ rule it cannot honour gets `UnsupportedAttribution` rather than a silently wrong
 
     [`examples/coproduction.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/coproduction.ipynb)
     takes the 5-minute tour's cement demand, puts a co-producing CHP behind its
-    steam, and runs the same demand under `none`, `economic` and
+    electricity, and runs the same demand under `none`, `economic` and
     `substitution` — the refusal, the two scores, and what the node recorded.
 
 ## Allocation: `none`, `mass`, `economic`, `energy`, `substitution`

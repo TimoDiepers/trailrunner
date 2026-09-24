@@ -26,9 +26,10 @@ from trailrunner.models.natural_gas_pipeline_transport import (
 
 _HERE = Path(__file__).parent
 
-# Same fallback chain examples/dac.ipynb uses: Switzerland and France both
-# fall back to Europe, Europe falls back to the global root.
-_HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
+# The fallback chain examples/dac.ipynb uses, plus Denmark, where the
+# showcase's cement works sits. Each country falls back to Europe, and
+# Europe to the global root.
+_HIERARCHY = LocationHierarchy({"CH": "RER", "DK": "RER", "FR": "RER", "RER": "GLO"})
 
 _cement_params = ParameterSet.from_parquet(
     _HERE / "cement_params.parquet", hierarchy=_HIERARCHY

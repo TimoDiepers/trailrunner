@@ -2,8 +2,8 @@
 
 Kiln fuel is not a fixed coefficient. Raw meal arrives from the quarry with
 water in it, and every kilogram of that water has to be boiled off before any
-limestone calcines, so wet feed costs both drying steam and kiln fuel. Cold
-feed costs a little more again. That dependency is the reason a model is
+limestone calcines, so wet feed costs kiln fuel. Cold feed
+costs a little more again. That dependency is the reason a model is
 Python code rather than a row in a table.
 
 Two classes live here and both declare the same product. ``CementPlant``
@@ -30,11 +30,15 @@ CEMENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440
 LIMESTONE = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_15200"  # "Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement"
 NATURAL_GAS = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020"  # "Natural gas, liquefied or in the gaseous state"
 ELECTRICITY = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100"  # "electricity"
-# The *specific* heat the plant asks for. Nothing in this repository produces
-# it, which is the point: the showcase relaxes it one skos:broader step to
-# fi_1730, "Steam and hot water", and a generic supplier answers. The
-# concession is that a technology was asked for and an average came back.
-STEAM = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_6"  # "heat from electric boilers"
+# The lime the works takes as a minor constituent. Nothing in this repository
+# produces it, which is the point: the showcase relaxes it up the taxonomy
+# until something answers. The first skos:broader step reaches fi_3742, spelled
+# identically and produced by nobody; the second reaches fi_374, "Plaster, lime
+# and cement" -- an average over binders that includes cement itself. A lime
+# demand answered by a category containing the product the works is making is
+# the right answer available and a poor answer in substance, which is exactly
+# the kind of concession that has to be recorded rather than absorbed.
+LIME = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420"  # "Quicklime, slaked lime and hydraulic lime"
 # Invented, like dac.py's DAC_PLANT and for the same reason: BONSAI's product
 # classification does not carry capital-good infrastructure at this
 # granularity. The concepts endpoint answers 404, so this can never relax.
@@ -63,9 +67,9 @@ def moisture_penalty(moisture: float, temperature: float) -> float:
     that the dependency exists and lives in code, not that this particular
     curve is the right one.
 
-    Applied to the kiln fuel and the drying steam, and not to electricity.
-    Grinding work is set by how fine the cement has to be, not by how wet the
-    quarry was.
+    Applied to the kiln fuel, and to nothing else. Grinding work is set by how
+    fine the cement has to be, not by how wet the quarry was, and the lime the
+    works blends in is a recipe quantity rather than a thermal one.
     """
     moisture_term = MOISTURE_SENSITIVITY * (moisture - REFERENCE_MOISTURE)
     temperature_term = TEMPERATURE_SENSITIVITY * (REFERENCE_TEMPERATURE - temperature)
@@ -109,7 +113,7 @@ class CementPlant(Model):
         clinker = row["clinker_factor"] * demand.amount
         limestone = LIMESTONE_PER_CLINKER * clinker
         fuel = row["fuel_demand"] * clinker * penalty
-        steam = row["steam_demand"] * demand.amount * penalty
+        lime = row["lime_demand"] * demand.amount
         electricity = row["electricity_demand"] * demand.amount
 
         construction, fleet_provenance = self._construction(demand)
@@ -126,9 +130,7 @@ class CementPlant(Model):
                 Demand(
                     flow=here(NATURAL_GAS), amount=fuel, unit=row.unit_of("fuel_demand")
                 ),
-                Demand(
-                    flow=here(STEAM), amount=steam, unit=row.unit_of("steam_demand")
-                ),
+                Demand(flow=here(LIME), amount=lime, unit=row.unit_of("lime_demand")),
                 Demand(
                     flow=here(ELECTRICITY),
                     amount=electricity,
@@ -235,8 +237,8 @@ class MeteredCementPlant(Model):
     What a meter at the plant boundary can and cannot tell you is the whole
     point of the class. It gives one stack figure, calcination and combustion
     together and indistinguishable, so this returns a single biosphere
-    exchange where :class:`CementPlant` returns two. The gas, steam and
-    electricity it also meters are *inputs*: their emissions happen off site,
+    exchange where :class:`CementPlant` returns two. The gas, lime and
+    electricity it also weighs are *inputs*: their emissions happen off site,
     so they go out as technosphere demands and get answered by whoever
     supplies them, exactly as the computed model's do.
 
@@ -270,9 +272,9 @@ class MeteredCementPlant(Model):
                     unit=row.unit_of("metered_fuel"),
                 ),
                 Demand(
-                    flow=here(STEAM),
-                    amount=row["metered_steam"] * scale,
-                    unit=row.unit_of("metered_steam"),
+                    flow=here(LIME),
+                    amount=row["metered_lime"] * scale,
+                    unit=row.unit_of("metered_lime"),
                 ),
                 Demand(
                     flow=here(ELECTRICITY),

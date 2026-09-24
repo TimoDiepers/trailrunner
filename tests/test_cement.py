@@ -7,7 +7,7 @@ from trailrunner.models.cement import (
     ELECTRICITY,
     LIMESTONE,
     NATURAL_GAS,
-    STEAM,
+    LIME,
     CementPlant,
     MeteredCementPlant,
     moisture_penalty,
@@ -49,10 +49,10 @@ def cement_params(tmp_path):
     path = tmp_path / "cement.parquet"
     rows = [
         {"location": "CH", "time": 2030, "clinker_factor": 0.75, "fuel_demand": 3.3,
-         "steam_demand": 0.34, "electricity_demand": 0.10,
+         "lime_demand": 0.010, "electricity_demand": 0.10,
          "moisture": 0.04, "temperature": 10.0},
         {"location": "RER", "time": 2030, "clinker_factor": 0.80, "fuel_demand": 3.5,
-         "steam_demand": 0.40, "electricity_demand": 0.11,
+         "lime_demand": 0.012, "electricity_demand": 0.11,
          "moisture": 0.06, "temperature": 9.0},
     ]
     fields = [
@@ -60,7 +60,7 @@ def cement_params(tmp_path):
         {"name": "time", "type": "integer", "unit": "year", "iri": None},
         {"name": "clinker_factor", "type": "number", "unit": "dimensionless", "iri": None},
         {"name": "fuel_demand", "type": "number", "unit": "MJ", "iri": None},
-        {"name": "steam_demand", "type": "number", "unit": "MJ", "iri": None},
+        {"name": "lime_demand", "type": "number", "unit": "kg", "iri": None},
         {"name": "electricity_demand", "type": "number", "unit": "kWh", "iri": None},
         {"name": "moisture", "type": "number", "unit": "dimensionless", "iri": None},
         {"name": "temperature", "type": "number", "unit": "degC", "iri": None},
@@ -85,10 +85,10 @@ def test_cement_plant_produces_exactly_what_was_demanded(cement_params):
 def test_cement_plant_demands_limestone_gas_steam_and_electricity(cement_params):
     result = CementPlant(params=cement_params).apply(cement_demand())
     by_iri = {d.flow.iri: d for d in result.technosphere}
-    assert set(by_iri) == {LIMESTONE, NATURAL_GAS, STEAM, ELECTRICITY}
+    assert set(by_iri) == {LIMESTONE, NATURAL_GAS, LIME, ELECTRICITY}
     assert by_iri[LIMESTONE].unit == "kg"
     assert by_iri[NATURAL_GAS].unit == "MJ"
-    assert by_iri[STEAM].unit == "MJ"
+    assert by_iri[LIME].unit == "kg"
     assert by_iri[ELECTRICITY].unit == "kWh"
     for child in result.technosphere:
         assert child.flow.location == "CH"
@@ -103,10 +103,10 @@ def test_clinker_factor_scales_the_limestone_and_the_fuel(cement_params):
     assert by_iri[NATURAL_GAS].amount == pytest.approx(2475.0)  # 3.3 MJ per kg clinker
 
 
-def test_steam_and_electricity_scale_with_the_cement_not_the_clinker(cement_params):
+def test_lime_and_electricity_scale_with_the_cement_not_the_clinker(cement_params):
     result = CementPlant(params=cement_params).apply(cement_demand())
     by_iri = {d.flow.iri: d for d in result.technosphere}
-    assert by_iri[STEAM].amount == pytest.approx(340.0)
+    assert by_iri[LIME].amount == pytest.approx(10.0)
     assert by_iri[ELECTRICITY].amount == pytest.approx(100.0)
 
 
@@ -130,7 +130,7 @@ def test_combustion_co2_matches_the_gas_the_model_just_demanded(cement_params):
     assert combustion == pytest.approx(gas.amount * 0.056)
 
 
-def test_wetter_feed_raises_thermal_demand_but_not_electricity(cement_params):
+def test_wetter_feed_raises_kiln_fuel_but_not_the_recipe_quantities(cement_params):
     plant = CementPlant(params=cement_params)
     wet = {
         d.flow.iri: d.amount
@@ -138,7 +138,9 @@ def test_wetter_feed_raises_thermal_demand_but_not_electricity(cement_params):
     }
     # RER's row is wetter and colder, so its penalty exceeds one.
     assert wet[NATURAL_GAS] / (0.80 * 1000.0 * 3.5) > 1.0
-    assert wet[STEAM] / (1000.0 * 0.40) > 1.0
+    # Lime and electricity are recipe quantities: the penalty must not touch
+    # them, or a wet quarry would silently change the cement's composition.
+    assert wet[LIME] == pytest.approx(1000.0 * 0.012)
     assert wet[ELECTRICITY] == pytest.approx(1000.0 * 0.11)
 
 
@@ -162,16 +164,16 @@ def test_cement_plant_answers_the_full_demanded_amount_without_rescaling(cement_
 def metered_params(tmp_path):
     path = tmp_path / "cement_metered.parquet"
     rows = [
-        {"location": "CH", "time": 2023, "metered_fuel": 2610.0, "metered_steam": 385.0,
+        {"location": "CH", "time": 2023, "metered_fuel": 2610.0, "metered_lime": 11.0,
          "metered_electricity": 108.0, "metered_co2": 562.0},
-        {"location": "CH", "time": 2024, "metered_fuel": 2560.0, "metered_steam": 372.0,
+        {"location": "CH", "time": 2024, "metered_fuel": 2560.0, "metered_lime": 10.6,
          "metered_electricity": 106.0, "metered_co2": 551.0},
     ]
     fields = [
         {"name": "location", "type": "string", "unit": None, "iri": None},
         {"name": "time", "type": "integer", "unit": "year", "iri": None},
         {"name": "metered_fuel", "type": "number", "unit": "MJ", "iri": None},
-        {"name": "metered_steam", "type": "number", "unit": "MJ", "iri": None},
+        {"name": "metered_lime", "type": "number", "unit": "kg", "iri": None},
         {"name": "metered_electricity", "type": "number", "unit": "kWh", "iri": None},
         {"name": "metered_co2", "type": "number", "unit": "kg", "iri": None},
     ]
@@ -183,7 +185,7 @@ def test_metered_plant_returns_the_row_untouched(metered_params):
     result = MeteredCementPlant(params=metered_params).apply(cement_demand(time=2023))
     by_iri = {d.flow.iri: d for d in result.technosphere}
     assert by_iri[NATURAL_GAS].amount == pytest.approx(2610.0)
-    assert by_iri[STEAM].amount == pytest.approx(385.0)
+    assert by_iri[LIME].amount == pytest.approx(11.0)
     assert by_iri[ELECTRICITY].amount == pytest.approx(108.0)
 
 
@@ -202,7 +204,7 @@ def test_metered_plant_still_sends_its_purchased_energy_upstream(metered_params)
     result = MeteredCementPlant(params=metered_params).apply(cement_demand(time=2023))
     assert {d.flow.iri for d in result.technosphere} == {
         NATURAL_GAS,
-        STEAM,
+        LIME,
         ELECTRICITY,
     }
 

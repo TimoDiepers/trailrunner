@@ -524,9 +524,9 @@ def test_the_showcase_chain_characterizes_its_cement_as_warming():
         Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
     )
     report = Orchestrator(Glossary(models)).calculate(
-        Demand(flow=Flow(iri=CEMENT, location="CH", time=2030), amount=1000.0, unit="kg")
+        Demand(flow=Flow(iri=CEMENT, location="DK", time=2030), amount=1000.0, unit="kg")
     )
-    direct = report.inventory[(Flow(iri=CO2_FOSSIL, location="CH", time=2030), "kg")]
+    direct = report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2030), "kg")]
     # The plant's own two exchanges are 397.5 kg of calcination and 138.6 kg
     # of combustion. The inventory key aggregates every co2-fossil exchange at
     # this place and year, so the grid's gas share lands here too and the
@@ -557,11 +557,11 @@ def test_the_metered_year_reaches_the_meter_and_still_characterizes():
         Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
     )
     report = Orchestrator(Glossary(models)).calculate(
-        Demand(flow=Flow(iri=CEMENT, location="CH", time=2023), amount=1000.0, unit="kg")
+        Demand(flow=Flow(iri=CEMENT, location="DK", time=2023), amount=1000.0, unit="kg")
     )
     # Same aggregation as above: 562.0 kg off the meter, plus whatever the
     # grid burns to supply the plant's metered electricity.
-    assert report.inventory[(Flow(iri=CO2_FOSSIL, location="CH", time=2023), "kg")] > 562.0
+    assert report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2023), "kg")] > 562.0
 
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
     assert dynamic.uncharacterized == []
