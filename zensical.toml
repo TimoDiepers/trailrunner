@@ -19,6 +19,7 @@ nav = [
   { "User Guide" = [
     { Installation = "content/installation.md" },
     { "Quick Start" = "content/getting_started/quickstart.md" },
+    { "Tutorial: an LCA from the CLI" = "content/getting_started/cli.md" },
     { "Core Concepts" = "content/concepts.md" },
     { "Writing a Model" = "content/writing_a_model.md" },
     { Parameters = "content/parameters.md" },
@@ -26,6 +27,7 @@ nav = [
     { Attribution = "content/attribution.md" },
     { "Reading a Report" = "content/reports.md" },
     { Assessment = "content/assessment.md" },
+    { Figures = "content/figures.md" },
   ]},
   { "API Reference" = [
     "api/index.md",

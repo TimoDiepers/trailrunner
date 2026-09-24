@@ -6,346 +6,282 @@ tags:
 
 # Assessment
 
-`trailrunner.assessment` turns a finished [`Report`](../api/report.md) into a single score or a
-time-explicit curve. It is a separate package from `orchestration`, `core` and `params`, and
-that separation is deliberate rather than incidental.
+`trailrunner.assessment` turns a finished [`Report`](../api/report.md) into a score
+(`assess`) or a time-explicit curve (`assess_dynamic`).
 
-## Why this is a separate module
-
-An inventory — the flows in and out of a supply chain, keyed by identity, place and time — is a
-complete, valid deliverable on its own. It answers "what happened" without taking a position on
-"how much does that matter", and plenty of legitimate uses of a `Report` never need the second
-question answered: auditing an unresolved list, comparing two traversals' cutoffs, or handing raw
-biosphere exchanges to someone else's characterization pipeline entirely.
-
-Characterization is a separate *reading* of that inventory — one particular method's opinion,
-applied afterwards — not a step the traversal performs. `trailrunner.assessment` imports from
-`trailrunner.orchestration.report`; the reverse is never true. The `Orchestrator`, the `Queue` and
-every `Model` run to completion with no idea that this package exists, and nothing about the
-traversal changes if it is never imported at all. That keeps a `Model` author's job to exactly one
-thing — what did this process consume and emit — and keeps a change to how flows get characterized
-from ever being a reason to re-run the traversal.
+It is a separate package on purpose. An inventory, the flows in and out of a supply chain
+keyed by identity, place and time, is a complete deliverable on its own: it says what
+happened without deciding how much that matters. Characterization is one method's reading
+of it, applied afterwards. `assessment` imports from `orchestration`, never the reverse.
+The traversal runs the same whether or not this package is imported, so a model author
+only answers "what did this process consume and emit", and changing a method never means
+re-running the traversal.
 
 ```python
-from trailrunner import Demand, Flow, Glossary, Orchestrator
 from trailrunner.assessment import Method, assess
 
-report = Orchestrator(glossary).calculate(demand)          # the inventory, on its own
-assessment = assess(report, Method.from_parquet("gwp100.parquet"))  # a reading of it
+report = Orchestrator(glossary).calculate(demand)            # the inventory
+assessment = assess(report, Method.from_parquet("gwp100.parquet"))  # one reading of it
 ```
 
-## The method parquet layout
+From the CLI: `trailrunner run ... --method gwp100.parquet` and `--dynamic
+radiative_forcing`. See the [CLI tutorial](getting_started/cli.md#4-get-a-score-method).
 
-A [`Method`](../api/assessment.md) reads characterization factors from a parquet file, the same
-shape as a [`ParameterSet`](parameters.md): a Frictionless `datapackage.json` embedded in the
-schema metadata, columns' units and IRIs read out of `resources[].schema.fields`. Four columns:
+## Methods
+
+A [`Method`](../api/assessment.md) holds characterization factors keyed by
+`(flow_iri, flow_unit, location, time)`.
+
+### In memory
+
+```python
+from trailrunner import LocationHierarchy
+from trailrunner.assessment import Method
+
+GWP100 = Method(
+    rows=[
+        {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": "kg", "location": "GLO", "cf": 1.0},
+        {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": "kg", "location": "GLO", "cf": 29.8},
+        {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": "kg", "location": "GLO", "cf": 273.0},
+    ],
+    unit="kg CO2-eq",
+    name="IPCC AR6 GWP100",
+    hierarchy=LocationHierarchy({"DK": "RER", "RER": "GLO"}),
+)
+```
+
+### The method parquet layout
+
+`Method.from_parquet(path, hierarchy=...)` reads the same layout as a
+[`ParameterSet`](parameters.md): a Frictionless `datapackage.json` in the schema metadata,
+with field units under `resources[].schema.fields`.
 
 | Column | Meaning |
 | --- | --- |
-| `flow_iri` | which elementary flow this factor characterizes |
-| `flow_unit` | the unit the factor applies to — string equality, no conversion |
-| `location` | where the factor holds; widened through a [`LocationHierarchy`](../api/location.md) the same way a `ParameterSet` row is |
-| `cf` | the characterization factor itself |
-| `time` | *optional.* A year, for a method whose factors change over time |
+| `flow_iri` | the elementary flow this factor characterizes |
+| `flow_unit` | the unit the factor applies to, matched by string equality with no conversion |
+| `location` | *optional.* Where the factor holds, widened through the `LocationHierarchy` like a parameter row |
+| `time` | *optional.* A year, for factors that change over time |
+| `cf` | the factor. Its declared `unit.name` is the method's score unit |
 
-`time` is read only if the column is present, and matched **exactly** — a lookup for year 2031
-against a row written for 2030 misses, and falls through to a row with no `time` at all if one
-exists. There is no interpolation between two years' CFs, on purpose: a `ParameterSet` row is a
-measured or projected quantity, and interpolating between two of those years is a reasonable
-estimate of a third; a CF is a modelling convention agreed on for a given horizon, and
-interpolating between two conventions produces neither one.
+The method's `name` comes from the datapackage's `name`. The
+[CLI tutorial](getting_started/cli.md#4-get-a-score-method) has a complete pyarrow script
+that writes one.
 
-**Location outranks time.** The lookup walks the location chain in the outer loop and tries
-`flow.time` then `None` in the inner one, so a `CH` row *with no year* beats a `GLO` row written
-for exactly the year asked for. That is a real decision, not an accident of loop order: a method
-states its factors where they hold, and a regional convention that did not bother to date itself
-is still that region's convention. Reaching past it to the global table because the global table
-happened to name the year would answer with a different method's opinion, quietly. If you need a
-year to win over a region, state the regional row for that year too.
+The file is refused on load if it is ambiguous or incomplete:
 
-Two factors sharing one `(flow_iri, flow_unit, location, time)` key is a **data error**, and
-`Method.__init__` raises [`DuplicateFactor`](../api/errors.md) naming the key and the file — the
-same way two models producing one product raises rather than picking one. Keeping whichever row
-came last would put a number in the score that appears in no message anywhere. A parquet missing
-`flow_iri`, `flow_unit` or `cf` raises [`MissingColumns`](../api/errors.md), which names the file
-and the layout it expected.
+- two rows sharing one key raise [`DuplicateFactor`](../api/errors.md), naming the key and
+  the file,
+- a missing `flow_iri`, `flow_unit` or `cf` column raises
+  [`MissingColumns`](../api/errors.md),
+- a `cf` column with no declared unit raises [`MissingUnit`](../api/errors.md), rather than
+  producing a score with no unit.
 
-The method's *name* comes from the datapackage's `name`; its *score unit* comes from the `cf`
-column's declared `unit.name` — the same rule `ParameterSet.unit_of` follows, and for the same
-reason: the unit travels with the number that needs it, rather than being assumed by the caller.
-A `cf` column with no declared unit raises [`MissingUnit`](../api/errors.md) rather than handing
-back a dimensionless score.
+### How a factor is looked up
 
-```python
-from trailrunner.assessment import Method
+**Location outranks time.** The lookup walks the location chain (always ending at the
+root, so `GLO` factors answer every location) and at each level tries the flow's year,
+then a row with no year. A `CH` row with no year beats a `GLO` row for exactly the year
+asked for: a method states its factors where they hold, and a regional factor that isn't
+dated is still that region's factor. If a year should win over a region, write the
+regional row for that year.
 
-method = Method.from_parquet("gwp100.parquet")
-method.name   # "EF v3.1 | climate change"
-method.unit   # "kg CO2eq"
-```
+**Years match exactly.** A lookup for 2031 against a 2030 row misses and falls through to
+an undated row. Factors aren't interpolated: a parameter between two measured years is a
+fair estimate, but a factor is a convention for a given horizon, and interpolating between
+two conventions gives neither.
 
-## `assess()` and reading `uncharacterized`
+**A flow with no location** matches rows whose `location` is empty, then the root. It
+never takes the first regional factor in file order.
+
+## `assess()`
 
 ```python
 from trailrunner.assessment import assess
 
-assessment = assess(report, method)
-
-assessment.score               # total, in method.unit
-assessment.by_flow              # {(Flow, unit): contribution}
-assessment.direct_by_node        # {node_id: contribution from that node's own emissions}
-assessment.cumulative_by_node     # {node_id: that node's own contribution plus everything below it}
-assessment.provenance             # {(Flow, unit): factor lookup provenance — location fallback, etc.}
-assessment.uncharacterized         # [(Flow, unit, amount), ...]
-assessment.uncharacterized_by_node  # {node_id: [(Flow, unit, amount), ...]}
-assessment.truncated                 # the traversal hit max_depth or max_nodes
-assessment.unresolved                 # how many demands it could not resolve
-assessment.proxies                     # how many nodes were answered by something other than a model
-print(assessment.summary())              # the score and every reason to distrust it, in one block
+assessment = assess(report, GWP100)
+print(assessment.summary())
 ```
 
-`uncharacterized_by_node` exists because `direct_by_node` alone cannot tell you the difference
-between a node whose only emission has no factor and a node that emitted nothing: both are
-`0.0`. `uncharacterized` cannot close that gap on its own either — it carries a `Flow`, not a
-node id, so the two lists cannot be joined after the fact. The per-node record is filled in the
-loop that has both in hand.
+```text
+543.908 kg CO2-eq
+method: IPCC AR6 GWP100
+8 uncharacterized flows on 6 nodes (not in the score, and not zero)
+12 unresolved
+0 proxies
+```
 
-`truncated`, `unresolved` and `proxies` are carried straight over from the `Report`. A consumer
-handed only an `Assessment` — the usual case once a score is passed along — would otherwise have
-no way to tell a complete traversal's score from one that stopped at `max_nodes` halfway down the
-chain. They are the same floats either way.
+An [`Assessment`](../api/assessment.md) carries:
 
-`summary()` returns (it does not print) a block in the shape of [`Report.summary()`](reports.md):
-the score with its unit, the method's name, how many flows went uncharacterized and on how many
-nodes, then the inventory flags above. It exists for the same reason `Report.summary()` does — the
-caveats belong in front of a reader who did not know to go looking for them.
+| Attribute | What it holds |
+| --- | --- |
+| `score`, `unit`, `method` | the total, its unit, and the method's name |
+| `by_flow` | `{(Flow, unit): contribution}` |
+| `direct_by_node` | `{node_id: contribution of that node's own emissions}` |
+| `cumulative_by_node` | `{node_id: own contribution plus everything below it}` |
+| `provenance` | `{(Flow, unit): how its factor was found}`, e.g. a location fallback |
+| `uncharacterized` | `[(Flow, unit, amount)]`, emissions the method has no factor for |
+| `uncharacterized_by_node` | the same, per node |
+| `truncated`, `unresolved`, `proxies` | carried over from the report |
 
-`uncharacterized` is not an edge case to check once and forget — it is as much a part of the
-answer as `score` is, for exactly the reason `report.unresolved` is: a flow the method has no
-factor for is silently treated as *no impact* the moment it is left out of the sum, and that is
-never what a missing factor means. `Method.factor` returns `None` rather than `0.0` precisely so
-`assess` can tell the two apart, and it records every `None` here instead of adding it in as
-zero.
+`to_dataframe()` gives one row per characterized flow, sorted by the absolute score.
 
-A non-empty `uncharacterized` list means the *method* has a gap, not that the inventory does. The
-flows are real; the characterization does not cover them yet. When you see one:
+`truncated`, `unresolved` and `proxies` travel with the score, because a score is often
+passed along without its report, and whoever receives it still needs to know the traversal
+stopped at 12 cutoffs.
 
-- Check whether the flow genuinely falls outside the method's scope (a GWP100 method has nothing
-  to say about a `sox` flow, and that is correct, not a bug).
-- If it should be covered, check the flow's IRI against what the method file actually has rows
-  for — a mismatch there is the single most common reason a factor "goes missing" (see the
-  Brightway converter's caveat below).
-- Report the score alongside the list, not instead of it. A score with an empty `uncharacterized`
-  is a different claim than the same score with three flows left out, and a reader comparing two
-  runs needs to know which one they are looking at.
+### `uncharacterized` is part of the answer
+
+A flow with no factor would count as *no impact* the moment it dropped out of the sum,
+and a missing factor never means that. `Method.factor` returns `None` rather than `0.0` so
+`assess` can tell the difference and record the flow here instead.
+
+A non-empty list means the *method* has a gap, not the inventory. When you see one:
+
+- check whether the flow is genuinely out of scope: a GWP100 method has nothing to say
+  about mercury, and that is correct,
+- if it should be covered, compare the flow's IRI and unit with the method file's rows.
+  A mismatch there is the most common reason a factor "goes missing" (see the
+  [Brightway converter](#the-brightway-converter-an-offline-escape-hatch)),
+- report the score together with the list. The same score with three flows left out is a
+  different claim from one with none left out.
+
+`uncharacterized_by_node` exists because `direct_by_node` alone can't distinguish a node
+whose only emission has no factor from a node that emitted nothing: both are `0.0`.
 
 ## `assess_dynamic()`: a time-explicit reading
 
-Every `Exchange` already carries `flow.time`, so the inventory *is* a time series; `assess_dynamic`
-reshapes it into the four columns [`dynamic_characterization`](https://github.com/brightway-lca/dynamic_characterization)
-expects (`date`, `amount`, `flow`, `activity`) and characterizes each emission over its own decay
-curve rather than folding everything into one instantaneous factor. It needs the `dynamic` extra:
+Every exchange carries `flow.time`, so the inventory already is a time series.
+`assess_dynamic` characterizes each emission over its own decay curve, using
+[`dynamic_characterization`](https://github.com/brightway-lca/dynamic_characterization),
+instead of collapsing everything into one factor. It needs the `dynamic` extra:
 
 ```bash
 uv sync --extra dynamic
 ```
 
-A worked example: a DAC plant is built in 2026, and the CO2 it captures — plus the fossil CO2 its
-own operating heat still emits — happens in 2030. Both years matter to the curve, and the point of
-this module is that they stay apart instead of collapsing into a single 2030 number:
-
 ```python
-from trailrunner import Demand, Flow, Glossary, Orchestrator
 from trailrunner.assessment import assess_dynamic
 
-report = Orchestrator(glossary).calculate(demand)  # a two-node traversal: construction in
-                                                    # 2026, capture and operating heat in 2030
+dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 
-assessment = assess_dynamic(report, metric="radiative_forcing", horizon=50)
-assessment.series           # DataFrame: date, amount, flow, activity — the marginal series
-assessment.unit             # "W/m2" — the unit of `series`
-assessment.curve            # DataFrame: date, amount — the cumulative integral, for plotting
-assessment.total            # that integral at the end of the horizon
-assessment.cumulative_unit  # "W·yr/m2" — the unit of `curve` and `total`
-assessment.truncated        # the traversal hit max_depth or max_nodes
-assessment.unresolved       # how many demands it could not resolve
-assessment.proxies          # how many nodes were answered by something other than a model
-print(assessment.summary())
+dynamic.series            # DataFrame: date, amount, flow, activity, the per-year series
+dynamic.unit              # "W/m2", the unit of series
+dynamic.curve             # DataFrame: date, amount, the running total
+dynamic.total             # the running total at the end of the horizon
+dynamic.cumulative_unit   # "W·yr/m2", the unit of curve and total
+print(dynamic.summary())
 ```
 
-**`unit` and `cumulative_unit` are not the same thing.** `series` is a marginal quantity per year;
-`curve` and `total` are its cumulative sum, which for a radiative-forcing metric is an integral
-over time and so is W·yr/m2, not W/m2. For the `GWP` metrics the marginal series is already in
-kg CO2eq per year and the cumulative sum is kg CO2eq, so the two coincide — which is exactly why a
-single `unit` field looked right for long enough to ship. Label `total` with `cumulative_unit`.
+In the [5-minute tour](../showcase.md), the kilns are built in 2026 and 2029 and the cement
+is made in 2030. The curve shows the construction years first and the production years
+after, because that is when they happened. A single-year characterization can't represent
+that.
 
-`activity` in `series` is `"<model>#<node id>"`, not the model name alone: a supply chain with
-eleven gas boilers in it has eleven distinguishable series, and a row that says only `"GasBoiler"`
-cannot be attributed back to a place in the chain.
+**`unit` and `cumulative_unit` differ.** `series` is per year. `curve` and `total` are its
+running sum, which for radiative forcing is an integral over time: W·yr/m², not W/m². For
+`GWP` both are kg CO<sub>2</sub>-eq. Label `total` with `cumulative_unit`.
 
-`inventory_dataframe(report)` is exported for anyone who wants the frame without the
-characterization. Note that it **silently leaves out undated exchanges** — it returns a frame, not
-a report of what it dropped. Use `assess_dynamic`, which records every one of them, when the
-omissions matter.
+`activity` in `series` is `"<model>#<node id>"`, so eleven gas boilers in one chain stay
+eleven distinguishable series.
 
-```python
-import matplotlib.pyplot as plt
+### What it reports instead of dropping
 
-fig, ax = plt.subplots()
-ax.plot(assessment.curve["date"], assessment.curve["amount"])
-ax.set_xlabel("year")
-ax.set_ylabel(assessment.cumulative_unit)  # the curve is the integral, not the series
-```
+Four lists, each `(Flow, unit, amount)` like `Assessment.uncharacterized`:
 
-The resulting curve is flat until just after 2026 — when the construction pulse's own decay curve
-starts contributing — rises through the run-up years, and steps up again just after 2030 when the
-capture year's emissions begin theirs. The construction pulse shows up on the timeline *before*
-the capture years, because it happened before them; a static, single-year characterization has no
-way to represent that at all.
+- **`uncharacterized`**: no characterization function covers the flow. The defaults
+  (`default_functions()`) are the IPCC AR6 functions for fossil CO<sub>2</sub>, CO<sub>2</sub>
+  from air, biogenic CO<sub>2</sub> uptake, fossil CH<sub>4</sub>, N<sub>2</sub>O and CO.
+- **`wrong_unit`**: the flow is covered, but not in this exchange's unit.
+- **`undated`**: the exchange has no year, so there is nowhere on the axis to put it.
+- **`beyond_horizon`**: the emission entered the characterization but produced no dated
+  row, which happens under `fixed_time_horizon=True` when it falls after the shared horizon
+  ends.
 
-`assess_dynamic` reports four lists rather than silently dropping anything, and all four have
-the same shape as `Assessment.uncharacterized` — `(Flow, unit, amount)`, one entry per exchange —
-so "how much did this leave out" is the same question with the same kind of answer everywhere:
+`truncated`, `unresolved` and `proxies` are carried over from the report, and `summary()`
+names everything.
 
-- **`uncharacterized`** — exchanges whose flow no characterization function covers (by default,
-  the IPCC AR6 functions for fossil CO2, CO2 captured from air, biogenic CO2 uptake, fossil CH4,
-  N2O and CO — see `default_functions()`). Pass your own `functions` mapping to extend it.
-- **`wrong_unit`** — exchanges whose flow *is* covered, but not in the unit the exchange is
-  denominated in. See below.
-- **`undated`** — exchanges with no `flow.time`. A dynamic assessment has nowhere on the axis to
-  put them, so it says so rather than guessing a year. An exchange that is both undated and
-  uncharacterized appears in both lists, because each answers its own question.
-- **`beyond_horizon`** — exchanges that *did* enter the characterization but contributed no dated
-  row to `series`. Under `fixed_time_horizon=True` every horizon ends at the same date, so an
-  emission past that date gets a zero-length horizon and comes back undated; it cannot go on the
-  curve. Dropping it in silence would leave you with a total that reads as though it had been
-  counted, so it is named instead.
-
-`assess_dynamic` also carries `truncated`, `unresolved` and `proxies` over from the `Report`, the
-same way `assess` does, and `summary()` names all of them alongside the four lists.
-
-### Two sign conventions for removals, one stated per flow
-
-`default_functions()` covers two ways of writing a removal down, and pairs each with the function
-that matches it:
-
-- `flows/co2-from-air` — what `DirectAirCapture` emits, **already negative** — gets the ordinary
-  `characterize_co2`. The minus sign is in the inventory, so nothing should apply a second one.
-- `flows/co2-uptake` gets `characterize_co2_uptake`, which negates: that flow's convention is a
-  **positive** amount meaning uptake.
-
-Crossing them is silent and total: `characterize_co2_uptake` applied to an already-negative amount
-turns a removal into warming of the same size, with an empty `uncharacterized` list and nothing
-anywhere saying it happened. A model emitting a removal therefore has to use the convention of the
-IRI it emits on.
+`inventory_dataframe(report)` gives the four-column frame without characterizing it. It
+**silently drops undated exchanges**. Use `assess_dynamic`, which lists them, when that
+matters.
 
 ### Characterization functions are keyed on `(IRI, unit)`
 
-`default_functions()` returns a mapping keyed on `("<flow IRI>", "kg")`, not on the IRI alone, and
-a `functions` mapping you supply is keyed the same way. The reason is blunt: the IPCC AR6
-functions are defined **per kilogram** — their radiative efficiencies are `radiative_efficiency_kg`
-— so handing one an amount denominated in grams characterizes 10 g of fossil CO2 as 10 kg. That is
-not a rounding error, it is a factor of 1000, arriving with an empty `uncharacterized` list and
-nothing anywhere saying it happened. It is reachable from shipped code: `models/electricity.py`
-takes its biosphere unit from the parameter file's declared unit, so a file written in `g/MJ`
-produces exchanges in `g`.
+The IPCC AR6 functions are defined **per kilogram**. Handed an amount in grams, one would
+characterize 10 g as 10 kg, a factor of 1000 with nothing flagged. So functions are keyed on
+`(flow IRI, unit)`, and units match by string equality:
 
-Unit compatibility here is **string equality**, exactly as in `Method.factor`. A mismatch is
-reported, never converted:
+- IRI known in another unit → **`wrong_unit`**,
+- IRI not known at all → **`uncharacterized`**.
 
-- the IRI is known in some *other* unit → the exchange goes to **`wrong_unit`**;
-- the IRI is not known at all → it goes to **`uncharacterized`**.
-
-They are kept apart because they are different problems for whoever reads the result. "Nobody
-characterized this gas" is a gap in the method and may be correct. "This gas is characterized, per
-kilogram, and your model emitted grams" is a mismatch between a model and a method that somebody
-can fix today — by fixing the model's unit, or by adding a `(iri, unit)` entry of your own:
+The first is a mismatch you can fix today: correct the model's unit, or add your own entry.
 
 ```python
-from trailrunner.assessment import assess_dynamic
-from trailrunner.assessment.dynamic import CO2_FOSSIL, default_functions
+from trailrunner.assessment import assess_dynamic, default_functions
+from trailrunner.assessment.dynamic import CO2_FOSSIL
 
 functions = dict(default_functions())
-functions[(CO2_FOSSIL, "g")] = my_per_gram_function   # you supply the factor of 1000, explicitly
-assessment = assess_dynamic(report, functions=functions)
+functions[(CO2_FOSSIL, "g")] = my_per_gram_function   # you supply the factor of 1000
+dynamic = assess_dynamic(report, functions=functions)
 ```
 
-Without this, the two paths disagreed about the same input: `assess` put a grams exchange in
-`uncharacterized` and `assess_dynamic` characterized it as kilograms.
+### Two sign conventions for removals
 
-### The metrics that need a scenario first
+`default_functions()` pairs each removal flow with the function matching its sign:
 
-`METRICS` lists five, but only `radiative_forcing` and `GWP` work out of the box. `pGWP`, `pGTP`
-and `prospective_radiative_forcing` are the Watanabe et al. scenario-based metrics, and they
-require `dynamic_characterization.prospective.set_scenario()` to have been called first.
-`trailrunner` exposes no way to call it — there is no scenario argument anywhere in
-`assess_dynamic` — so reaching those three means importing `dynamic_characterization.prospective`
-yourself and setting the scenario before you call in. They are listed because the library accepts
-them, not because this module wires them up.
+- `flows/co2-from-air`, which `DirectAirCapture` emits **already negative**, uses the
+  ordinary CO<sub>2</sub> function,
+- `flows/co2-uptake` uses `characterize_co2_uptake`, which negates, because that flow's
+  convention is a **positive** amount meaning uptake.
 
-Two of `dynamic_characterization`'s own conventions are worth knowing before reading a curve
-closely: the CO2 impulse-response function is exactly zero at the emission's own year, so a
-marginal series' first row falls in `emission_year + 1`, not the emission year itself; and the
-library's year offsets are a fixed 365.2425-day average Gregorian year rather than a calendar
-year, so a horizon's last row can land a day short of its naive last anniversary. Both are the
-installed library's behaviour, not this module's.
+Mixing them up silently turns a removal into warming of the same size. A model emitting a
+removal has to follow the convention of the IRI it emits on.
+
+### Metrics
+
+`METRICS` lists five, but only `radiative_forcing` and `GWP` work as they are. `pGWP`,
+`pGTP` and `prospective_radiative_forcing` need
+`dynamic_characterization.prospective.set_scenario()` called first, and `assess_dynamic`
+has no scenario argument. Import and set it yourself before calling in.
+
+Two conventions of `dynamic_characterization` matter when reading a curve closely: the
+CO<sub>2</sub> response is zero in the emission's own year, so the first row falls in
+`emission_year + 1`, and years are a fixed 365.2425 days, so a horizon's last row can land
+a day short of the calendar anniversary.
 
 ### The two horizon conventions
 
-`assess_dynamic` exposes `fixed_time_horizon`, and it defaults to `False`:
+- **`fixed_time_horizon=False`** (default): each emission is characterized over its own
+  `horizon` years, starting from its own year.
+- **`fixed_time_horizon=True`** (Levasseur): every horizon ends on the same date, so
+  earlier emissions are integrated for longer and one at the very end barely counts.
 
-- **`fixed_time_horizon=False`** (the default) — the *conventional* convention. Each emission is
-  characterized over its own `horizon` years, starting at its own emission year. An emission in
-  2040 and one in 2050 both get the full horizon, just starting from different points on the
-  calendar.
-- **`fixed_time_horizon=True`** — the *Levasseur* convention. Every emission's horizon ends at the
-  same date, so an earlier emission is integrated for longer than a later one and an emission at
-  the very end of the run barely counts at all.
+They answer different questions about weighing emissions at different times, and the
+literature doesn't settle which a study should ask. Both are exposed so the choice is made
+visibly by whoever runs the study.
 
-Neither is obviously right — they encode different questions about how to weigh emissions that
-happen at different times against each other, and the literature does not settle which question a
-given study should ask. `trailrunner` exposes both rather than picking one, so the choice is made
-by whoever is close enough to the study to know which question it needs answered, and made
-visibly rather than buried in a default.
-
-#### What the fixed horizon is anchored to
-
-"Every emission's horizon ends at the same date" raises the obvious question: *which* date.
-`dynamic_characterization.characterize` takes a `time_horizon_start`, and its default is
-`datetime.now()` — evaluated once, **at module import**. Left alone, that anchors a study's
-Levasseur horizon to the machine's wall clock: the same report gives a different total next year,
-a 2030 emission with `horizon=20` silently gets about 16 years of horizon instead of 20, and any
-emission past the wall-clock horizon's end comes back as a single undated row.
-
-`trailrunner` derives the anchor from the report instead and passes it explicitly: **the earliest
-emission that actually enters the characterization, as 1 January of that year.** That is the
-study's own start, it is reproducible, and it does not depend on when the code runs. The value
-actually used is recorded on the result:
+The fixed horizon has to start somewhere. `dynamic_characterization` defaults to the
+current wall-clock time, which would make the same report give a different total next
+year. trailrunner anchors it instead to **1 January of the earliest year that actually
+enters the characterization**, and records the anchor:
 
 ```python
-assessment = assess_dynamic(report, horizon=20, fixed_time_horizon=True)
-assessment.time_horizon_start   # datetime(2030, 1, 1) — what the horizon was anchored to
+dynamic = assess_dynamic(report, horizon=20, fixed_time_horizon=True)
+dynamic.time_horizon_start   # datetime(2030, 1, 1)
 ```
 
-"Actually enters the characterization" is load-bearing, and it is the difference between a
-reported gap and a silent zero. An exchange in the wrong unit, or one whose flow no function
-covers, is reported and never reaches the frame. If such an exchange were allowed to set the
-anchor — a stray 2010 entry in grams, say — the shared horizon would end in 2030, and a perfectly
-characterizable 2030 emission would fall past it and come back empty. The total would be `0.0`,
-with nothing in `uncharacterized`, `wrong_unit` or `undated` to explain it. So the anchor comes
-from the rows that are going to be characterized, and nothing else.
-
-Pass `time_horizon_start=` yourself when the study has a better anchor than its own first
-characterized emission — a functional unit dated before any emission, most obviously. The field
-is recorded on every result, including conventional-convention ones, where it is inert: with
-`fixed_time_horizon=False` each emission starts its own horizon and the anchor changes nothing.
+Only characterized rows count. An uncharacterizable or wrong-unit exchange from 2010 can't
+drag the anchor back and push a real 2030 emission past the horizon into a silent zero.
+Pass `time_horizon_start=` yourself when the study has a better anchor, such as a
+functional unit dated before any emission. With `fixed_time_horizon=False` the anchor is
+recorded but changes nothing.
 
 ## The Brightway converter: an offline escape hatch
 
-`trailrunner` never imports `bw2data` at runtime — a method file has to travel with a study
-without dragging along whoever's local Brightway project produced it. `dev/convert_brightway_method.py`
-is a hand-run script, behind the `brightway` extra, that reads an existing Brightway LCIA method
-and writes it out in the parquet layout above:
+trailrunner never imports `bw2data` at runtime, so a method file travels with a study
+without whoever's Brightway project produced it. `dev/convert_brightway_method.py` is a
+hand-run script, behind the `brightway` extra, that writes an existing Brightway LCIA
+method in the layout above:
 
 ```bash
 uv sync --extra brightway
@@ -356,35 +292,21 @@ uv run --extra brightway python dev/convert_brightway_method.py \
     --out gwp100.parquet
 ```
 
-State the caveat plainly, because it is easy to trust a converted file more than it has earned:
-**flow identity is the hard part, and the converter is deliberately dumb about it.** Each
-Brightway biosphere flow becomes `<iri-prefix><slugified name>/<slugified categories>` — the
-flow's `name` and its compartment, lowercased, with every run of non-alphanumeric characters
-collapsed to a single hyphen. The compartment is in there because ecoinvent has many same-named
-biosphere flows in different compartments ("Carbon dioxide, fossil" to air, to water, to soil),
-and a slug built from the name alone would collide them into one row. Nothing checks that the
-result matches the IRI any of your models actually emit. A CF attached to an IRI nothing in your
-supply chain produces is not an error anywhere in the pipeline — it is silently *no CF at all* for
-every flow that does emit, and the only place that shows up is `Assessment.uncharacterized` (or
-`DynamicAssessment.uncharacterized`, for the time-explicit path) coming back non-empty, or a score
-that is quietly missing a term nobody flagged.
+!!! warning "Check both identity columns before trusting a converted method"
 
-The **unit is the second trap, and it is the same trap.** Brightway spells biosphere units
-`"kilogram"`, `"cubic meter"`, `"megajoule"`; `trailrunner`'s models emit `"kg"`, `"m3"`, `"MJ"`.
-Matching in `Method.factor` is string equality in both columns, so a method file full of
-`"kilogram"` matches nothing at all and every flow lands in `uncharacterized` — honest, but a
-guaranteed empty score on first use. The converter normalises the spellings it knows (see
-`UNIT_SPELLINGS` in the script) and **prints every spelling it did not recognise**, leaving those
-untouched for you to decide about. That normalisation happens once, at authoring time; nothing in
-`trailrunner.assessment` ever converts between units at runtime.
+    **Flow identity.** Each Brightway biosphere flow becomes
+    `<iri-prefix><slug of name>/<slug of categories>`. The compartment is included because
+    ecoinvent has same-named flows in different compartments. Nothing checks these IRIs
+    against what your models emit. A factor on an IRI nobody emits isn't an error anywhere.
+    It just means no factor for the flows that do emit, and that shows up only as a
+    non-empty `uncharacterized`.
 
-Before trusting a number that came out of a converted method, check **both** identity columns of
-the output file:
+    **Units.** Brightway writes `"kilogram"`, `"cubic meter"`, `"megajoule"`, while
+    trailrunner's models emit `"kg"`, `"m3"`, `"MJ"`. The converter normalises the
+    spellings it knows (`UNIT_SPELLINGS` in the script) and **prints every one it doesn't
+    recognise**, leaving it untouched for you. Nothing converts units at runtime.
 
-- **`flow_iri`** against the IRIs your models declare in their `biosphere` exchanges;
-- **`flow_unit`** against the units those same exchanges carry — the converter's output line
-  names any unit it could not normalise, and those are the first ones to look at;
-
-by hand, or by running `assess` and confirming `uncharacterized` is empty for the flows you expect
-the method to cover. For the time-explicit path, check `wrong_unit` too: a non-empty `wrong_unit`
-is precisely this mismatch, caught.
+    Compare `flow_iri` and `flow_unit` in the output with your models' biosphere
+    exchanges, or run `assess` and confirm `uncharacterized` is empty for the flows the
+    method should cover. On the time-explicit path, a non-empty `wrong_unit` is this same
+    mismatch.
