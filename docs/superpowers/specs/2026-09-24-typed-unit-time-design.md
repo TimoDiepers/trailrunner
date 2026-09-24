@@ -113,24 +113,34 @@ throughout — decided, not a stopgap.
   state, documented on the model and its parameters, not part of the unit.
 - `kg CO2eq` (dynamic metric units in `assessment/dynamic.py`, method score
   units) → `KiloGM`. The "CO2-eq" belongs to the indicator's name.
-- `tkm`: `NaturalGasPipelineTransport` answers `TONNE` of gas transported.
-  Distance is looked up by origin (as `transport_distance_km` is today in the
-  supply model) and multiplied in inside the model. The supply model demands
-  tonnes, not tkm. Every per-tkm parameter keeps its value and is multiplied
-  by distance; the BAFU reproduction test must still pass with the same
-  numbers.
-- The lorry leg (`FREIGHT_LORRY`, demanded in tkm): demanded in `TONNE` with
-  the lorry distance as a parameter of the pipeline model, answered by
-  whatever answers it today (background pack), whose unit is migrated the
-  same way.
+- `tkm`: `NaturalGasOffshorePipelineTransport` answers `TONNE` of gas
+  transported, and the distance travels with the demand as a context
+  condition, `Property("distance", km, KILOMETRE)` — the route length is the
+  demander's to state (the supply model knows it per consumer location), and
+  #42 made context exactly the place for such a condition. The model
+  multiplies tonnes by distance and applies its per-tkm parameters unchanged;
+  a demand without a distance is refused with a message naming the missing
+  condition. 1 t over 1 km reproduces today's 1 tkm figures exactly, so the
+  BAFU reproduction numbers do not move.
+- The lorry leg (`FREIGHT_LORRY`): demanded in `TONNE` with the same
+  `distance` context, amount `lorry_factor × tonnes` (lorry tkm per pipeline
+  tkm, so the same distance carries it).
+- The background pack's two tkm datasets (`transport-freight-rail`,
+  `transport-natural-gas-pipeline-long-distance`) are dropped: nothing in the
+  library, examples or tests demands them, and a per-tkm dataset has no
+  per-tonne reading without a distance.
 - `"unit"` (pipeline infrastructure) → `NUM`.
 - `EUR` does not occur in library or model code; only in tests, which switch
   to a vocab unit.
 
 ### Files with units
 
-- Parameter parquets: field metadata `unit` becomes an IRI. `unit_of` returns
-  the IRI.
+- Parameter parquets: a column whose unit ends up on an exchange (anything
+  read through `unit_of`) declares a vocab unit IRI. Ratio columns
+  (`MJ/tkm`, `kg/Nm3`, …) are documentation for a human and may keep free
+  text: the vocab has no such compound units, and strictness is enforced
+  where a unit becomes part of an exchange — at the Runner — not on every
+  metadata string.
 - Method parquets: `flow_unit` column and the `cf` unit metadata become IRIs.
   `Method.factor` converts within a quantity kind when the exact unit has no
   row.
