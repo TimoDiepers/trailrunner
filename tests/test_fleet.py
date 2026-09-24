@@ -12,7 +12,7 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, TONNE_PER_YEAR, UNITLESS, YEAR
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
@@ -20,7 +20,7 @@ FLEET_FIELDS = [
     {"name": "plant", "type": "string", "unit": None, "iri": None},
     {"name": "location", "type": "string", "unit": None, "iri": None},
     {"name": "build_year", "type": "integer", "unit": YEAR, "iri": None},
-    {"name": "capacity", "type": "number", "unit": "kg/year", "iri": None},
+    {"name": "capacity", "type": "number", "unit": TONNE_PER_YEAR, "iri": None},
     {"name": "lifetime", "type": "number", "unit": YEAR, "iri": None},
 ]
 
@@ -131,7 +131,7 @@ def test_fleet_complains_when_nothing_is_running_anywhere(fleet):
 
 
 def test_fleet_carries_the_units_of_its_columns(fleet):
-    assert fleet.operating(location="CH", time=2030).unit_of("capacity") == "kg/year"
+    assert fleet.operating(location="CH", time=2030).unit_of("capacity") == TONNE_PER_YEAR
 
 
 def demand(location="CH", time=2030, amount=1000.0):
@@ -179,7 +179,7 @@ def test_the_construction_demanded_is_the_fleet_share_of_a_lifetime(dac_params, 
 
 def test_construction_is_demanded_in_the_capacity_unit(dac_params, fleet):
     result = DirectAirCapture(params=dac_params, fleet=fleet).apply(demand())
-    assert {d.unit for d in construction(result)} == {"kg/year"}
+    assert {d.unit for d in construction(result)} == {TONNE_PER_YEAR}
 
 
 def test_a_bigger_demand_claims_a_bigger_share_of_the_same_fleet(dac_params, fleet):

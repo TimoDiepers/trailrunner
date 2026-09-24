@@ -6,7 +6,8 @@ from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.runner import Runner
-from trailrunner.core.units import KG, MJ, TONNE
+from trailrunner.core.flow import Property
+from trailrunner.core.units import KG, MJ, PA, TONNE, VOCAB, UnitCatalog
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
@@ -160,3 +161,46 @@ def test_a_model_returning_the_wrong_type_is_a_validation_error():
     runner = Runner(Glossary([Broken()]))
     with pytest.raises(ValidationError):
         runner.apply(DEMAND)
+
+
+def _result(unit=KG, context=()):
+    flow = Flow(iri="https://example.org/p")
+    return (
+        Demand(flow=flow, amount=1.0, unit=KG),
+        Result(
+            production=[Exchange(flow=flow, amount=1.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri="https://example.org/e", context=context), amount=1.0, unit=unit)],
+        ),
+    )
+
+
+def test_a_free_text_unit_is_refused():
+    demand, result = _result(unit="kg")
+    with pytest.raises(ValidationError, match="not a unit of the vocabulary"):
+        Runner.validate(demand, result)
+
+
+def test_a_context_unit_is_checked_too():
+    demand, result = _result(context=(Property("pressure", 4.0, "bar"),))
+    with pytest.raises(ValidationError, match="pressure"):
+        Runner.validate(demand, result)
+
+
+def test_a_demand_in_free_text_is_refused():
+    flow = Flow(iri="https://example.org/p")
+    demand = Demand(flow=flow, amount=1.0, unit="tkm")
+    result = Result(production=[Exchange(flow=flow, amount=1.0, unit="tkm")])
+    with pytest.raises(ValidationError, match="tkm"):
+        Runner.validate(demand, result)
+
+
+def test_an_uncached_vocab_unit_offline_says_how_to_fix_it():
+    # Review focus 3.
+    demand, result = _result(unit=VOCAB + "LB")
+    with pytest.raises(ValidationError, match="warm_unit_cache"):
+        Runner.validate(demand, result, units=UnitCatalog())
+
+
+def test_vocab_units_pass():
+    demand, result = _result(context=(Property("pressure", 4e5, PA),))
+    Runner.validate(demand, result)

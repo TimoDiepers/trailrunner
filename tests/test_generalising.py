@@ -12,7 +12,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import ContextRange, Coverage
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, PystTaxonomy, StaticTaxonomy
-from trailrunner.core.units import KG, KILOMETRE, METRE, MJ, NUM, PA, TONNE
+from trailrunner.core.units import KELVIN, KG, KILOMETRE, METRE, MJ, NUM, PA, TONNE
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GREEN_TRUCK = "https://vocab.sentier.dev/products/truck-green"
@@ -596,8 +596,8 @@ class FiveBarWarmGas(Model):
     produces = [GAS]
     coverage = Coverage(
         context=(
-            ContextRange("pressure", "bar", 5.0, 5.0),
-            ContextRange("temperature", "K", 300.0, 300.0),
+            ContextRange("pressure", PA, 5e5, 5e5),
+            ContextRange("temperature", KELVIN, 300.0, 300.0),
         )
     )
 
@@ -605,17 +605,17 @@ class FiveBarWarmGas(Model):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
 
-def gas_at_both(bar, kelvin):
-    context = (Property("pressure", bar, "bar"), Property("temperature", kelvin, "K"))
+def gas_at_both(pascal, kelvin):
+    context = (Property("pressure", pascal, PA), Property("temperature", kelvin, KELVIN))
     return Demand(flow=Flow(iri=GAS, context=context), amount=10.0, unit=MJ)
 
 
-BOTH_TOLERATED = {"pressure": (0.0, 1.0, "bar"), "temperature": (0.0, 10.0, "K")}
+BOTH_TOLERATED = {"pressure": (0.0, 1e5, PA), "temperature": (0.0, 10.0, KELVIN)}
 
 
 def test_plain_context_never_moves_two_conditions_together():
     settings = ProxySettings(context_tolerance=BOTH_TOLERATED, max_steps={"context": 5})
-    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0)) is None
+    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4e5, 295.0)) is None
 
 
 def test_combined_context_conditions_move_together():
@@ -623,19 +623,19 @@ def test_combined_context_conditions_move_together():
         order=(("context.pressure", "context.temperature"),),
         context_tolerance=BOTH_TOLERATED,
     )
-    offer = provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0))
+    offer = provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4e5, 295.0))
     assert offer.resolution["relaxations"] == [
-        "context: pressure 4 bar -> 5 bar",
+        "context: pressure 400000 Pa -> 500000 Pa",
         "context: temperature 295 K -> 300 K",
     ]
-    assert offer.resolution["answered"].endswith("[pressure=5 bar, temperature=300 K]")
+    assert offer.resolution["answered"].endswith("[pressure=500000 Pa, temperature=300 K]")
 
 
 def test_a_single_condition_dimension_moves_only_that_condition():
     settings = ProxySettings(order=("context.temperature",), context_tolerance=BOTH_TOLERATED)
     gas = provider([FiveBarWarmGas()], settings=settings)
-    assert gas.offer(gas_at_both(4.0, 300.0)) is None  # pressure is off, and not named
-    offer = gas.offer(gas_at_both(5.0, 295.0))
+    assert gas.offer(gas_at_both(4e5, 300.0)) is None  # pressure is off, and not named
+    offer = gas.offer(gas_at_both(5e5, 295.0))
     assert offer.resolution["relaxations"] == ["context: temperature 295 K -> 300 K"]
 
 
@@ -649,10 +649,10 @@ def test_the_order_decides_single_before_combined():
         context_tolerance=BOTH_TOLERATED,
     )
     gas = provider([FiveBarWarmGas()], settings=settings)
-    assert gas.offer(gas_at_both(4.0, 300.0)).resolution["relaxations"] == [
-        "context: pressure 4 bar -> 5 bar"
+    assert gas.offer(gas_at_both(4e5, 300.0)).resolution["relaxations"] == [
+        "context: pressure 400000 Pa -> 500000 Pa"
     ]
-    assert len(gas.offer(gas_at_both(4.0, 295.0)).resolution["relaxations"]) == 2
+    assert len(gas.offer(gas_at_both(4e5, 295.0)).resolution["relaxations"]) == 2
 
 
 def test_a_context_condition_combines_with_location():
@@ -676,6 +676,6 @@ def test_a_context_condition_combines_with_location():
 def test_a_combined_context_entry_stays_within_each_tolerance():
     settings = ProxySettings(
         order=(("context.pressure", "context.temperature"),),
-        context_tolerance={"pressure": (0.0, 1.0, "bar"), "temperature": (0.0, 2.0, "K")},
+        context_tolerance={"pressure": (0.0, 1e5, PA), "temperature": (0.0, 2.0, KELVIN)},
     )
-    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0)) is None
+    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4e5, 295.0)) is None
