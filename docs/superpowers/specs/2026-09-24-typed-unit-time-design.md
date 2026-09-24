@@ -69,8 +69,10 @@ result out), not in the frozen dataclass constructors: building a `Flow` must
 not touch the network. An unknown unit raises a `TrailrunnerError` naming the
 model and the exchange.
 
-Units whose multiplier depends on an offset (`DEG_C`) are never converted;
-they only compare equal to themselves.
+Temperature units are never converted; they only compare equal to
+themselves. The vocab gives `DEG_C` and `K` the same quantity kind and
+multiplier 1 with **no** `conversionOffset`, so a multiplier-only conversion
+would read 10 °C as 10 K.
 
 ### Fallback: exact conversion
 
@@ -130,8 +132,11 @@ throughout — decided, not a stopgap.
   library, examples or tests demands them, and a per-tkm dataset has no
   per-tonne reading without a distance.
 - `"unit"` (pipeline infrastructure) → `NUM`.
-- `EUR` does not occur in library or model code; only in tests, which switch
-  to a vocab unit.
+- `EUR` does not occur in library or model code. Allocation properties
+  (`Exchange.properties`) keep free-text units: the vocab has no currencies,
+  and allocation only ever compares a property's unit with the same
+  property's unit on the other co-products. Strict checking covers
+  `Exchange.unit` and context-condition units.
 
 ### Files with units
 
