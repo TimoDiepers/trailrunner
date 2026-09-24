@@ -81,16 +81,22 @@ class GeneralisingProvider:
                 inner_offer = self.inner.offer(candidate, exclude=exclude)
                 if inner_offer is None:
                     continue
+                resolution = {
+                    "model": type(inner_offer.model).__name__,
+                    "relaxations": notes,
+                    "asked": describe(demand),
+                    "answered": describe(candidate),
+                }
+                conversion = inner_offer.resolution.get("conversion")
+                if conversion is not None:
+                    resolution["conversion"] = conversion
                 return Offer(
                     model=inner_offer.model,
-                    demand=candidate,
+                    # The inner offer's demand, not the candidate: it is the
+                    # candidate already converted into the model's unit.
+                    demand=inner_offer.demand,
                     tier="generalising",
-                    resolution={
-                        "model": type(inner_offer.model).__name__,
-                        "relaxations": notes,
-                        "asked": describe(demand),
-                        "answered": describe(candidate),
-                    },
+                    resolution=resolution,
                 )
         return None
 

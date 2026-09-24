@@ -8,6 +8,7 @@ from trailrunner.core.flow import Demand
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import Settings
+from trailrunner.core.units import UnitCatalog, default_catalog
 from trailrunner.orchestration.glossary import Glossary
 
 PRODUCTION_RELATIVE_TOLERANCE = 1e-9
@@ -28,7 +29,12 @@ class Runner:
     behind the same interface without the Orchestrator changing.
     """
 
-    def __init__(self, glossary: Glossary | None = None, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        glossary: Glossary | None = None,
+        settings: Settings | None = None,
+        units: UnitCatalog | None = None,
+    ) -> None:
         # `None` is a real case since phase 2: a ResolutionChain with no
         # ModelProvider has no Glossary to expose, and the Orchestrator always
         # passes `model=offer.model` into apply(), so the Runner never consults
@@ -36,6 +42,7 @@ class Runner:
         # mismatch for the next reader to trip over.
         self.glossary = glossary
         self.settings = settings if settings is not None else Settings()
+        self.units = units if units is not None else default_catalog()
 
     def apply(self, demand: Demand, model: Model | None = None) -> Result:
         if model is None:

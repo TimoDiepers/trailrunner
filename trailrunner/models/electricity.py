@@ -19,7 +19,7 @@ from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
-from trailrunner.core.units import KWH, MJ, symbol
+from trailrunner.core.units import KWH, MJ
 
 # Real BONSAI vocabulary concepts (verified live against
 # https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
@@ -138,7 +138,7 @@ class GasPower(Model):
     """
 
     produces = [ELECTRICITY_GAS]
-    coverage = Coverage(time_range=(2000, 2050))
+    coverage = Coverage(time_range=(2000, 2050), units=frozenset({ELECTRICITY_UNIT}))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.
@@ -152,14 +152,6 @@ class GasPower(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        if demand.unit != ELECTRICITY_UNIT:
-            raise ValidationError(
-                f"{type(self).__name__} was asked for {demand.unit!r} of "
-                f"{demand.flow.iri}; it converts to fuel through a fixed "
-                f"{KWH_TO_MJ} MJ/{symbol(ELECTRICITY_UNIT)} factor and only "
-                f"{symbol(ELECTRICITY_UNIT)} can be read that way"
-            )
-
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
         fuel = demand.amount * KWH_TO_MJ / float(row["efficiency"])
         here = dict(location=demand.flow.location, time=demand.flow.time)

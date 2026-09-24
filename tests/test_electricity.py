@@ -17,6 +17,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
+from trailrunner.resolution.models import ModelProvider
 
 from .conftest import write_parameter_parquet
 from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
@@ -199,13 +200,22 @@ def test_gas_gets_more_efficient_over_time(gas_params):
     assert late.biosphere[0].amount < early.biosphere[0].amount
 
 
-def test_gas_rejects_a_demand_that_is_not_in_kilowatt_hours(gas_params):
+def test_gas_refuses_a_mass_demand_as_a_unit_mismatch(gas_params):
     demand = Demand(
-        flow=Flow(iri=ELECTRICITY_GAS, location="CH", time=2030), amount=100.0, unit=MJ
+        flow=Flow(iri=ELECTRICITY_GAS, location="CH", time=2030), amount=100.0, unit=KG
     )
-    with pytest.raises(ValidationError) as raised:
-        GasPower(params=gas_params).apply(demand)
-    assert repr(MJ) in str(raised.value)
+    provider = ModelProvider(Glossary([GasPower(params=gas_params)]))
+    assert provider.offer(demand) is None
+    assert provider.explain(demand)[0] == "unit_mismatch"
+
+
+def test_gas_is_handed_kwh_for_an_mj_demand(gas_params):
+    demand = Demand(
+        flow=Flow(iri=ELECTRICITY_GAS, location="CH", time=2030), amount=3.6, unit=MJ
+    )
+    offer = ModelProvider(Glossary([GasPower(params=gas_params)])).offer(demand)
+    assert offer.demand.unit == KWH
+    assert offer.demand.amount == pytest.approx(1.0)
 
 
 # --- The traversal ---------------------------------------------------------

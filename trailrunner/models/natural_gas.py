@@ -28,12 +28,11 @@ chain terminates in a resource rather than in a cutoff, and its parameters
 say so.
 """
 
-from trailrunner.core.errors import ValidationError
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
-from trailrunner.core.units import M3, MJ, symbol
+from trailrunner.core.units import M3, MJ
 from trailrunner.models.natural_gas_pipeline_transport import (
     NATURAL_GAS_AT_PRODUCTION,
     TRANSPORT,
@@ -78,6 +77,9 @@ class NaturalGasSupply(Model):
     pipeline, the flaring to the field -- so this model contributes no
     biosphere flows at all, only the two demands that carry the gas from
     where it is to where it was asked for.
+
+    Energy content is MJ/Nm3, so the model is handed MJ: ``Coverage.units``
+    converts a kWh demand and refuses a kg one.
     """
 
     produces = [NATURAL_GAS]
@@ -88,6 +90,7 @@ class NaturalGasSupply(Model):
                 "pressure", "bar", DELIVERY_PRESSURE_BAR, DELIVERY_PRESSURE_BAR
             ),
         ),
+        units=frozenset({MJ}),
     )
 
     supports = ALLOCATION_RULES
@@ -100,13 +103,6 @@ class NaturalGasSupply(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        if demand.unit != MJ:
-            raise ValidationError(
-                f"{type(self).__name__} was asked for {demand.unit!r} of "
-                f"{demand.flow.iri}; it converts energy to volume through an "
-                f"MJ/Nm3 energy content and only {symbol(MJ)} can be read that way"
-            )
-
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
         origin = row["origin"]
 
@@ -148,19 +144,12 @@ class NaturalGasExtraction(Model):
     """
 
     produces = [NATURAL_GAS_AT_PRODUCTION]
-    coverage = Coverage(time_range=(2000, 2050))
+    coverage = Coverage(time_range=(2000, 2050), units=frozenset({M3}))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional. See NaturalGasSupply."""
 
     def apply(self, demand: Demand) -> Result:
-        if demand.unit != M3:
-            raise ValidationError(
-                f"{type(self).__name__} was asked for {demand.unit!r} of "
-                f"{demand.flow.iri}; its factors are per {symbol(M3)} and only "
-                f"{symbol(M3)} can be read that way"
-            )
-
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
         here = dict(location=demand.flow.location, time=demand.flow.time)
 

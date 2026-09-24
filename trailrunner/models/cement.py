@@ -95,7 +95,7 @@ class CementPlant(Model):
     """
 
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2026, 2050))
+    coverage = Coverage(time_range=(2026, 2050), units=frozenset({KG}))
     fleet: Fleet | None = None
     burner_pressure: float | None = None
 
@@ -271,7 +271,7 @@ class MeteredCementPlant(Model):
     """
 
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2018, 2025))
+    coverage = Coverage(time_range=(2018, 2025), units=frozenset({KG}))
 
     supports = ALLOCATION_RULES
     """Monofunctional, like :class:`CementPlant`, and for the same reason."""

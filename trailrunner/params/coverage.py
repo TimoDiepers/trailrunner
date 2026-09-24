@@ -45,6 +45,15 @@ class Coverage:
     locations: frozenset[str] | None = None
     time_range: tuple[int, int] | None = None
     context: tuple[ContextRange, ...] = ()
+    units: frozenset[str] | None = None
+    """Unit IRIs the model answers in; ``None`` means any unit, passed through.
+
+    Not a restriction on *whether* the model answers but on *what it is
+    handed*: a demand in another unit of the same quantity kind is converted
+    exactly before ``apply`` sees it (``ModelProvider``), and one of another
+    kind is not answered at all. ``covers`` does not read this field, because
+    a unit is on the demand, not on the flow.
+    """
 
     def covers(self, flow: Flow) -> bool:
         if self.locations is not None:

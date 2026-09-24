@@ -1,6 +1,5 @@
 import pytest
 
-from trailrunner.core.errors import ValidationError
 from trailrunner.core.flow import Demand, Flow
 from trailrunner.models.natural_gas import (
     CO2_FOSSIL,
@@ -15,9 +14,10 @@ from trailrunner.models.natural_gas_pipeline_transport import (
 )
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.parameter_set import ParameterSet
+from trailrunner.resolution.models import ModelProvider
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import KG, M3, MJ
+from trailrunner.core.units import KG, KWH, M3, MJ
 
 SUPPLY_ROWS = [
     {"location": "DK", "time": 2020, "origin": "NO", "transport_distance_km": 1000.0,
@@ -115,9 +115,18 @@ def test_supply_emits_nothing_itself(supply):
     assert supply.apply(gas()).biosphere == []
 
 
-def test_supply_rejects_a_unit_its_energy_content_cannot_read(supply):
-    with pytest.raises(ValidationError, match="MJ/Nm3"):
-        supply.apply(gas(unit=KG))
+def test_supply_refuses_a_mass_demand_as_a_unit_mismatch(supply):
+    provider = ModelProvider(Glossary([supply]))
+    assert provider.offer(gas(unit=KG)) is None
+    reason, detail = provider.explain(gas(unit=KG))
+    assert reason == "unit_mismatch"
+    assert "NaturalGasSupply" in detail
+
+
+def test_supply_is_handed_mj_for_a_kwh_demand(supply):
+    offer = ModelProvider(Glossary([supply])).offer(gas(amount=1.0, unit=KWH))
+    assert offer.demand.unit == MJ
+    assert offer.demand.amount == pytest.approx(3.6)
 
 
 def test_extraction_scales_both_flows_with_the_volume(extraction):
@@ -140,9 +149,10 @@ def test_extraction_is_a_leaf(extraction):
     assert extraction.apply(wellhead(time=2020)).technosphere == []
 
 
-def test_extraction_rejects_a_unit_its_factors_cannot_read(extraction):
-    with pytest.raises(ValidationError, match="m3"):
-        extraction.apply(wellhead(unit=KG, time=2020))
+def test_extraction_refuses_a_mass_demand_as_a_unit_mismatch(extraction):
+    provider = ModelProvider(Glossary([extraction]))
+    assert provider.offer(wellhead(unit=KG, time=2020)) is None
+    assert provider.explain(wellhead(unit=KG, time=2020))[0] == "unit_mismatch"
 
 
 def test_the_two_models_chain_through_the_glossary(supply, extraction):

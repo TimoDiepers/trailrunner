@@ -1,45 +1,66 @@
 """Tier 1: the models themselves. An exact product IRI, within coverage."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from trailrunner.core.flow import Demand
 from trailrunner.core.model import Model
+from trailrunner.core.units import UnitCatalog, default_catalog
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.resolution.chain import Offer, describe
 
 
 class ModelProvider:
-    """A Provider over a Glossary. Semantics unchanged from v1.
+    """A Provider over a Glossary: exact product IRI, within coverage.
 
-    A thin wrapper rather than a rewrite: ``Glossary`` stays in
-    ``orchestration``, keeps its public API, and works standalone for anyone
-    who wants tier 1 alone.
+    Also where a demand meets the unit its model reasons in. A model that
+    declares ``Coverage.units`` is handed the demand in one of them: converted
+    exactly when the quantity kind matches (1 t becomes 1000 kg), refused when
+    it does not. The conversion is recorded under ``"conversion"`` and is not
+    a proxy -- it loses nothing -- so the tier stays ``"model"``.
     """
 
-    def __init__(self, glossary: Glossary) -> None:
+    def __init__(self, glossary: Glossary, units: UnitCatalog | None = None) -> None:
         self.glossary = glossary
+        self.units = units if units is not None else default_catalog()
 
     def offer(self, demand: Demand, exclude: Sequence[Model] = ()) -> Offer | None:
         model = self.glossary.resolve(demand.flow, exclude=exclude)
         if model is None:
             return None
-        return Offer(
-            model=model,
-            demand=demand,
-            tier="model",
+        answered, conversion = self._in_model_unit(demand, model)
+        if answered is None:
+            return None
+        resolution = {
+            "model": type(model).__name__,
             # ``asked`` and ``answered`` are identical here, and said anyway:
             # they are the two keys a reader compares across tiers, and one
             # that is present only when it differs is a key whose absence has
             # to be interpreted. See ``chain``'s module docstring.
-            resolution={
-                "model": type(model).__name__,
-                "asked": describe(demand),
-                "answered": describe(demand),
-            },
-        )
+            "asked": describe(demand),
+            "answered": describe(answered),
+        }
+        if conversion is not None:
+            resolution["conversion"] = conversion
+        return Offer(model=model, demand=answered, tier="model", resolution=resolution)
+
+    def _in_model_unit(self, demand: Demand, model: Model) -> tuple[Demand | None, str | None]:
+        accepted = model.coverage.units if model.coverage is not None else None
+        if accepted is None or demand.unit in accepted:
+            return demand, None
+        for target in sorted(accepted):
+            if self.units.convertible(demand.unit, target):
+                factor = self.units.factor(demand.unit, target)
+                converted = replace(demand, amount=demand.amount * factor, unit=target)
+                note = (
+                    f"unit: {self.units.symbol(demand.unit)} -> "
+                    f"{self.units.symbol(target)} ×{factor:g}"
+                )
+                return converted, note
+        return None, None
 
     def explain(self, demand: Demand, exclude: Sequence[Model] = ()) -> tuple[str, str] | None:
-        """A coverage miss, or nothing.
+        """A unit mismatch, a coverage miss, or nothing.
 
         ``exclude`` is applied here too. A credit whose only producer is the
         model that minted it was not refused for coverage — it was refused
@@ -48,7 +69,20 @@ class ModelProvider:
         a coverage that is already right. With every declaring model excluded
         there is no near miss to report, so the chain falls through to
         ``no_model_found``: nobody *else* makes this.
+
+        A unit mismatch is checked first because it is the more specific
+        answer: the model covers this flow and would answer it, in a unit the
+        demand cannot be converted into.
         """
+        model = self.glossary.resolve(demand.flow, exclude=exclude)
+        if model is not None:
+            accepted = sorted(model.coverage.units)  # non-None, or offer() would have answered
+            return (
+                "unit_mismatch",
+                f"{type(model).__name__} answers {demand.flow.iri} in "
+                f"{', '.join(self.units.symbol(unit) for unit in accepted)} but the demand is in "
+                f"{self.units.symbol(demand.unit)}, a different quantity",
+            )
         near_misses = self.glossary.declared_models(demand.flow, exclude=exclude)
         if not near_misses:
             return None
