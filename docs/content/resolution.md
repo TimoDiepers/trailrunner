@@ -6,73 +6,93 @@ tags:
 
 # Resolution
 
-A demand for a product IRI can be answered three ways, tried in order: an exact model
-match, a generalised demand, or a dataset borrowed from a curated pack. Passing a
-[`ResolutionChain`](../api/resolution.md) to [`Orchestrator`](../api/orchestrator.md) in
-place of a bare [`Glossary`](../api/glossary.md) opts into all three tiers you register;
-`Orchestrator(Glossary([...]))` still works exactly as before, with no chain in sight.
+Every demand the traversal pops has to be answered by something. A
+[`ResolutionChain`](../api/resolution.md) asks its providers in order and takes the first
+offer:
+
+| Tier | Provider | Answers with | Recorded as |
+| --- | --- | --- | --- |
+| 1 | `ModelProvider` | a model that produces this exact IRI and covers this place and year | `[model: ...]` |
+| 2 | `GeneralisingProvider` | a model found by relaxing the demand: a wider region, a nearby year, a broader product | `[proxy: ...]` |
+| 3 | `BackgroundProvider` | a row of coefficients borrowed from a curated background pack | `[background: ...]` |
+
+Only tier 1 is an exact answer. Every later tier is a **concession**, and it writes what it
+conceded into the node's resolution, `report.proxies` and `report.tree()`.
+
+`Orchestrator(glossary)` is shorthand for a chain with tier 1 alone. That is what the
+[CLI](getting_started/cli.md) uses, and why it never produces a proxy.
+
+## Building a chain
+
+This is the chain the [5-minute tour](../showcase.md) runs:
 
 ```python
-from trailrunner.resolution import ModelProvider, ResolutionChain
+from trailrunner import Glossary, LocationHierarchy, ModelProvider, Orchestrator, ResolutionChain
+from trailrunner.resolution import (
+    BackgroundPack,
+    BackgroundProvider,
+    GeneralisingProvider,
+    PystTaxonomy,
+)
 
-chain = ResolutionChain([
-    ModelProvider(glossary),          # tier 1: the models
-    GeneralisingProvider(...),        # tier 2: relax the demand
-    BackgroundProvider(pack),         # tier 3: borrow a dataset, and say so
-])
+hierarchy = LocationHierarchy({"CH": "RER", "DK": "RER", "FR": "RER", "RER": "GLO"})
+
+tier1 = ModelProvider(Glossary(models))
+tier2 = GeneralisingProvider(
+    tier1,
+    hierarchy=hierarchy,
+    taxonomy=PystTaxonomy("examples/pyst_cache.json"),  # offline: answers from the file only
+)
+tier3 = BackgroundProvider(
+    BackgroundPack.from_parquet("examples/background_pack.parquet", hierarchy=hierarchy)
+)
+
+report = Orchestrator(ResolutionChain([tier1, tier2, tier3])).calculate(demand)
 ```
 
-## Tier order is the practitioner's to declare
+**The tier order is yours to declare.** `ResolutionChain` doesn't reorder anything, and no
+tier knows the others exist. Whether a relaxed demand beats a borrowed dataset, or the
+other way round, is a modelling decision. A study that prefers the background tier builds
+the chain in that order.
 
-Nothing in `ResolutionChain` picks this order for you: it asks each provider in turn and
-takes the first offer. That is deliberate. Whether a widened region is preferable to a
-borrowed background row — or the other way around — is a modelling decision, not something
-a library should default silently. A study that wants the background tier tried before
-generalisation just builds the chain in that order; the code does not care, and neither
-tier knows the other exists.
-
-`explain()` is reused the same way when every tier declines: tier 1's coverage misses are
-tried first, because "no model produces this" is more useful to a reader than
-"generalisation ran out" — the two rarely point at the same fix.
+When every tier declines, the demand becomes a cutoff, and the chain asks each tier in the
+same order why it declined. Tier 1 reports `coverage_excluded` if a model declares the
+product but its coverage misses. Tier 2 reports `generalisation_exhausted` if it had
+candidates and none matched. Otherwise the reason is `no_model_found`.
 
 ## Tier 2: generalising a demand
 
-[`GeneralisingProvider`](../api/resolution.md) relaxes one dimension of a demand and
-re-asks tier 1. [`ProxySettings`](../api/settings.md) governs which dimensions are tried,
-in what order, and how far — a practitioner's budget, not a library default.
-
-### Location
-
-Widens along a [`LocationHierarchy`](../api/location.md), most specific step first:
+[`GeneralisingProvider`](../api/resolution.md) relaxes one dimension of the demand at a
+time and asks tier 1 again. [`ProxySettings`](../api/settings.md), on `Settings.proxy`
+or passed as `settings=`, controls which dimensions are tried, in what order, and how far:
 
 ```python
-from trailrunner.core.flow import Demand, Flow
-from trailrunner.params.location import LocationHierarchy
+from trailrunner import ProxySettings
 
-hierarchy = LocationHierarchy({"CH": "RER", "RER": "GLO"})
-# a demand at CH, with no CH model registered, is re-asked at RER, then GLO
+ProxySettings(
+    order=("time", "location", "product"),                 # the default order
+    max_steps={"time": 1, "location": 3, "product": 2},    # the default budgets
+    time_tolerance=5,                                      # years
+)
 ```
 
-The resolution records the note itself, e.g. `"location: CH -> RER"`, not just that a
-relaxation happened.
+A dimension missing from `max_steps`, or set to 0, is never relaxed. A step means the same
+in every dimension: one level up the location hierarchy, one level up the taxonomy, or one
+year snapped to. Each candidate that answers records a note such as
+`"location: CH -> RER"`, and it shows up in the tree as `[proxy: location: CH -> RER]`.
 
-### Time
+**Location** widens along the [`LocationHierarchy`](../api/location.md), most specific
+first. With `{"CH": "RER", "RER": "GLO"}`, a demand at `CH` with no `CH` model is asked
+again at `RER`, then at `GLO`.
 
-Snaps to the nearest year some registered model actually declares coverage for, within
-`ProxySettings.time_tolerance` — never further, and never to a year nothing claims:
+**Time** snaps to the nearest year that some model declaring the product actually covers,
+within `time_tolerance`. A demand for 2030 with a model covering 2035–2050 and a tolerance
+of 5 is asked again for 2035. Years nothing claims are never tried.
 
-```python
-# a demand at time=2030 with a model covering 2035-2050 and tolerance=5
-# is re-asked at time=2035, not simply "the closest year in general"
-```
-
-### Product
-
-Walks a [`Taxonomy`](../api/resolution.md)'s `skos:broader` relation upward,
-breadth-first: every concept one level up is tried before any concept two levels up, so
-"truck, green" generalises to "truck" before anything wider and the most specific model
-still standing wins. A concept with two broader concepts contributes both, and both are
-one level up.
+**Product** climbs a [`Taxonomy`](../api/resolution.md)'s `skos:broader` relation,
+breadth-first: every concept one level up is tried before any concept two levels up, so the
+most specific model still standing wins. A concept with two broader concepts contributes
+both, at the same level.
 
 ```python
 from trailrunner.resolution import StaticTaxonomy
@@ -81,141 +101,108 @@ taxonomy = StaticTaxonomy({
     "https://vocab.sentier.dev/products/truck-green": ["https://vocab.sentier.dev/products/truck"],
     "https://vocab.sentier.dev/products/truck": ["https://vocab.sentier.dev/products/road-vehicle"],
 })
-# with max_steps={"product": 2}, a demand for "truck, green" is re-asked at
-# "truck", then at "road-vehicle"
+# with max_steps={"product": 2}, a demand for truck-green is asked again
+# as truck, then as road-vehicle
 ```
 
-A step means the same thing here as everywhere else: `max_steps["product"]` is how many
-*levels up the vocabulary* the walk may climb, exactly as `max_steps["location"]` is how
-many levels up the hierarchy the region may widen. Real vocabulary chains are several
-levels deep — `fi_17100 → fi_1710 → fi_171` is three — and a budget of 2 reaches the
-second of them.
+`StaticTaxonomy` is for tests and hand-written hierarchies. In a real study,
+[`PystTaxonomy`](#the-vocabulary-cache-and-offline-runs) reads the sentier vocabulary.
 
-In production this is backed by [`PystTaxonomy`](../api/resolution.md) instead of a
-hand-written map — see [below](#the-pyst-cache-and-offline-runs).
+The tour shows what this costs. The cement plant demands BONSAI `fi_37420` ("Quicklime,
+slaked lime and hydraulic lime"), which nobody produces. Two levels up is `fi_374`
+("Plaster, lime and cement"), and a supplier there answers:
 
-### Relaxations do not compose
+```text
+10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [proxy: product: fi_37420 -> fi_374]
+```
 
-Each dimension is tried starting from the *original* demand, in the declared order. A
-demand that needs both a wider region and an earlier year is not answered — not because
-that combination is impossible to search, but because the composed search is a
-cross-product whose preference order (wider-region-first? earlier-year-first?) is a second
-normative choice, and inventing one silently is exactly what this tier exists to prevent.
-The demand falls through instead, and shows up as a `generalisation_exhausted` cutoff:
-deferred, not forgotten, and visible either way.
+That is the best answer available, and a poor one in substance: `fi_374` averages over a
+category that contains the cement being made. The concession is written at the node so a
+reader can judge it.
 
-That reason is only given when candidates actually existed and were tried — its detail
-counts them, e.g. `candidates tried: location(2), product(3)`. A demand with no location,
-no year and no taxonomy behind it has nothing to relax whatever `max_steps` permits, and
-this tier says nothing at all about it, so the chain reports `no_model_found`: the reader
-is pointed at a missing model rather than at a budget that could not have helped.
+### Relaxations don't compose
+
+Each dimension is tried starting from the *original* demand. A demand that needs both a
+wider region *and* a different year isn't answered. The combined search would need a second
+preference order (region first or year first?), and choosing one silently is exactly what
+this tier avoids. Such a demand falls through and shows up as a `generalisation_exhausted`
+cutoff whose detail counts the candidates tried, e.g. `candidates tried: location(2),
+product(3)`.
+
+A demand with nothing to relax (no location, no year, no taxonomy behind it) gets no
+explanation from this tier, so it is reported as `no_model_found`. That points the reader
+at a missing model rather than at a budget that couldn't have helped.
 
 ## Tier 3: borrowing from a background pack
 
 [`BackgroundProvider`](../api/resolution.md) is the last resort. It answers with a row of
-coefficients — exactly the thing trailrunner exists to avoid modelling as a black box — so
-every node it answers is labelled `linear_background`, and the label carries enough detail
-that a reader never has to guess how much of the upstream that row actually covers.
+per-unit coefficients, the kind of static dataset trailrunner otherwise replaces with
+models, so every node it answers says so, including how much of the upstream the row
+actually covers.
 
-### The pack's format
+### The pack format
 
-A [`BackgroundPack`](../api/resolution.md) loads from a long/tidy parquet file, one row per
+A [`BackgroundPack`](../api/resolution.md) loads from a long parquet table, one row per
 `(product, location, dataset, flow)`:
 
-| column | meaning |
+| Column | Meaning |
 | --- | --- |
 | `product_iri`, `product_unit` | the demand this row answers |
-| `location` | looked up through a `LocationHierarchy`, same as tier 2 |
-| `dataset` | the human-readable name of the borrowed process |
-| `source` | a citation — a dataset UUID, a DOI, whatever traces the row back to where it came from |
-| `basis` | `"cumulative"` or `"unit_process"` — see below |
+| `location` | looked up through a `LocationHierarchy`, ending at its root |
+| `dataset` | the name of the borrowed process |
+| `source` | a citation: dataset UUID, DOI, whatever traces the row back |
+| `basis` | `"cumulative"` or `"unit_process"`, see below |
 | `flow_iri`, `flow_unit`, `amount` | one biosphere exchange, **per unit of product** |
 
-```python
-from trailrunner.resolution import BackgroundPack, BackgroundProvider
+The lookup key is `(product_iri, product_unit, location)`. Two datasets for one key raise
+[`DuplicateBackgroundEntry`](../api/errors.md) on load, naming both, since there is no rule
+to pick between them. A borrowed row is a `BackgroundDataset` model that supports every
+allocation rule and never demands anything upstream.
 
-pack = BackgroundPack.from_parquet("examples/background_pack.parquet")
-provider = BackgroundProvider(pack)
-```
+### `basis`: complete or not
 
-Two things are refused on load rather than carried into a run. A `basis` that is neither
-`"cumulative"` nor `"unit_process"` raises `ValueError` where it is written, because
-`complete` is derived from it and an unrecognised word would quietly read as an incomplete
-borrow nobody declared. And two datasets for one `(product_iri, product_unit, location)`
-raise [`DuplicateBackgroundEntry`](../api/errors.md), naming both: that triple is the
-pack's only lookup key, there is no rule that picks between two answers, and keeping
-whichever row came last would put an unexplained number in the inventory *and* label it
-with the other dataset's name in the very field a reader checks it against. It is the same
-refusal `Glossary.resolve` makes with `AmbiguousModelMatch` and a method file makes with
-`DuplicateFactor`.
-
-### `basis`, and what a node's resolution says about it
-
-A borrowed row is one of two things, and a reader needs to know which:
-
-- **`"cumulative"`** — the whole upstream of the product is already netted into these
-  exchanges. This is the shape a Brightway-backed provider would return from
-  `lca.inventory`; the subtree genuinely terminates, and the node's resolution says
-  `"complete": True`.
-- **`"unit_process"`** — these are the dataset's own **direct** exchanges only; its
-  technosphere inputs were never resolved. The subtree still terminates — trailrunner has
-  no matrix to solve those inputs with — but its upstream is **missing**, not merely
-  deferred, and the resolution says `"complete": False`.
-
-Both terminate with no technosphere children; only `"cumulative"` may honestly claim
-`complete`. `examples/background_pack.parquet` (built by `dev/build_background_pack.py`
-from real EcoSpold 1 process data) is entirely `"unit_process"`, and several of its rows
-show why the distinction matters: a borrowed "steel" or "cement" row can carry *zero*
-biosphere exchanges of the tracked substances, not because the real process emits nothing,
-but because everything it emits is embodied in a technosphere input this tier does not
-resolve. A cutoff at that point would be visible; a `unit_process` row that looked complete
-would not be, which is exactly what `complete: False` prevents.
-
-`report.tree()` tags the two differently:
+- **`cumulative`**: the whole upstream is already summed into these exchanges, the shape a
+  Brightway `lca.inventory` would give. The subtree genuinely ends here, and the resolution
+  says `"complete": True`.
+- **`unit_process`**: only the dataset's own **direct** emissions. Its inputs were never
+  resolved (trailrunner has no matrix to solve them with), so the upstream is **missing**,
+  and the resolution says `"complete": False`.
 
 ```text
-1 kg natural-gas @US/-  [background: unit_process, incomplete]
+0.1 kg steel-low-alloyed @DK/2026  [background: unit_process, incomplete]
 1 kg clinker @GLO/-  [background: cumulative]
 ```
 
-### A borrowed dataset may not be the product you asked for
+`examples/background_pack.parquet`, built by `dev/build_background_pack.py` from EcoSpold
+1 process data, is entirely `unit_process`. Some of its rows carry *zero* tracked emissions,
+not because the process emits nothing, but because everything it emits sits in inputs this
+tier doesn't resolve. `complete: False` keeps that from looking like a finished answer.
 
-Some products have no dataset under their own name that carries any of the tracked
-elementary flows directly — the literally-named dataset turns out to be a further
-blending or processing step with nothing but technosphere inputs one level up (see
-`dev/build_background_pack.py` for the full account). For those, the pack borrows the
-nearest upstream dataset that *does* emit directly instead: as of the current pack,
-**clinker** answers a demand for cement, **liquid aluminium at plant** answers primary
-aluminium, and **converter/electric steel** answers "steel, low-alloyed". These are near
-neighbours of the product demanded, not the product under its own name.
+!!! warning "A borrowed dataset may not be the product you asked for"
 
-`resolution["dataset"]` always names the dataset that actually answered the demand, so
-this is never hidden — but a reader trusting a number without checking that field would
-not know the row came from a different-sounding process. Before trusting a borrowed
-number, check `resolution["dataset"]` (or the corresponding line in `report.tree()`)
-against the product you actually demanded.
+    Some products have no dataset under their own name that emits anything directly. For
+    those, the shipped pack borrows the nearest upstream dataset that does: **clinker**
+    answers cement, **liquid aluminium at plant** answers primary aluminium, and
+    **converter/electric steel** answers low-alloyed steel. `resolution["dataset"]`
+    always names the dataset that actually answered. Check it before trusting a borrowed
+    number.
 
-### What a resolution says, in every tier
+## What a resolution records
 
-A resolution dict is read by people and by code that never knows which tier wrote it, so
-four keys mean the same thing in all three:
+Every node's resolution is a dict. Four keys mean the same thing in every tier:
 
-| key | meaning |
+| Key | Meaning |
 | --- | --- |
-| `tier` | `"model"`, `"generalising"` or `"background"` — copied from `Offer.tier`, never set independently |
-| `model` | class name of the model that produced the Result (tier 3's is `BackgroundDataset`) |
-| `asked` | the demand as it came in: full IRI, location and year |
-| `answered` | the demand the model was actually applied to — equal to `asked` where nothing was relaxed, rather than absent |
+| `tier` | `"model"`, `"generalising"` or `"background"` |
+| `model` | class name of the model that produced the result (`BackgroundDataset` for tier 3) |
+| `asked` | the demand as it came in: full IRI, `@location/year` |
+| `answered` | the demand the model was applied to: equal to `asked` unless something was relaxed |
 
-Each tier then adds its own: `relaxations` for tier 2, and `dataset`, `source`, `basis`
-and `complete` for tier 3. The relaxation notes are written for a `tree()` line, so a
-product note shortens both IRIs to their last segment; the full pair is in `asked` and
-`answered`, and so in `report.proxies` and the log parquet.
+Tier 2 adds `relaxations`. Tier 3 adds `dataset`, `source`, `basis`, `complete`,
+`location_used` and `location_fallback`.
 
-### Reading `report.proxies`
-
-Every node whose resolution's `tier` is not `"model"` — a generalised match or a borrowed
-one — lands in `report.proxies`, keyed by node id, holding the full resolution dict:
+`report.resolutions` holds this for every node. `report.proxies` holds the subset whose
+tier isn't `"model"`:
 
 ```python
 for node_id, resolution in report.proxies.items():
@@ -223,94 +210,66 @@ for node_id, resolution in report.proxies.items():
         print(node_id, "incomplete borrow:", resolution["dataset"])
 ```
 
-`report.summary()` reports the count; `report.tree()` shows where in the traversal each one
-sits, and reads a borrow's incompleteness from the same `complete` key `summary()` counts,
-so the two views cannot disagree.
+`report.summary()` counts proxies and incomplete borrows (`5 proxies (4 incomplete)`), and
+`report.tree()` shows where each one sits. Both read the same keys, so they can't disagree.
 
-Every `Offer` carries its tier into its resolution, so a provider cannot answer with a
-concession the report then prints as an exact match — the failure that made this promise
-worth checking. A resolution dict written straight into a `Log` by hand with no `tier` key
-at all is still read as `"model"` in both views: that default is uniform, not inferred, and
-anything trailrunner's own chain produces says which tier it came from outright.
+## The vocabulary cache and offline runs
 
-## The PyST cache and offline runs
-
-`PystTaxonomy` answers `broader()` from a JSON cache file first, and only calls the network
-(`https://vocab.sentier.dev`, via [`default_client()`](../api/resolution.md)) on a genuine
-miss — and a run built without a client at all just gets `[]` for anything not already
-cached, which the generalising tier reads as "nothing to relax to," not an error. The cache
-is not an optimisation: it is committed beside the examples it serves precisely so a run
-reproduces on a plane, in a lecture hall, or two years from now, without the network or a
-token. `PYST_AUTH_TOKEN` is read from the environment, used only in the request header, and
-never written to the cache file — nothing under version control should ever carry it.
+[`PystTaxonomy`](../api/resolution.md) answers `broader()` from a JSON cache file first,
+and only calls `https://vocab.sentier.dev` on a miss, and only if it was given a client. The
+cache is committed beside the study it serves, so a run reproduces without a network or a
+token:
 
 ```python
 from trailrunner.resolution import PystTaxonomy, default_client
 
-# offline: answers only from examples/pyst_cache.json, [] on a genuine miss
+# offline: answers only from the cache, [] for anything not in it
 taxonomy = PystTaxonomy("examples/pyst_cache.json")
 
-# online, to warm the cache with a new IRI (see dev/warm_pyst_cache.py):
+# online, to warm the cache with new IRIs (dev/warm_pyst_cache.py does this)
 taxonomy = PystTaxonomy("examples/pyst_cache.json", client=default_client())
+taxonomy.broader(new_iri)   # fetched and cached in memory
+taxonomy.save()             # written back to the JSON file
 ```
 
-### A failure degrades the dimension, it does not end the run
+`PYST_AUTH_TOKEN` is read from the environment, sent only in the request header, and never
+written to the cache.
 
-An unreachable service, a request that times out, a body that is not JSON: each answers
-`[]`, the same thing an offline run gets, and nothing is written to the cache, so a later
-run asks again rather than inheriting one outage as a fact about the vocabulary. A
-traversal must not die because one of three relaxation dimensions could not be reached.
+A network failure, a timeout or a non-JSON body degrades the product dimension instead of
+ending the run. `broader()` answers `[]` and nothing is cached, so a later run asks again.
+Only a response of the wrong shape raises, because that means the API changed.
 
-The one failure that *is* raised is a response of the wrong shape — the relationships
-endpoint answers a list, and something else means the API changed under this client, which
-is a bug to fix rather than a dimension to do without.
-
-### "No such concept" is not "no parents"
-
-`GET /api/v1/concepts/<iri>` answers **404** for an IRI the vocabulary does not have, while
-`GET /api/v1/relationships/?iri=<iri>` answers **200 with an empty list** for that same
-IRI — exactly as it does for a real top concept that genuinely has nothing above it. So
-`broader()` alone cannot tell the two apart, and an invented product IRI relaxes nothing
-while appearing to work.
-
-`broader()` still answers `[]` for both, because a missing concept should degrade the
-product dimension and not kill a traversal. The difference is recorded rather than
-discarded:
+**"No such concept" isn't "no parents".** The vocabulary answers an unknown IRI and a real
+top-level concept the same way, with an empty parent list. `broader()` returns `[]` for
+both, and `known()` tells them apart:
 
 ```python
-taxonomy.broader("https://vocab.sentier.dev/products/electricity")  # []
-taxonomy.known("https://vocab.sentier.dev/products/electricity")    # False -- not a concept
-taxonomy.unknown_iris                                               # every 404 this instance hit
+taxonomy.broader(iri)   # [] either way
+taxonomy.known(iri)     # False: not a concept. None: nobody could check (offline, cached, failure)
+taxonomy.unknown_iris   # every IRI this instance found missing
 ```
 
-`known()` answers `None` when nobody could ask — an offline run, a cache hit, a client that
-cannot check, a network failure while checking — because "nobody asked" is not "the
-vocabulary says no". `dev/warm_pyst_cache.py` prints the unknown IRIs in a block nobody can
-miss, and caches nothing for them: an IRI that is not a concept must not end up in a
-committed cache file looking like one.
+`dev/warm_pyst_cache.py` prints unknown IRIs prominently and caches nothing for them, so an
+invented IRI never ends up in a committed cache looking like a real concept.
 
-### Names: the other half of a concept
+### Names from the same vocabulary
 
-The same vocabulary that says what generalises to what also says what each concept is
-*called*. [`PystLabels`](../api/resolution.md) reads `skos:prefLabel` on the same bargain as
-the taxonomy — cache first, network only on a miss, committed beside the study — and
-[`Report.tree(labels=...)`](../api/report.md) prints those names instead of the IRI's last
-segment:
+[`PystLabels`](../api/resolution.md) reads each concept's `skos:prefLabel` on the same
+terms (cache first, network only on a miss), and
+[`Report.tree(labels=...)`](reports.md#summary-and-tree) prints those names instead of IRI
+segments:
 
 ```python
 from trailrunner.resolution import PystLabels
 
-vocab = PystLabels("examples/pyst_labels.json")  # offline: no client, no token
+vocab = PystLabels("examples/pyst_labels.json")
 vocab.label("https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9")
 # 'heat from main producers of heat'
 
 print(report.tree(labels=vocab.label))
 ```
 
-A label is presentation, so every way of not having one — offline, a network failure, a
-concept with no English label, an IRI the vocabulary does not have — answers `None`, and
-the tree falls back to the IRI's last segment. That fallback is informative in its own
-right: a line that still reads as an identifier is a flow no vocabulary concept backs, which
-is the same reason the product dimension cannot relax it. Ask `known()` when you need the
-difference stated rather than inferred; `dev/warm_pyst_cache.py` warms both caches in one
-run.
+A missing label (offline, a failure, no English label, not a concept) answers `None`, and
+the tree falls back to the IRI's last segment. So a tree line that still reads like an
+identifier is a flow no vocabulary concept backs, which is also why the product dimension
+can't relax it.

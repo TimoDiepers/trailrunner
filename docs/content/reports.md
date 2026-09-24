@@ -6,48 +6,131 @@ tags:
 
 # Reading a Report
 
-`Orchestrator.calculate()` returns a [`Report`](../api/report.md). The numbers are only part
-of it: the unresolved list and the provenance table say how much the numbers are worth.
+`Orchestrator.calculate()` returns a [`Report`](../api/report.md). The inventory is only
+part of it. The unresolved list, the proxies and the provenance say how much the inventory
+is worth.
+
+| Attribute | What it holds |
+| --- | --- |
+| `inventory` | `{(Flow, unit): amount}`, biosphere flows summed over the whole traversal |
+| `unresolved` | every demand that never became inventory, with its reason |
+| `provenance` | `{node_id: dict}`, what each node's model recorded about its parameters |
+| `resolutions` | `{node_id: dict}`, which tier answered each node and what it conceded |
+| `proxies` | the subset of `resolutions` that weren't exact model matches |
+| `attribution` | `{node_id: dict}`, the allocation rule applied to each node |
+| `attribution_settings` | the run's `AttributionSettings` |
+| `nodes`, `edges` | the traversal graph |
+| `warnings` | `[(message, node_id)]`, e.g. a flow repeating on its own path |
+| `truncated` | `True` if `max_depth` or `max_nodes` was hit |
+| `log` | the underlying [`Log`](../api/log.md), for writing to parquet |
+
+## `summary()` and `tree()`
+
+Start here. Both return a string instead of printing, so they can be tested or written to
+a file:
+
+```python
+print(report.summary())
+print()
+print(report.tree())
+```
+
+Here is the shipped cement chain for 1 t in Denmark in 2030, with tier 1 only:
+
+```text
+11 nodes, 11 inventory entries
+12 unresolved (no_model_found: 12)
+0 proxies
+attribution: allocation=none, capital=per_output
+
+1000 kg fi_37440 @DK/2030  [model: CementPlant]
+  2475 MJ fi_12020 @DK/2030  [model: NaturalGasSupply]
+    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+    ...
+  100 kWh fi_17100 @DK/2030  [model: GridElectricity]
+    8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
+    ...
+    84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
+    12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
+  1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
+  10 kg fi_37420 @DK/2030  [cutoff: no_model_found]
+```
+
+**`summary()`** gives, in order: node and inventory counts, unresolved demands broken down
+by reason, the proxy count (with incomplete borrows called out), the run's attribution
+rules, and then, only when they apply, a truncation line and a warning count. Check these
+before trusting the inventory.
+
+**`tree()`** is the traversal as indented text. Each line is
+`amount unit product @location/year  [how it was answered]`:
+
+| Tag | Meaning |
+| --- | --- |
+| `[model: CementPlant]` | an exact match in tier 1 |
+| `[proxy: product: fi_37420 -> fi_374]` | answered by relaxing the demand, naming what was relaxed |
+| `[background: cumulative]` | borrowed from a background pack, upstream included |
+| `[background: unit_process, incomplete]` | borrowed, direct emissions only, upstream missing |
+| `[cutoff: no_model_found]` | nothing answered, with the reason |
+
+A cutoff sits under the node that demanded it, because that's where in the chain it
+happened. See [Resolution](resolution.md) for the tiers.
+
+The product is the last segment of its IRI. Pass `labels=`, a dict or any callable taking
+an IRI, to print names instead. [`PystLabels`](../api/resolution.md) supplies them from a
+committed cache, and anything without a name falls back to the segment:
+
+```python
+from trailrunner.resolution import PystLabels
+
+print(report.tree(labels=PystLabels("examples/pyst_labels.json").label))
+# 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, ... @DK/2030  [model: CementPlant]
+#   2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+```
 
 ## `inventory`
 
 Biosphere exchanges summed over the whole traversal, keyed by `(Flow, unit)`. The `Flow`
-keeps its location and time, so emissions at different places or years stay apart.
+keeps its location and year, so emissions at different places or times stay separate:
 
 ```python
 for (flow, unit), amount in report.inventory.items():
-    print(f"{amount:>12.2f} {unit}  {flow.iri}  {flow.location} {flow.time}")
+    print(f"{amount:>12.4g} {unit}  {flow.iri}  {flow.location} {flow.time}")
 ```
+
+Two entries for the same substance in different units also stay separate. Nothing is
+converted.
 
 ## `unresolved`
 
-Every demand that never became inventory, with the reason it stopped:
+Every demand that never became inventory, as an `UnresolvedRecord` with `demand`,
+`reason`, `detail`, `depth` and `parent`:
 
 | `reason` | What happened | What to do |
 | --- | --- | --- |
-| `no_model_found` | no registered model declares this product IRI | write or register a model |
-| `coverage_excluded` | a model declares it, but its `Coverage` rejected this location or year; `detail` names the model | widen the coverage, or fix the flow's location/year |
-| `max_depth` | the traversal hit the depth limit here | raise `max_depth` |
-| `max_nodes` | the node budget ran out; the rest of the queue was drained into this list | raise `max_nodes` |
+| `no_model_found` | no registered model declares this product | write or register a model, or add a resolution tier |
+| `coverage_excluded` | a model declares it, but its `Coverage` rejects this location or year. `detail` names the model | widen the coverage, or check the flow's location and year |
+| `generalisation_exhausted` | tier 2 tried relaxing the demand and nothing matched. `detail` counts the candidates | raise `ProxySettings.max_steps`, or model it |
+| `max_depth` | the branch reached the depth limit | raise `max_depth` |
+| `max_nodes` | the node budget ran out, and the rest of the queue was drained here | raise `max_nodes` |
 
 ```python
 for record in report.unresolved:
-    line = f"{record.reason}: {record.demand.amount:.1f} {record.demand.unit} of {record.demand.flow.iri}"
+    line = f"{record.reason}: {record.demand.amount:.4g} {record.demand.unit} of {record.demand.flow.iri}"
     if record.detail:
-        line += f" — {record.detail}"
+        line += f" ({record.detail})"
     print(line)
 ```
 
-A demand nobody models is reported, never silently treated as zero. An inventory with a
-long unresolved list is an incomplete inventory, and the report says so out loud.
+A demand nobody models is reported, never counted as zero. An inventory with a long
+unresolved list is incomplete, and the report says so.
 
 ## `provenance`
 
-Per node id, whatever that node's model recorded — for models that pass their parameter row
-through, which location and year were actually used and whether a fallback or interpolation
-happened. The model's record and nothing else: how the model was *chosen* is in
-`resolutions`, and the run's normative choices are in `attribution`, because the model
-neither made nor saw them:
+Per node, whatever that node's model recorded: for a model that passes its parameter row
+through, which location and year were used and whether a fallback or interpolation
+happened. Only the model's own record goes here. How the model was *chosen* is in
+`resolutions`, and the run's normative choices are in `attribution`, since the model
+neither made nor saw them.
 
 ```python
 for node_id, entries in report.provenance.items():
@@ -55,117 +138,59 @@ for node_id, entries in report.provenance.items():
         print(node_id, entries)
 ```
 
+## `resolutions` and `proxies`
+
+Every node's resolution: `tier`, `model`, `asked`, `answered`, plus `relaxations` (tier
+2) or `dataset`, `source`, `basis`, `complete` (tier 3). `proxies` keeps only the nodes
+whose tier isn't `"model"`. [Resolution](resolution.md#what-a-resolution-records) covers
+the keys.
+
 ## `nodes` and `edges`
 
-The traversal graph as it happened. `nodes` are the `NodeRecord`s in visit order, each with
-its `demand`, its `result`, its `depth` and its `parent`; `edges` are `(parent, child)` id
-pairs. Every visit is its own node — nodes are never merged, so the same process
-appearing twice in a supply chain appears twice here.
-
-## `summary()` and `tree()`
-
-Both return a string rather than printing, so they are testable and a caller can write them to
-a file.
-
-`tree()` is the traversal as indented text. Every line says how honestly that node was
-answered: `[model: ...]` for an exact match, `[proxy: ...]` for a node answered by relaxing the
-demand (naming what was relaxed), `[background: cumulative]` or
-`[background: unit_process, incomplete]` for one borrowed from a background pack — see
-[Resolution](resolution.md) for what that distinction means — or `[cutoff: ...]` for a demand
-nothing answered. A cutoff hangs under the node that asked for it, because that is where in
-the chain it happened, not under the root.
-
-Each line names the flow by the last segment of its IRI, which keeps the tree readable
-without a lookup. Pass `labels=` — a dict, or any callable taking an IRI — to print the
-vocabulary's own name instead; [`PystLabels`](../api/resolution.md) supplies one from a
-committed cache, and anything the mapping has no name for falls back to the last segment,
-so a partial mapping is useful:
-
-```python
-from trailrunner.resolution import PystLabels
-
-print(report.tree(labels=PystLabels("examples/pyst_labels.json").label))
-# 5000 MJ heat from main producers of heat @CH/2030  [proxy: product: fi_1730_9 -> fi_1730]
-```
-
-`summary()` is nodes, inventory size, unresolved counts broken down by reason, proxy count, and
-whether the traversal was truncated — the numbers to check before trusting the inventory.
-
-Under `substitution` both the unresolved and the proxy line also split out what happened on
-a **credit branch** — a negative demand, an avoided burden being traversed:
-
-```text
-1 unresolved (no_model_found: 1, of which 1 on a credit branch)
-```
-
-The sign is the point. A forgone burden *understates* the impact; a forgone credit
-*overstates* it. One bucket counting both tells the reader neither. Under any rule but
-`substitution` nothing negative is ever demanded, so the clause never prints.
-
-```python
-print(report.tree())
-print()
-print(report.summary())
-```
-
-Running the DAC traversal with a `Boiler` model answering the heat demand and nothing
-registered for electricity (`tests/test_dac.py::test_end_to_end_traversal_with_a_heat_model`)
-prints:
-
-```text
-1000 kg co2-captured @CH/2030  [model: DirectAirCapture]
-  5000 MJ heat @CH/2030  [model: Boiler]
-  400 kWh electricity @CH/2030  [cutoff: no_model_found]
-
-2 nodes, 2 inventory entries
-1 unresolved (no_model_found: 1)
-0 proxies
-```
-
-The electricity cutoff is indented under the DAC node, not the root, because the DAC node is
-what asked for it. This particular run only ever asked the `model` tier — `[proxy: ...]` and
-`[background: ...]` appear once a [`ResolutionChain`](../api/resolution.md) with a
-generalising or background provider answers a node instead; see
-[Resolution](resolution.md).
+The traversal graph as it happened. `nodes` are `NodeRecord`s in visit order, each with
+`id`, `demand`, `result`, `depth`, `parent`, `model` (a class name), `resolution` and
+`attribution`. `edges` are `(parent, child)` id pairs. Nodes are never merged, so a process
+that appears twice in the supply chain appears twice here.
 
 ## `warnings` and `truncated`
 
-`warnings` is a list of `(message, node_id)`. A flow that repeats on its own supply chain
-path gets one: the traversal was **truncated, not converged**.
+A flow that repeats on its own supply-chain path gets a warning: the traversal was
+**truncated, not converged**. `truncated` is `True` when `max_depth` or `max_nodes` was hit
+anywhere, and `summary()` then adds `traversal was truncated: max_depth or max_nodes was
+reached`.
 
-`truncated` is `True` when `max_depth` or `max_nodes` bit anywhere in the run. A truncated
-tree with an honest unresolved list beats a converged number that would be wrong.
+The defaults (`max_depth=10`, `max_nodes=1000`) are starting points, not tuned values:
+large enough for the shipped chains, small enough that a runaway loop stops quickly. Raise
+them freely.
 
-```python
-if report.truncated:
-    print("limits hit — raise max_depth / max_nodes, or accept the cutoffs")
-```
+## To pandas
 
-The defaults (`max_depth=10`, `max_nodes=1000`) are starting points, not tuned figures:
-large enough for the supply chains v1 is exercised on, small enough that a runaway loop
-stops quickly. Raise them freely.
+With pandas installed (the `viz` or `dynamic` extra), `report.to_dataframe()` gives one
+row per node: `node`, `parent`, `depth`, `model`, `tier`, `demand_iri`, `location`, `time`,
+`amount`, `unit`.
 
 ## Writing the log to parquet
 
-The underlying [`Log`](../api/log.md) can go to a single parquet file, one row per record,
-tagged by `kind` — `biosphere`, `node` (a node that emitted nothing, so it does not vanish),
-`unresolved`, `provenance`, `resolution` (how a node's demand was matched — which tier
-answered and what, if anything, was relaxed to get there) and `attribution` (the normative
-choice applied to it):
-
 ```python
-from trailrunner.orchestration.log import Log
-
-log = Log()
-# ... a traversal fills it ...
-log.to_parquet("run.parquet")
+report.log.to_parquet("run.parquet")
 ```
 
-One flat table under one explicit schema, rather than six files, because the point is to
-diff two runs with a single read: runs that differ only in which cutoffs they hit or which
-parameter fallbacks they took differ on disk too.
+or `trailrunner run ... --out run.parquet`. The result is one flat table under one
+explicit schema, with one row per record, tagged by `kind`:
 
-Nothing nested goes into a cell. A `resolution` or `attribution` record is flattened one
-row per leaf — `relaxation.0`, `allocation`, `property`, `share`, `co_product.0`,
-`co_product.1` — because a list or a dict stringified whole lands as a Python repr a reader
-has to parse back out, and a column nobody can filter on is not a reproducible record.
+| `kind` | One row per |
+| --- | --- |
+| `biosphere` | biosphere exchange (`flow_*`, `amount`, `unit`) |
+| `node` | node that emitted nothing, so it doesn't vanish from the file |
+| `unresolved` | cutoff (`reason`, `detail`) |
+| `provenance` | key a model recorded (`key`, `value`) |
+| `resolution` | key of a node's resolution |
+| `attribution` | key of a node's attribution record |
+
+Every row also carries the node context: `model`, `node`, `parent`, `depth` and the
+`demand_*` columns. Nested values are flattened one row per leaf (`relaxation.0`,
+`co_product.1`), so every column can be filtered on without parsing.
+
+It is one file rather than six because the point is comparing runs: two runs that differ
+only in which cutoffs they hit or which fallbacks they took differ on disk too, and one
+read shows it.

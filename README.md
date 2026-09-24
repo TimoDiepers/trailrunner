@@ -38,17 +38,30 @@ flowchart TB
   real output at every step, built from [`examples/showcase.ipynb`](examples/showcase.ipynb)
 - [Core Concepts](docs/content/concepts.md), the parts above one at a time
 - [Quick Start](docs/content/getting_started/quickstart.md), a first calculation
-- [Writing a Model](docs/content/writing_a_model.md) · [Parameters](docs/content/parameters.md) · [Resolution](docs/content/resolution.md) · [Attribution](docs/content/attribution.md) · [Assessment](docs/content/assessment.md)
+- [Tutorial: an LCA from the CLI](docs/content/getting_started/cli.md), a supply
+  chain, a score and a curve without writing Python
+- [Writing a Model](docs/content/writing_a_model.md) · [Parameters](docs/content/parameters.md) · [Resolution](docs/content/resolution.md) · [Attribution](docs/content/attribution.md) · [Reading a Report](docs/content/reports.md) · [Assessment](docs/content/assessment.md) · [Figures](docs/content/figures.md)
 - [`examples/coproduction.ipynb`](examples/coproduction.ipynb), what a run does
   when one model makes two things
 - [`examples/dac.ipynb`](examples/dac.ipynb), the worked example end to end
-
-Design: `docs/superpowers/specs/2026-09-21-trailrunner-design.md`
 
 ## Status
 
 Early development. Computes an inventory, plus static and time-explicit (dynamic)
 impact characterization of it.
+
+## Running from the shell
+
+```bash
+uv run trailrunner run \
+    https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
+    --amount 1000 --unit kg --location DK --year 2030 \
+    --models examples/showcase_models.py
+```
+
+prints the report's summary and the supply chain it walked. Add `--method` for a score,
+`--dynamic radiative_forcing` for a time-explicit result and `--out run.parquet` for the
+full log; the [CLI tutorial](docs/content/getting_started/cli.md) goes through each.
 
 ## Development
 

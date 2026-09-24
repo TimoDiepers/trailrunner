@@ -84,11 +84,12 @@ The seams are deliberate. The traversal never learns how a process works, and a 
 
 - [Installation](content/installation.md)
 - [The 5-minute tour](showcase.md)
-- [Quick Start](content/getting_started/quickstart.md)
+- [Quick Start](content/getting_started/quickstart.md), a first calculation in Python
+- [Tutorial: an LCA from the CLI](content/getting_started/cli.md), a supply chain, a score and a curve from the shell
 - [Core Concepts](content/concepts.md)
 - [Writing a Model](content/writing_a_model.md)
 - [API Reference](api/index.md)
 
 ## 🚧 Status
 
-Early development. The traversal produces an inventory. [`trailrunner.assessment`](content/assessment.md) is a separate reading of it that turns the inventory into a static score or a time-explicit curve.
+Early development. The traversal produces an inventory. [`trailrunner.assessment`](content/assessment.md) is a separate reading of it that turns the inventory into a static score or a time-explicit curve, and [`trailrunner.viz`](content/figures.md) draws either.
