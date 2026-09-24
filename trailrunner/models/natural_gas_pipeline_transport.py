@@ -1,8 +1,11 @@
 """Long-distance offshore pipeline transport of natural gas.
 
-The functional unit is 1 tkm: distance is whatever the caller demands in
-tkm, not a parameter this model looks up. What *does* vary by origin
-country is which of two regional tiers it belongs to -- countries in the
+The functional unit is 1 t of gas transported, over the distance the demand
+states in its context (``distance``, any length unit): 1 t over 1 km is the
+ecoinvent dataset's 1 tkm, number for number. The route length is the
+demander's to state -- ``NaturalGasSupply`` knows it per consumer -- and the
+per-tkm parameters below are applied to tonnes × km. What *does* vary by
+origin country is which of two regional tiers it belongs to -- countries in the
 former Soviet Union, the Middle East, Africa, Asia or Latin America consume
 noticeably more compressor energy and leak noticeably more gas per km than
 Europe or North America (ESU-services, Bussa et al. 2025, Tab. 4.4/4.6).
@@ -22,12 +25,15 @@ and `.../validate_pipeline_model.py` for the cross-check against the
 parsed ecoinvent corpus.
 """
 
+from dataclasses import replace
+
+from trailrunner.core.errors import ValidationError
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
-from trailrunner.core.units import KG, M3, MJ, NUM
+from trailrunner.core.units import KG, KILOMETRE, M3, MJ, NUM, TONNE, default_catalog, symbol
 
 TRANSPORT = "https://vocab.sentier.dev/products/natural-gas-transport-offshore-pipeline-long-distance"
 PIPELINE_INFRASTRUCTURE = "https://vocab.sentier.dev/products/pipeline-natural-gas-long-distance-high-capacity-offshore"
@@ -71,6 +77,9 @@ _COMPOSITION_FLOWS = (
     (NMVOC, "nmvoc_frac"),
 )
 
+DISTANCE = "distance"
+"""The context condition carrying how far the gas travels."""
+
 HIGH_TIER_LOCATIONS = frozenset({"AZ", "DZ", "ID", "IR", "LY", "MY", "QA", "RU"})
 LOW_TIER_LOCATIONS = frozenset({"GB", "IT", "NL", "NO", "UA", "US"})
 DOCUMENTED_LOCATIONS = HIGH_TIER_LOCATIONS | LOW_TIER_LOCATIONS
@@ -90,10 +99,10 @@ def leaked_volume_nm3_per_tkm(leakage_rate_per_1000km: float, gas_density_kg_per
 
 
 class NaturalGasOffshorePipelineTransport(Model):
-    """Transports 1 tkm of natural gas by long-distance offshore pipeline."""
+    """Transports tonnes of natural gas over a stated distance by offshore pipeline."""
 
     produces = [TRANSPORT]
-    coverage = Coverage(locations=DOCUMENTED_LOCATIONS)
+    coverage = Coverage(locations=DOCUMENTED_LOCATIONS, units=frozenset({TONNE}))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.
@@ -107,27 +116,46 @@ class NaturalGasOffshorePipelineTransport(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
+        distance = demand.flow.get_context(DISTANCE)
+        if distance is None:
+            raise ValidationError(
+                f"{type(self).__name__} moves tonnes of gas over a distance, and the "
+                f"demand for {demand.flow.iri} states none; add "
+                f"Property({DISTANCE!r}, <km>, KILOMETRE) to the flow's context"
+            )
+        km = default_catalog().try_convert(distance.value, distance.unit, KILOMETRE)
+        if km is None:
+            raise ValidationError(
+                f"{type(self).__name__} was given a distance in "
+                f"{symbol(distance.unit)}, which is not a length"
+            )
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
-        amount = demand.amount
+        tkm = demand.amount * km
         location, time = demand.flow.location, demand.flow.time
 
         def flow(iri: str) -> Flow:
             return Flow(iri=iri, location=location, time=time)
 
-        leaked_nm3 = leaked_volume_nm3_per_tkm(row["leakage_rate_per_1000km"], row["gas_density_kg_per_nm3"]) * amount
+        leaked_nm3 = leaked_volume_nm3_per_tkm(row["leakage_rate_per_1000km"], row["gas_density_kg_per_nm3"]) * tkm
 
         technosphere = [
-            Demand(flow=flow(PIPELINE_INFRASTRUCTURE), amount=row["infra_factor"] * amount, unit=NUM),
+            Demand(flow=flow(PIPELINE_INFRASTRUCTURE), amount=row["infra_factor"] * tkm, unit=NUM),
             Demand(flow=flow(NATURAL_GAS_AT_PRODUCTION), amount=leaked_nm3, unit=M3),
             Demand(
                 flow=flow(NATURAL_GAS_BURNED_IN_GAS_TURBINE),
-                amount=row["gas_turbine_mj_per_tkm"] * amount,
+                amount=row["gas_turbine_mj_per_tkm"] * tkm,
                 unit=MJ,
             ),
-            Demand(flow=flow(FREIGHT_LORRY), amount=row["lorry_factor"] * amount, unit="tkm"),
+            # lorry_factor is lorry tkm per pipeline tkm, so the same distance
+            # carries lorry_factor × tonnes.
+            Demand(
+                flow=replace(flow(FREIGHT_LORRY), context=(distance,)),
+                amount=row["lorry_factor"] * demand.amount,
+                unit=TONNE,
+            ),
             Demand(
                 flow=flow(MINERAL_OIL_DISPOSAL),
-                amount=row["mineral_oil_disposal_factor"] * amount,
+                amount=row["mineral_oil_disposal_factor"] * tkm,
                 unit=KG,
             ),
         ]
@@ -137,16 +165,13 @@ class NaturalGasOffshorePipelineTransport(Model):
             for iri, column in _COMPOSITION_FLOWS
             if row[column] is not None
         ]
-        biosphere.append(
-            Exchange(flow=flow(HALON_1211), amount=row["halon1211_rate_kg_per_tkm"] * amount, unit=KG)
-        )
-        biosphere.append(
-            Exchange(flow=flow(HFC_23), amount=row["hfc23_rate_kg_per_tkm"] * amount, unit=KG)
-        )
+        biosphere.append(Exchange(flow=flow(HALON_1211), amount=row["halon1211_rate_kg_per_tkm"] * tkm, unit=KG))
+        biosphere.append(Exchange(flow=flow(HFC_23), amount=row["hfc23_rate_kg_per_tkm"] * tkm, unit=KG))
 
         return Result(
-            production=[Exchange(flow=demand.flow, amount=amount, unit=demand.unit)],
+            production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
             technosphere=technosphere,
             biosphere=biosphere,
-            provenance=dict(row.provenance) | {"tier": row["tier"], "leaked_volume_nm3": leaked_nm3},
+            provenance=dict(row.provenance)
+            | {"tier": row["tier"], "leaked_volume_nm3": leaked_nm3, "tkm": tkm},
         )

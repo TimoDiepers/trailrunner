@@ -10,9 +10,10 @@ never once asked, because it produces *transport* (tkm) and nothing in the
 chain demanded transport.
 
 ``NaturalGasSupply`` is the missing hop, and its only job is unit and
-geography bookkeeping: MJ of delivered gas become Nm3 at the wellhead
-through an energy content, and Nm3 become tkm of pipeline through a density
-and a route length. Both of those demands are placed at the *origin*, not at
+geography bookkeeping: MJ of delivered gas become m3 at the wellhead
+through an energy content, and m3 (at normal conditions) become tonnes,
+carried over the route length the supply states as the transport demand's
+``distance``. Both of those demands are placed at the *origin*, not at
 the consumer, which is what makes the pipeline model's own tier split do
 anything: Danish gas comes down the Norwegian shelf (low-leakage tier) and
 European gas comes a great deal further from Russia (high-leakage tier), and
@@ -28,12 +29,13 @@ chain terminates in a resource rather than in a cutoff, and its parameters
 say so.
 """
 
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
-from trailrunner.core.units import M3, MJ, PA
+from trailrunner.core.units import KILOMETRE, M3, MJ, PA, TONNE
 from trailrunner.models.natural_gas_pipeline_transport import (
+    DISTANCE,
     NATURAL_GAS_AT_PRODUCTION,
     TRANSPORT,
 )
@@ -105,9 +107,9 @@ class NaturalGasSupply(Model):
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
         origin = row["origin"]
 
-        volume_nm3 = demand.amount / float(row["energy_content_mj_per_nm3"])
-        tonnes = volume_nm3 * float(row["gas_density_kg_per_nm3"]) / KG_PER_TONNE
-        tkm = tonnes * float(row["transport_distance_km"])
+        volume_m3 = demand.amount / float(row["energy_content_mj_per_nm3"])
+        tonnes = volume_m3 * float(row["gas_density_kg_per_nm3"]) / KG_PER_TONNE
+        km = float(row["transport_distance_km"])
 
         # At the origin, not at the consumer: a route's leakage tier is a
         # property of where the pipeline runs, and asking for transport
@@ -122,13 +124,21 @@ class NaturalGasSupply(Model):
             technosphere=[
                 Demand(
                     flow=Flow(iri=NATURAL_GAS_AT_PRODUCTION, **there),
-                    amount=volume_nm3,
+                    amount=volume_m3,
                     unit=M3,
                 ),
-                Demand(flow=Flow(iri=TRANSPORT, **there), amount=tkm, unit="tkm"),
+                Demand(
+                    flow=Flow(
+                        iri=TRANSPORT,
+                        context=(Property(DISTANCE, km, KILOMETRE),),
+                        **there,
+                    ),
+                    amount=tonnes,
+                    unit=TONNE,
+                ),
             ],
             provenance=dict(row.provenance)
-            | {"origin": origin, "volume_nm3": volume_nm3, "transport_tkm": tkm},
+            | {"origin": origin, "volume_m3": volume_m3, "transport_tonnes": tonnes, "transport_km": km},
         )
 
 

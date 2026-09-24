@@ -1,6 +1,6 @@
 import pytest
 
-from trailrunner.core.flow import Demand, Flow
+from trailrunner.core.flow import Demand, Flow, Property
 from trailrunner.models.natural_gas import (
     CO2_FOSSIL,
     NATURAL_GAS,
@@ -9,6 +9,7 @@ from trailrunner.models.natural_gas import (
     NaturalGasSupply,
 )
 from trailrunner.models.natural_gas_pipeline_transport import (
+    DISTANCE,
     NATURAL_GAS_AT_PRODUCTION,
     TRANSPORT,
 )
@@ -17,7 +18,7 @@ from trailrunner.params.parameter_set import ParameterSet
 from trailrunner.resolution.models import ModelProvider
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import KG, KWH, M3, MJ
+from trailrunner.core.units import KG, KILOMETRE, KWH, M3, MJ, TONNE
 
 SUPPLY_ROWS = [
     {"location": "DK", "time": 2020, "origin": "NO", "transport_distance_km": 1000.0,
@@ -88,12 +89,14 @@ def test_supply_converts_energy_to_wellhead_volume(supply):
     assert volume.unit == M3
 
 
-def test_supply_converts_volume_to_tonne_kilometres(supply):
+def test_supply_demands_tonnes_over_the_route(supply):
     result = supply.apply(gas())
     transport = [d for d in result.technosphere if d.flow.iri == TRANSPORT][0]
-    # 68.75 Nm3 * 0.735 kg/Nm3 = 50.53 kg = 0.05053 t, over 1000 km.
-    assert transport.amount == pytest.approx(2475.0 / 36.0 * 0.735 / 1000 * 1000.0)
-    assert transport.unit == "tkm"
+    # 68.75 m3 * 0.735 kg/m3 = 50.53 kg = 0.05053 t, over 1000 km.
+    assert transport.amount == pytest.approx(2475.0 / 36.0 * 0.735 / 1000)
+    assert transport.unit == TONNE
+    assert transport.flow.get_context(DISTANCE) == Property(DISTANCE, 1000.0, KILOMETRE)
+    assert result.provenance["transport_km"] == 1000.0
 
 
 def test_supply_places_both_demands_at_the_origin(supply):
@@ -103,11 +106,11 @@ def test_supply_places_both_demands_at_the_origin(supply):
 
 
 def test_a_further_origin_means_more_transport_for_the_same_energy(supply):
-    danish = supply.apply(gas(location="DK"))
-    european = supply.apply(gas(location="RER"))
-    assert european.provenance["origin"] == "RU"
-    assert european.provenance["transport_tkm"] == pytest.approx(
-        4 * danish.provenance["transport_tkm"]
+    danish = supply.apply(gas(location="DK")).provenance
+    european = supply.apply(gas(location="RER")).provenance
+    assert european["origin"] == "RU"
+    assert european["transport_tonnes"] * european["transport_km"] == pytest.approx(
+        4 * danish["transport_tonnes"] * danish["transport_km"]
     )
 
 

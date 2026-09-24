@@ -1,7 +1,10 @@
 import pytest
 
-from trailrunner.core.flow import Demand, Flow
+from trailrunner.core.errors import ValidationError
+from trailrunner.core.flow import Demand, Flow, Property
 from trailrunner.models.natural_gas_pipeline_transport import (
+    DISTANCE,
+    FREIGHT_LORRY,
     HALON_1211,
     HFC_23,
     METHANE_FOSSIL,
@@ -17,7 +20,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import M3, MJ
+from trailrunner.core.units import KILOMETRE, M3, METRE, MJ, TONNE
 
 # A high-tier and a low-tier row, values taken directly from the source report
 # (Bussa et al. 2025, Tab. 4.4/4.6/4.7) -- see
@@ -48,8 +51,44 @@ def pipeline_params(tmp_path):
     return ParameterSet.from_parquet(path)
 
 
-def demand(location="DZ", amount=1.0):
-    return Demand(flow=Flow(iri=TRANSPORT, location=location, time=2025), amount=amount, unit="tkm")
+def demand(location="DZ", amount=1.0, km=1.0, unit=KILOMETRE):
+    """1 t over 1 km is the old 1 tkm functional unit, number for number."""
+    return Demand(
+        flow=Flow(iri=TRANSPORT, location=location, time=2025,
+                  context=(Property(DISTANCE, km, unit),)),
+        amount=amount,
+        unit=TONNE,
+    )
+
+
+def test_tonnes_times_distance_is_the_old_tkm(pipeline_params):
+    model = NaturalGasOffshorePipelineTransport(params=pipeline_params)
+    one_tkm = model.apply(demand(amount=1.0, km=1.0))
+    ten_t_100_km = model.apply(demand(amount=10.0, km=100.0))
+    turbine = lambda r: next(e for e in r.technosphere if e.flow.iri == NATURAL_GAS_BURNED_IN_GAS_TURBINE)
+    assert turbine(ten_t_100_km).amount == pytest.approx(1000 * turbine(one_tkm).amount)
+
+
+def test_distance_in_metres_is_the_same_distance(pipeline_params):
+    model = NaturalGasOffshorePipelineTransport(params=pipeline_params)
+    in_km = model.apply(demand(km=2.0))
+    in_m = model.apply(demand(km=2000.0, unit=METRE))
+    assert [e.amount for e in in_m.biosphere] == pytest.approx([e.amount for e in in_km.biosphere])
+
+
+def test_a_demand_without_a_distance_is_refused(pipeline_params):
+    model = NaturalGasOffshorePipelineTransport(params=pipeline_params)
+    bare = Demand(flow=Flow(iri=TRANSPORT, location="DZ", time=2025), amount=1.0, unit=TONNE)
+    with pytest.raises(ValidationError, match="distance"):
+        model.apply(bare)
+
+
+def test_the_lorry_leg_travels_the_same_distance(pipeline_params):
+    result = NaturalGasOffshorePipelineTransport(params=pipeline_params).apply(demand(amount=3.0, km=50.0))
+    lorry = next(e for e in result.technosphere if e.flow.iri == FREIGHT_LORRY)
+    assert lorry.unit == TONNE
+    assert lorry.flow.get_context(DISTANCE) == Property(DISTANCE, 50.0, KILOMETRE)
+    assert lorry.amount == pytest.approx(HIGH["lorry_factor"] * 3.0)
 
 
 def test_leaked_volume_is_leakage_rate_over_density():
@@ -60,7 +99,7 @@ def test_production_covers_the_demand(pipeline_params):
     result = NaturalGasOffshorePipelineTransport(params=pipeline_params).apply(demand(amount=3.0))
     assert result.production[0].flow.iri == TRANSPORT
     assert result.production[0].amount == 3.0
-    assert result.production[0].unit == "tkm"
+    assert result.production[0].unit == TONNE
 
 
 def test_high_tier_leaks_more_than_low_tier(pipeline_params):
