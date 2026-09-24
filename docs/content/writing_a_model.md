@@ -1,4 +1,5 @@
 ---
+icon: lucide/workflow
 tags:
   - tutorial
 ---

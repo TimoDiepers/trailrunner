@@ -1,4 +1,5 @@
 ---
+icon: lucide/sliders-horizontal
 tags:
   - parameters
 ---

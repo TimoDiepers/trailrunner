@@ -1,4 +1,5 @@
 ---
+icon: lucide/megaphone
 tags:
   - tutorial
 ---

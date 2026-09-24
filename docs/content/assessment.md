@@ -1,4 +1,5 @@
 ---
+icon: lucide/bar-chart
 tags:
   - concepts
 ---

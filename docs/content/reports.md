@@ -1,4 +1,5 @@
 ---
+icon: lucide/file-text
 tags:
   - concepts
 ---
