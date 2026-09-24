@@ -35,7 +35,12 @@ NATURAL_GAS_BURNED_IN_GAS_TURBINE = "https://vocab.sentier.dev/products/natural-
 FREIGHT_LORRY = "https://vocab.sentier.dev/products/transport-freight-lorry-16t-32t"
 MINERAL_OIL_DISPOSAL = "https://vocab.sentier.dev/products/disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration"
 
-METHANE_FOSSIL = "https://vocab.sentier.dev/flows/methane-fossil"
+# "ch4-fossil" for the same reason CARBON_DIOXIDE_FOSSIL below is "co2-fossil",
+# and it matters more here: leaked methane is the whole climate story of gas
+# transport, and under the old "flows/methane-fossil" spelling it missed both
+# the GWP100 table and dynamic.py's characterization, so the showcase's gas
+# supply chain would have reported its leakage as uncharacterized.
+METHANE_FOSSIL = "https://vocab.sentier.dev/flows/ch4-fossil"
 ETHANE = "https://vocab.sentier.dev/flows/ethane"
 PROPANE = "https://vocab.sentier.dev/flows/propane"
 BUTANE = "https://vocab.sentier.dev/flows/butane"

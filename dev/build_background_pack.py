@@ -58,13 +58,12 @@ leaving the flow out:
     "Methane, fossil"         -> https://vocab.sentier.dev/flows/ch4-fossil  (kg)
     "Dinitrogen monoxide"     -> https://vocab.sentier.dev/flows/n2o         (kg)
 
-These three IRIs are the ones already used elsewhere in trailrunner
-(``trailrunner/models/electricity.py``, ``trailrunner/assessment/dynamic.py``)
--- ``trailrunner/models/natural_gas_pipeline_transport.py`` uses a different
-spelling (``carbon-dioxide-fossil``, ``methane-fossil``) for the same
-substances; that inconsistency already exists in the codebase and is exactly
-the kind of ambiguity this script refuses to paper over by picking a third
-spelling. It follows the majority convention instead.
+These three IRIs are the ones used everywhere in trailrunner
+(``trailrunner/models/electricity.py``, ``trailrunner/assessment/dynamic.py``,
+``trailrunner/models/natural_gas_pipeline_transport.py``). The pipeline model
+once spelled two of them differently (``carbon-dioxide-fossil``,
+``methane-fossil``); both have since been reconciled to the spelling below,
+which is the one the characterization tables actually read.
 
 Every other elementary flow this script finds (NOx, SO2, particulates,
 NMVOC, noise, embodied water, ...) has no IRI mapping attempted here, and is

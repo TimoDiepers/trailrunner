@@ -15,6 +15,21 @@ from trailrunner.assessment import assess_dynamic, inventory_dataframe  # noqa: 
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 
+GREENHOUSE_GASES = frozenset(
+    {CO2_IRI, "https://vocab.sentier.dev/flows/ch4-fossil", "https://vocab.sentier.dev/flows/n2o"}
+)
+
+
+def _greenhouse_gases_in(uncharacterized) -> set[str]:
+    """Which of the gases the default functions cover went uncharacterized.
+
+    A chain may legitimately emit substances no climate method knows — mercury,
+    NMVOC, a resource flow — and those belong in ``uncharacterized``. A
+    greenhouse gas landing there is a spelling bug, and this is what tells the
+    two apart.
+    """
+    return GREENHOUSE_GASES & {flow.iri for flow, _, _ in uncharacterized}
+
 
 def report_with(emissions) -> Report:
     """One node per (year, amount[, unit]) tuple, each emitting fossil CO2 that year.
@@ -534,7 +549,11 @@ def test_the_showcase_chain_characterizes_its_cement_as_warming():
     assert direct > 536.1
 
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
-    assert dynamic.uncharacterized == []
+    # Not "nothing uncharacterized": the gas chain behind the kiln fuel emits
+    # ethane, mercury, NMVOC and the wellhead's resource flow, and
+    # default_functions() characterizes none of those. What must never land
+    # there is a greenhouse gas.
+    assert not _greenhouse_gases_in(dynamic.uncharacterized)
     assert dynamic.total > 0.0
 
 
@@ -564,5 +583,5 @@ def test_the_metered_year_reaches_the_meter_and_still_characterizes():
     assert report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2023), "kg")] > 562.0
 
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
-    assert dynamic.uncharacterized == []
+    assert not _greenhouse_gases_in(dynamic.uncharacterized)
     assert dynamic.total > 0.0

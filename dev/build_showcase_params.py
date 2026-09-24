@@ -25,6 +25,8 @@ data a model reads, not the performance of any real plant.
 Run: ``uv run python dev/build_showcase_params.py``
 Writes: ``examples/dac_params.parquet``, ``examples/grid_electricity_params.parquet``,
 ``examples/gas_power_params.parquet``, ``examples/pipeline_transport_params.parquet``,
+``examples/natural_gas_supply_params.parquet``,
+``examples/natural_gas_extraction_params.parquet``,
 ``examples/cement_params.parquet``, ``examples/cement_metered_params.parquet``.
 """
 
@@ -150,14 +152,26 @@ GLOBAL_CONSTANTS = {
     "halon1211_rate_kg_per_tkm": 2.24e-9,
     "hfc23_rate_kg_per_tkm": 8.95e-8,
 }
+PIPELINE_YEARS = (2018, 2025, 2050)
+"""2025 is the source's own year; the other two exist so a lookup resolves.
+
+The tier constants carry no time dimension in Bussa et al. -- one leakage
+rate and one compressor-energy figure per tier, full stop -- so the outer
+years are the 2025 values repeated, which states that absence rather than
+inventing a trend. Without them a demand for gas transport in any other year
+falls out of the table entirely: ``ParameterSet`` interpolates between
+bracketing rows and refuses to extrapolate past the last one, which is the
+behaviour that should not be worked around with a fake gradient.
+"""
 PIPELINE_ROWS = [
     {
-        "location": location, "time": 2025, "tier": tier,
+        "location": location, "time": year, "tier": tier,
         "gas_density_kg_per_nm3": 0.735,
         **TIER_RATES[tier], **GENERIC_COMPOSITION, **GLOBAL_CONSTANTS,
     }
     for tier, locations in (("high", ["DZ", "RU"]), ("low", ["NO", "GB"]))
     for location in locations
+    for year in PIPELINE_YEARS
 ]
 PIPELINE_FIELDS = [
     LOCATION_FIELD,
@@ -178,6 +192,53 @@ PIPELINE_FIELDS = [
     {"name": "mineral_oil_disposal_factor", "type": "number", "unit": "kg/tkm", "iri": None},
     {"name": "halon1211_rate_kg_per_tkm", "type": "number", "unit": "kg/tkm", "iri": None},
     {"name": "hfc23_rate_kg_per_tkm", "type": "number", "unit": "kg/tkm", "iri": None},
+]
+
+
+# --- Natural gas supply: which field the gas comes from, and how far. --------
+# Illustrative routes, chosen because they are the ones that make the pipeline
+# model's tier split visible: Danish gas lands from the Norwegian shelf, a
+# short low-leakage leg, and the European average arrives from Russia, four
+# times as far and in the high-leakage tier. Energy content and density are
+# pipeline-quality gas (the density is the one the BAFU tier table uses).
+SUPPLY_ROWS = [
+    {"location": "DK", "time": 2020, "origin": "NO", "transport_distance_km": 1000.0,
+     "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
+    {"location": "DK", "time": 2050, "origin": "NO", "transport_distance_km": 1000.0,
+     "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
+    {"location": "RER", "time": 2020, "origin": "RU", "transport_distance_km": 4000.0,
+     "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
+    {"location": "RER", "time": 2050, "origin": "RU", "transport_distance_km": 4000.0,
+     "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
+]
+SUPPLY_FIELDS = [
+    LOCATION_FIELD,
+    TIME_FIELD,
+    {"name": "origin", "type": "string", "unit": None, "iri": None},
+    {"name": "transport_distance_km", "type": "number", "unit": "km", "iri": None},
+    {"name": "energy_content_mj_per_nm3", "type": "number", "unit": "MJ/Nm3", "iri": None},
+    {"name": "gas_density_kg_per_nm3", "type": "number", "unit": "kg/Nm3", "iri": None},
+]
+
+# --- Natural gas extraction: the two flows a field cannot avoid. -------------
+# Rows for the two origins SUPPLY_ROWS names, since neither NO nor RU has a
+# parent in the showcase's location hierarchy to fall back to. Illustrative
+# factors: the CO2 is flaring, venting and compressor fuel together, and the
+# extracted volume exceeds the delivered one because the field runs on some of
+# its own gas. The Russian figures are the higher pair, and the 2050 rows the
+# lower, which is a stated assumption about where field practice is going --
+# not a measurement.
+EXTRACTION_ROWS = [
+    {"location": "NO", "time": 2020, "co2_kg_per_nm3": 0.075, "extracted_nm3_per_nm3": 1.02},
+    {"location": "NO", "time": 2050, "co2_kg_per_nm3": 0.055, "extracted_nm3_per_nm3": 1.02},
+    {"location": "RU", "time": 2020, "co2_kg_per_nm3": 0.110, "extracted_nm3_per_nm3": 1.05},
+    {"location": "RU", "time": 2050, "co2_kg_per_nm3": 0.090, "extracted_nm3_per_nm3": 1.05},
+]
+EXTRACTION_FIELDS = [
+    LOCATION_FIELD,
+    TIME_FIELD,
+    {"name": "co2_kg_per_nm3", "type": "number", "unit": "kg", "iri": None},
+    {"name": "extracted_nm3_per_nm3", "type": "number", "unit": "Nm3", "iri": None},
 ]
 
 
@@ -254,6 +315,8 @@ def main() -> None:
     _write("grid_electricity_params", GRID_ROWS, GRID_FIELDS)
     _write("gas_power_params", GAS_ROWS, GAS_FIELDS)
     _write("pipeline_transport_params", PIPELINE_ROWS, PIPELINE_FIELDS)
+    _write("natural_gas_supply_params", SUPPLY_ROWS, SUPPLY_FIELDS)
+    _write("natural_gas_extraction_params", EXTRACTION_ROWS, EXTRACTION_FIELDS)
     _write("cement_params", CEMENT_ROWS, CEMENT_FIELDS)
     _write("cement_metered_params", CEMENT_METERED_ROWS, CEMENT_METERED_FIELDS)
 
