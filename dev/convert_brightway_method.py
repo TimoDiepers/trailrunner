@@ -38,12 +38,8 @@ import re
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from trailrunner.core.units import KG, KWH, M3, MJ, TONNE
-
-SQUARE_METRE = "https://vocab.sentier.dev/units/unit/M2"
-"""Not a constant in ``trailrunner.core.units`` -- confirmed to exist in the
-vocabulary (``GET /api/v1/concepts/...M2`` -> 200) but not yet bundled there,
-so it lives here rather than being added speculatively."""
+from trailrunner.core.errors import UnknownUnit
+from trailrunner.core.units import KG, KWH, M3, MJ, SQUARE_METRE, TONNE, default_catalog
 
 UNIT_SPELLINGS = {
     "kilogram": KG,
@@ -123,16 +119,20 @@ def check_units(unknown: set) -> None:
 def resolve_score_unit(unit_arg: str | None, metadata_unit: str) -> str:
     """The IRI to write into the ``cf`` column's metadata.
 
-    An explicit ``--unit`` is trusted as the IRI it is asked to be. Failing
-    that, the only guess this script makes on its own is a CO2-eq mass --
-    Brightway's own convention for climate change methods -- because a wrong
-    default here silently mislabels every score the method ever produces.
-    Anything else needs a human to say what the number means.
+    An explicit ``--unit`` is resolved against the bundled catalog -- an IRI,
+    a vocabulary id (``KiloGM``) or a symbol (``kg``) -- entirely offline, so
+    an operator's typo is caught here rather than surfacing later as
+    ``UnknownUnit`` the first time the method is loaded. Failing that, the
+    only guess this script makes on its own is a CO2-eq mass -- Brightway's
+    own convention for climate change methods -- because a wrong default here
+    silently mislabels every score the method ever produces. Anything else
+    needs a human to say what the number means.
     """
     if unit_arg:
-        if not unit_arg.startswith("http"):
-            raise ValueError(f"--unit must be a unit IRI, got {unit_arg!r}")
-        return unit_arg
+        try:
+            return default_catalog().resolve(unit_arg)
+        except UnknownUnit as exc:
+            raise ValueError(f"--unit {unit_arg!r} is not a unit: {exc}") from exc
     if metadata_unit.strip().lower() in CO2_EQ_MASS_UNITS:
         return KG
     raise ValueError(

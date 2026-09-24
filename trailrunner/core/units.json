@@ -7,6 +7,7 @@
   "https://vocab.sentier.dev/units/unit/KiloM": {"multiplier": 1000.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Length", "symbol": "km"},
   "https://vocab.sentier.dev/units/unit/KiloW-HR": {"multiplier": 3600000.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Energy", "symbol": "kW.h"},
   "https://vocab.sentier.dev/units/unit/M": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Length", "symbol": "m"},
+  "https://vocab.sentier.dev/units/unit/M2": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Area", "symbol": "m2"},
   "https://vocab.sentier.dev/units/unit/M3": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Volume", "symbol": "m3"},
   "https://vocab.sentier.dev/units/unit/MegaJ": {"multiplier": 1000000.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Energy", "symbol": "MJ"},
   "https://vocab.sentier.dev/units/unit/NUM": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Population", "symbol": "{#}"},
