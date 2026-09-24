@@ -45,25 +45,23 @@ fuel = row["fuel_demand"] * clinker * penalty
    RER   2030     0.060    9.0     1.044     2923.2
 ```
 
-`row` comes out of a [`trailpack`](https://github.com/TimoDiepers/trailpack)
-parquet file — units and vocabulary IRIs travel *with the column*, embedded
-in the file's own metadata, not hardcoded in the model. `.at()` looks for an
-exact `(location, time)` match; missing that, it widens the location
-hierarchy or interpolates between bracketing years — and stamps exactly
-which it did into `row.provenance`, never silently.
+!!! info "trailpack"
+    `row` ← [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet —
+    units & vocab IRIs travel with the column, not hardcoded in the model.
+    `.at()`: exact match → widen location → interpolate years, all stamped
+    in `provenance`.
 
-**Measured beats modelled, when it exists.** `MeteredCementPlant` and
-`CementPlant` declare the same product, disjoint `Coverage` — the demand's
-year decides which one answers, nothing else changes.
+    Born at BrightCon 2025's hackathon.
+
+**Measured beats modelled, when it exists.** Same product, disjoint
+coverage — year on the demand picks meter vs. model:
 
 ```text
-2023  answered by MeteredCementPlant   source: measured
-      direct CO2:  562.0 kg in 1 exchange(s)
-2030  answered by CementPlant          source: modelled
-      direct CO2:  536.1 kg in 2 exchange(s)   ← limestone vs. flame, split
+2023  MeteredCementPlant   measured    562.0 kg CO2, 1 exchange
+2030  CementPlant          modelled    536.1 kg CO2, 2 exchanges (limestone vs. flame)
 ```
 
-A meter sees one plume. A model knows which kilogram came from where.
+Meter sees one plume. Model knows which kg came from where.
 
 ---
 
@@ -90,8 +88,8 @@ flowchart TB
     class I record
 ```
 
-`Orchestrator.calculate` is `while queue:` and little else. Same IRI in
-`produces` = found. Two hits, six cutoffs — every cutoff logged, not dropped:
+`Orchestrator.calculate` = `while queue:`, little else. Same IRI in
+`produces` → found. Two hits, six cutoffs, all logged:
 
 ```text
 1000 kg Portland cement …                       [model: CementPlant]
@@ -104,16 +102,13 @@ flowchart TB
   2475 MJ Natural gas …                           [cutoff: no_model_found]
 ```
 
-That's what lets two models written by two different people compose at
-all — no bespoke wiring, no registry of who-connects-to-whom. Declare the
-right IRI and the orchestrator finds you.
+No bespoke wiring, no registry. Declare the right IRI, orchestrator finds you.
 
 ---
 
 ## Nothing answers? Relax along the vocabulary — deliberately
 
-Tier 1 = computational models. Every later tier is a **concession**, and
-the tier that made it writes what it conceded into the node.
+Tier 1 = models. Every later tier = **concession**, written at the node.
 
 ```text
        model: BinderSupply
@@ -123,19 +118,17 @@ the tier that made it writes what it conceded into the node.
         tier: generalising
 ```
 
-That "Plaster, lime **and cement**" answer is an average containing the very
-product this plant makes — best available, poor in substance, and written at
-the node instead of silently swallowed.
+"Plaster, lime **and cement**" — contains the very product this plant
+makes. Best available, poor in substance. Not hidden.
 
-**Tier 3 borrows a dataset** — kiln construction, curated background pack —
-and marks it `[proxy: incomplete]` rather than pretending it's whole:
+**Tier 3 borrows a dataset** (kiln construction), tags it honestly:
 
 ```text
   8.33 kg/year cement-kiln @DK/2026   [model: CementKilnConstruction]
     0.1 kg steel-low-alloyed @DK/2026 [background: unit_process, incomplete]
 ```
 
-Nothing is hidden by continuing anyway — the run tallies its own gaps:
+Run tallies its own gaps:
 
 ```text
 10 nodes, 3 inventory entries
@@ -144,15 +137,13 @@ Nothing is hidden by continuing anyway — the run tallies its own gaps:
 attribution: allocation=none, capital=per_output
 ```
 
-That's a normative choice too (`capital=per_output` — construction impact
-spread over the kiln's output), stated next to the numbers it produced.
+`capital=per_output` — normative choice, stated next to the numbers.
 
 ---
 
 ## Time rides along, for free
 
-Nothing in the loop was ever told about time — a `Flow` carries its year
-like it carries its location. So the inventory is a time series:
+`Flow` carries its year like it carries its location. Inventory = time series:
 
 ```python
 dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
@@ -160,9 +151,9 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 
 ![Marginal and cumulative radiative forcing over 100 years](assets/showcase/curve.svg)
 
-Kilns built 2027/2029 barely register; 2031's cement production is four
-orders of magnitude bigger. No matrix rebuilt, no second model — just a
-different reading of dates that were never lost.
+- Kilns (2027/2029): barely register
+- 2031 cement production: 4 orders of magnitude bigger
+- No matrix rebuilt, no second model — dates were never lost
 
 ---
 

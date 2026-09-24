@@ -36,8 +36,8 @@ penalty = moisture_penalty(row["moisture"], row["temperature"])
 fuel = row["fuel_demand"] * clinker * penalty
 ```
 
-**Measured beats modelled, when it exists.** Same product, disjoint coverage —
-the demand's year picks meter vs. model.
+**Measured beats modelled, when it exists.** Same product, disjoint coverage
+— demand's year picks meter vs. model.
 
 ```text
 2023  answered by MeteredCementPlant   source: measured    562.0 kg CO2
