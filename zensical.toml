@@ -29,6 +29,10 @@ nav = [
     { Assessment = "content/assessment.md" },
     { Figures = "content/figures.md" },
   ]},
+  { Examples = [
+    { "Co-production and allocation" = "content/examples/coproduction.md" },
+    { "Direct air capture, end to end" = "content/examples/dac.md" },
+  ]},
   { "API Reference" = [
     "api/index.md",
     { Flows = "api/flow.md" },
@@ -59,6 +63,8 @@ extra_css = [
 
 extra_javascript = [
   { path = "javascripts/mermaid-elk.js", type = "module" },
+  "javascripts/plotly-figures.js",
+  "javascripts/source-overrides.js",
 ]
 
 [project.theme]
@@ -190,6 +196,9 @@ tutorial = "tutorial"
 concepts = "concepts"
 parameters = "parameters"
 installation = "installation"
+example = "example"
+notebook = "notebook"
+attribution = "attribution"
 
 [project.theme.icon.tag]
 api = "lucide/code"
@@ -197,3 +206,6 @@ tutorial = "lucide/footprints"
 concepts = "lucide/book-open"
 parameters = "lucide/sliders-horizontal"
 installation = "lucide/download"
+example = "lucide/flask-conical"
+notebook = "lucide/notebook-pen"
+attribution = "lucide/scale"

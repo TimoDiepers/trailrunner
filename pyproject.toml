@@ -45,6 +45,10 @@ docs = [
   "mkdocstrings[python]>=1.0.0",
   "mkdocs-autorefs",
   "pymdown-extensions>=10.0",
+  # docs/convert_notebooks.py turns examples/*.ipynb into the pages under
+  # Examples, and the 5-minute tour, before zensical sees them.
+  "nbconvert>=7",
+  "nbformat>=5",
 ]
 dynamic = [
   # dynamic_characterization requires >=3.12, so the marker has to match it,

@@ -47,3 +47,27 @@ jobs:
         run: >
           uv run jupyter nbconvert --execute --to notebook --stdout
           examples/coproduction.ipynb > /dev/null
+
+  docs:
+    # The pages under Examples, and the 5-minute tour, are generated from the
+    # notebooks by docs/convert_notebooks.py and committed, so GitHub and the
+    # docs show the same thing and a docs build needs no notebook toolchain.
+    # Committed output goes stale silently, which is what this job is for:
+    # regenerate, and fail on a diff.
+    name: Docs pages match the notebooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra docs
+      - name: Regenerate the notebook pages
+        run: uv run python docs/convert_notebooks.py
+      - name: Fail if a page drifted from its notebook
+        run: |
+          git diff --exit-code -- docs || {
+            echo "::error::A docs page differs from its notebook. Run" \
+              "'python docs/convert_notebooks.py' and commit the result."
+            exit 1
+          }
+      - name: Build the docs
+        run: uv run zensical build

@@ -88,6 +88,7 @@ The seams are deliberate. The traversal never learns how a process works, and a 
 - [Tutorial: an LCA from the CLI](content/getting_started/cli.md), a supply chain, a score and a curve from the shell
 - [Core Concepts](content/concepts.md)
 - [Writing a Model](content/writing_a_model.md)
+- Worked examples: [Co-production and allocation](content/examples/coproduction.md) · [Direct air capture, end to end](content/examples/dac.md)
 - [API Reference](api/index.md)
 
 ## 🚧 Status

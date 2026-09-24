@@ -64,3 +64,31 @@
 .md-content .md-typeset .md-typeset__table {
   margin-bottom: 0;
 }
+
+/* Figures on notebook-derived pages: plotly draws into .plotly-figure__plot,
+   and the JSON the figure is drawn from stays in the page as an inert
+   <script>, which must not take up a line of its own. */
+.md-content .md-typeset .plotly-figure {
+  margin: 1.2em 0;
+}
+
+.md-content .md-typeset .plotly-figure > script {
+  display: none;
+}
+
+/* Held before plotly has drawn, so the page does not jump when it does. The
+   height itself comes from the figure's data-plotly-height attribute. */
+.md-content .md-typeset .plotly-figure__plot {
+  width: 100%;
+  min-height: 2rem;
+}
+
+/* Plotly writes a hardcoded four-way white text-shadow into a Sankey's node
+   labels, so that a label sitting on a coloured node bar stays readable. These
+   labels sit beside their nodes on a transparent canvas, so the halo is a
+   white blur around dark text on the light theme and a glow around light text
+   on the slate one. It is inline, so only !important reaches it. (The
+   committed SVGs strip the same declaration in dev/build_showcase_assets.py.) */
+.md-content .md-typeset .plotly-figure text {
+  text-shadow: none !important;
+}
