@@ -44,6 +44,20 @@ IRIS = [
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9",  # heat: "heat from main producers of heat"
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100",  # electricity: "electricity"
     "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020",  # natural-gas: "Natural gas, liquefied or in the gaseous state"
+    # The cement showcase -- trailrunner/models/cement.py's CEMENT, LIMESTONE
+    # and STEAM. fi_1730_6 is the specific technology the plant asks for and
+    # fi_1730 is the generic concept one skos:broader step above it; the
+    # relaxation beat in examples/showcase.ipynb walks exactly that edge, so
+    # this entry is what lets the beat resolve with no network.
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440",  # cement: "Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_15200",  # limestone: "Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement"
+    # The lime the works takes as a minor constituent, and the two rungs above
+    # it. Nothing produces fi_37420, and the first skos:broader step reaches a
+    # concept spelled identically -- it is the *second* step, to fi_374, that
+    # buys an answer. Beat 3 walks exactly that, so both rungs have to be here
+    # or the relaxation stops one short with no network to ask.
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420",  # lime: "Quicklime, slaked lime and hydraulic lime"
+    "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_3742",  # its parent, same label
 ]
 
 

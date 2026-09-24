@@ -39,6 +39,8 @@ flowchart TB
 - [Core Concepts](docs/content/concepts.md), the parts above one at a time
 - [Quick Start](docs/content/getting_started/quickstart.md), a first calculation
 - [Writing a Model](docs/content/writing_a_model.md) · [Parameters](docs/content/parameters.md) · [Resolution](docs/content/resolution.md) · [Attribution](docs/content/attribution.md) · [Assessment](docs/content/assessment.md)
+- [`examples/coproduction.ipynb`](examples/coproduction.ipynb), what a run does
+  when one model makes two things
 - [`examples/dac.ipynb`](examples/dac.ipynb), the worked example end to end
 
 Design: `docs/superpowers/specs/2026-09-21-trailrunner-design.md`

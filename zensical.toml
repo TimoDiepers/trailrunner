@@ -54,6 +54,10 @@ extra_css = [
   "stylesheets/extra.css",
 ]
 
+extra_javascript = [
+  { path = "javascripts/mermaid-elk.js", type = "module" },
+]
+
 [project.theme]
 language = "en"
 features = [

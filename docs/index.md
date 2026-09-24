@@ -13,25 +13,41 @@ Every flow that crosses a model's boundary is identified by an IRI from the hier
 That cascade is the loop below. One demand goes in, and a handful of objects pass it around until the queue is empty.
 
 ```mermaid
+%%{init: {'layout': 'elk'}}%%
 flowchart TB
-    D([initial demand]) --> Q[[Queue]]
+    D([initial demand]) --> Q
+    Q[[Queue]]
+
     Q -->|pop demand| C{{ResolutionChain}}
-    C -->|ask model tier: who can offer?| G[(Glossary: available models)]
+    C -->|who offers?| G[(Glossary: available models)]
     G -->|Offer: model + demand| C
-    C -->|nobody offers| X[cutoff, with a reason]
+
+    C -->|nobody offers| L[(Log)]
     C -->|selected offer| R[Runner]
+
     R -->|apply demand| M[Model: your code]
     M -->|Result| R
-    R -->|Result - technosphere demands| Q
-    R -->|Result - biosphere flows| I[(inventory)]
-    X --> L[(Log)]
+
+    R -->|Result: technosphere demands| Q
+    R -->|Result: biosphere flows| I[(inventory)]
+
     R --> L
     L --> P([Report])
+
+    classDef resolution fill:#2dd4bf22,stroke:#2dd4bf
+    classDef execution fill:#f59e0b22,stroke:#f59e0b
+    classDef record fill:#8b5cf622,stroke:#8b5cf6
+    class C,G resolution
+    class R,M execution
+    class L,P record
 ```
+
+*Colors are a track, not a step order: resolution (teal), execution (amber), record (violet).*
 
 | Part | Its one job |
 | --- | --- |
 | [`Demand`](api/flow.md) | an amount and a unit of a `Flow`, which carries what, where and when |
+| [`Orchestrator`](api/orchestrator.md) | owns the queue and is the loop itself — `while queue:`, pop, ask, apply, log, push what came back |
 | [`Queue`](api/queue.md) | the demands still waiting. FIFO unless you hand it a priority |
 | [`ResolutionChain`](api/resolution.md) | who can answer this demand? It asks each tier in order. Tier 1 is the [`Glossary`](api/glossary.md), which offers a `(model, demand)` pair to run. A demand no tier offers for is logged as a cutoff |
 | [`Model`](api/model.md) | one process, as code. `apply(demand) -> Result` |

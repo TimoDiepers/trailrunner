@@ -1,10 +1,18 @@
 {
   "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1202": "Natural gas, liquefied or in the gaseous state",
   "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020": "Natural gas, liquefied or in the gaseous state",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1520": "Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_15200": "Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement",
   "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1710": "Electrical energy",
   "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100": "electricity",
   "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730": "Steam and hot water",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_6": "heat from electric boilers",
   "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_1730_9": "heat from main producers of heat",
   "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_2811_21": "Carbon dioxide",
-  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_34210": "Hydrogen, nitrogen, oxygen, carbon dioxide and rare gases; inorganic oxygen compounds of non-metals n.e.c."
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_34210": "Hydrogen, nitrogen, oxygen, carbon dioxide and rare gases; inorganic oxygen compounds of non-metals n.e.c.",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_374": "Plaster, lime and cement",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_3742": "Quicklime, slaked lime and hydraulic lime",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420": "Quicklime, slaked lime and hydraulic lime",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_3744": "Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers",
+  "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440": "Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers"
 }
