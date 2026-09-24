@@ -3,13 +3,13 @@ from pathlib import Path
 import pytest
 
 from trailrunner.core.errors import AmbiguousModelMatch
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ProxySettings
 from trailrunner.models.dac import HEAT as REAL_HEAT
 from trailrunner.orchestration.glossary import Glossary
-from trailrunner.params.coverage import Coverage
+from trailrunner.params.coverage import ContextRange, Coverage
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, PystTaxonomy, StaticTaxonomy
 
@@ -501,3 +501,68 @@ def test_offline_cache_has_nothing_for_the_old_invented_heat_iri():
     """
     taxonomy = PystTaxonomy(PYST_CACHE, client=None)
     assert taxonomy.broader(HEAT) == []
+
+
+GAS = "https://vocab.sentier.dev/products/gas"
+
+
+class FiveBarGas(Model):
+    produces = [GAS]
+    coverage = Coverage(context=(ContextRange("pressure", "bar", 5.0, 5.0),))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+def gas_at(bar, unit="bar"):
+    return Demand(
+        flow=Flow(iri=GAS, location="CH", time=2030, context=(Property("pressure", bar, unit),)),
+        amount=10.0,
+        unit="MJ",
+    )
+
+
+PRESSURE_UP_TO_ONE_BAR_HIGHER = ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+
+
+def test_context_is_moved_to_the_value_a_model_covers():
+    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4.0))
+    assert isinstance(offer.model, FiveBarGas)
+    assert offer.demand.flow.get_context("pressure") == Property("pressure", 5.0, "bar")
+    assert offer.resolution["relaxations"] == ["context: pressure 4 bar -> 5 bar"]
+
+
+def test_asked_and_answered_differ_by_the_relaxed_context():
+    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4.0))
+    assert offer.resolution["asked"].endswith("@CH/2030 [pressure=4 bar]")
+    assert offer.resolution["answered"].endswith("@CH/2030 [pressure=5 bar]")
+
+
+def test_context_is_never_moved_to_the_side_the_tolerance_forbids():
+    """A 6-bar burner cannot run on 5-bar gas, however close it is."""
+    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(6.0)) is None
+
+
+def test_context_is_not_moved_beyond_the_tolerance():
+    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(3.0)) is None
+
+
+def test_context_is_not_relaxed_without_a_tolerance():
+    assert provider([FiveBarGas()]).offer(gas_at(4.0)) is None
+
+
+def test_context_in_another_unit_is_not_relaxed():
+    settings = ProxySettings(context_tolerance={"pressure": (0.0, 100.0)})
+    assert provider([FiveBarGas()], settings=settings).offer(gas_at(60.0, unit="psi")) is None
+
+
+def test_context_budget_is_respected():
+    settings = ProxySettings(
+        max_steps={"context": 0}, context_tolerance={"pressure": (0.0, 1.0)}
+    )
+    assert provider([FiveBarGas()], settings=settings).offer(gas_at(4.0)) is None
+
+
+def test_a_demand_naming_no_pressure_is_answered_exactly():
+    demand = Demand(flow=Flow(iri=GAS, location="CH", time=2030), amount=10.0, unit="MJ")
+    assert ModelProvider(Glossary([FiveBarGas()])).offer(demand).tier == "model"

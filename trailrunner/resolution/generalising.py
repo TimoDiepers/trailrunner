@@ -18,7 +18,7 @@ from dataclasses import replace
 from itertools import islice
 from typing import Protocol
 
-from trailrunner.core.flow import Demand
+from trailrunner.core.flow import Demand, Property
 from trailrunner.core.model import Model
 from trailrunner.core.settings import ProxySettings
 from trailrunner.params.location import LocationHierarchy
@@ -174,8 +174,8 @@ class GeneralisingProvider:
         """Every candidate worth trying along ``dimension``, within ``budget``.
 
         ``budget`` is a number of *steps away from the original demand*: hops
-        up the location hierarchy, levels up the taxonomy, or years snapped
-        to. One step can offer more than one candidate — a concept with two
+        up the location hierarchy, levels up the taxonomy, or years and
+        context values snapped to. One step can offer more than one candidate — a concept with two
         broader concepts is one level up either way — and all of them are
         tried, which is why the budget is enforced here rather than by
         counting candidates at the call site. Each candidate comes with the
@@ -185,6 +185,8 @@ class GeneralisingProvider:
             yield from self._location_candidates(demand, budget)
         elif dimension == "time":
             yield from self._time_candidates(demand, budget)
+        elif dimension == "context":
+            yield from self._context_candidates(demand, budget)
         elif dimension == "product":
             yield from self._product_candidates(demand, budget)
 
@@ -222,6 +224,46 @@ class GeneralisingProvider:
         for step, year in enumerate(islice(candidates, budget), 1):
             flow = replace(demand.flow, time=year)
             yield replace(demand, flow=flow), f"time: {original} -> {year}", step
+
+    def _context_candidates(
+        self, demand: Demand, budget: int
+    ) -> Iterator[tuple[Demand, str, int]]:
+        """Move one condition to the nearest value a declaring model covers.
+
+        The same move as ``_time_candidates``, one condition at a time: ask
+        the registry which ranges exist, snap into each, keep what lies within
+        ``context_tolerance``. The tolerance is ``(below, above)`` so that a
+        condition with a safe side -- gas at a higher pressure can be
+        throttled, gas at a lower one cannot be boosted -- is only ever moved
+        to that side. A condition with no tolerance, or declared by a model in
+        another unit, is not moved at all.
+        """
+        found: dict[tuple[str, float], tuple[float, Property]] = {}
+        for asked in demand.flow.context:
+            tolerance = self.settings.context_tolerance.get(asked.name)
+            if tolerance is None:
+                continue
+            below, above = tolerance
+            for model in self.inner.glossary.declared_models(demand.flow):
+                if model.coverage is None:
+                    continue
+                declared = model.coverage.context_range(asked.name)
+                if declared is None or declared.unit != asked.unit:
+                    continue
+                value = min(max(asked.value, declared.minimum), declared.maximum)
+                shift = value - asked.value
+                if shift == 0 or not -below <= shift <= above:
+                    continue
+                found.setdefault((asked.name, value), (abs(shift), asked))
+        ranked = sorted(found.items(), key=lambda item: (item[1][0], item[0]))
+        for step, ((name, value), (_distance, asked)) in enumerate(islice(ranked, budget), 1):
+            context = tuple(
+                replace(entry, value=value) if entry.name == name else entry
+                for entry in demand.flow.context
+            )
+            flow = replace(demand.flow, context=context)
+            note = f"context: {name} {asked.value:g} {asked.unit} -> {value:g} {asked.unit}"
+            yield replace(demand, flow=flow), note, step
 
     def _product_candidates(
         self, demand: Demand, budget: int

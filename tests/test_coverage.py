@@ -1,5 +1,7 @@
-from trailrunner.core.flow import Flow
-from trailrunner.params.coverage import Coverage
+import pytest
+
+from trailrunner.core.flow import Flow, Property
+from trailrunner.params.coverage import ContextRange, Coverage
 
 
 def test_empty_coverage_covers_everything():
@@ -39,3 +41,25 @@ def test_time_range_rejects_missing_time():
 def test_coverage_is_hashable():
     coverage = Coverage(locations=frozenset({"CH"}), time_range=(2020, 2050))
     assert hash(coverage) == hash(Coverage(locations=frozenset({"CH"}), time_range=(2020, 2050)))
+
+
+def test_context_range_restricts_only_flows_that_name_the_condition():
+    coverage = Coverage(context=(ContextRange("pressure", "bar", 5.0, 5.0),))
+    assert coverage.covers(Flow(iri="gas"))
+    assert coverage.covers(Flow(iri="gas", context=(Property("pressure", 5.0, "bar"),)))
+    assert not coverage.covers(Flow(iri="gas", context=(Property("pressure", 4.0, "bar"),)))
+
+
+def test_context_in_another_unit_is_not_covered():
+    coverage = Coverage(context=(ContextRange("pressure", "bar", 0.0, 10.0),))
+    assert not coverage.covers(Flow(iri="gas", context=(Property("pressure", 4.0, "psi"),)))
+
+
+def test_a_context_condition_the_coverage_does_not_declare_is_no_restriction():
+    coverage = Coverage(context=(ContextRange("pressure", "bar", 5.0, 5.0),))
+    assert coverage.covers(Flow(iri="gas", context=(Property("purity", 0.9, "-"),)))
+
+
+def test_context_range_rejects_minimum_above_maximum():
+    with pytest.raises(ValueError, match="minimum"):
+        ContextRange("pressure", "bar", 6.0, 5.0)

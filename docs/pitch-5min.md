@@ -115,6 +115,27 @@ Tier 1 = models. Every later tier = **concession**, written at the node.
 "Plaster, lime **and cement**" — contains the very product this plant
 makes. Best available, poor in substance. Not hidden.
 
+**Tier 2 also relaxes context.** Time and place are not the only things a
+demand asks for. The kiln burners want gas at **4 bar**, carried in the flow's
+`context`; `NaturalGasSupply` declares in its coverage that it delivers at
+**5 bar**. Tier 1 misses. The practitioner allows pressure to be met up to
+1 bar higher, never lower — gas is throttled at the burner, not boosted:
+
+```python
+ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})  # (below, above)
+```
+
+```text
+       model: NaturalGasSupply
+ relaxations: ['context: pressure 4 bar -> 5 bar']
+       asked: …/fi_12020 @DK/2030 [pressure=4 bar]
+    answered: …/fi_12020 @DK/2030 [pressure=5 bar]
+        tier: generalising
+```
+
+The gas plant's own gas names no pressure, so any supplier answers it — a
+plain tier-1 match, same supplier, same run.
+
 **Tier 3 borrows a dataset** from a curated background pack and tags it
 `incomplete`, because its own upstream is missing rather than deferred.
 
@@ -126,7 +147,7 @@ One `while queue:` later — 1000 kg of Danish cement, every tier in one run:
 
 ```text
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
     68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
       0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
@@ -161,7 +182,7 @@ One `while queue:` later — 1000 kg of Danish cement, every tier in one run:
 flowchart TB
     D(["1000 kg cement @DK/2030"]) --> CP["CementPlant<br/>DK · 2030"]
 
-    CP -->|"2475 MJ natural gas"| NGS["NaturalGasSupply<br/>DK · 2030"]
+    CP -->|"2475 MJ natural gas @ 4 bar<br/>tier 2 · met at 5 bar"| NGS["NaturalGasSupply<br/>DK · 2030 · delivers 5 bar"]
     CP -->|"100 kWh electricity"| GE["GridElectricity<br/>DK · 2030"]
     CP -->|"10 kg lime"| BS["BinderSupply<br/>DK · 2030<br/>tier 2 · asked fi_37420, answered fi_374"]
     CP -->|"8.33 kg/yr kiln line"| K26["CementKilnConstruction<br/>DK · 2026"]
@@ -199,14 +220,14 @@ flowchart TB
     class XG,XP,XE gap
     class INV record
 
-    linkStyle 3 stroke:#3b82f6
+    linkStyle 1,3 stroke:#3b82f6
     linkStyle 14,15 stroke:#14b8a6
     linkStyle 6,10,12 stroke:#ef4444
     linkStyle 16,17,18,19,20,21,22 stroke:#8b5cf6
 ```
 
-*Amber = tier 1, a model answered · blue = tier 2, generalised up the
-vocabulary · teal = tier 3, borrowed dataset · red dashed = cutoff · violet =
+*Amber = tier 1, a model answered · blue = tier 2, a relaxed demand (broader
+concept, or pressure met higher) · teal = tier 3, borrowed dataset · red dashed = cutoff · violet =
 elementary flows into the inventory.*
 
 Read the years. The kilns were built in **2026** and **2029**, so their
@@ -218,7 +239,7 @@ the flows carried both.
 ```text
 18 nodes, 13 inventory entries
 11 unresolved (generalisation_exhausted: 11)
-5 proxies (4 incomplete)
+6 proxies (4 incomplete)
 attribution: allocation=none, capital=per_output
 ```
 
@@ -253,6 +274,7 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 - **Inventories are time-explicit by construction** — dynamic LCIA needs no second model
 - **The run is a file** — one parquet holds the graph, the gaps and the choices
 - **A process can depend on its demand** — location, year, scale, feed conditions live in the model
+- **Demands match on more than time and place** — a declared condition like pressure is covered, or relaxed on the record
 - **A model can be a measurement** — same interface, disjoint coverage, report says which answered
 
 ---

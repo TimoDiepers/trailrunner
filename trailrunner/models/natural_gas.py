@@ -37,7 +37,7 @@ from trailrunner.models.natural_gas_pipeline_transport import (
     NATURAL_GAS_AT_PRODUCTION,
     TRANSPORT,
 )
-from trailrunner.params.coverage import Coverage
+from trailrunner.params.coverage import ContextRange, Coverage
 
 NATURAL_GAS = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020"  # "Natural gas, liquefied or in the gaseous state"
 """Same IRI as ``electricity.NATURAL_GAS`` and ``cement.NATURAL_GAS``.
@@ -69,6 +69,15 @@ NM3 = "Nm3"
 
 KG_PER_TONNE = 1000.0
 
+DELIVERY_PRESSURE_BAR = 5.0
+"""Pressure the gas leaves this model at: a medium-pressure distribution grid.
+
+Declared in ``coverage`` rather than read from a parameter row, because it
+decides *whether* the model answers, and that has to be known before any row
+is looked up. A demand naming a different pressure is not answered here
+exactly; one naming none is.
+"""
+
 
 class NaturalGasSupply(Model):
     """Delivered natural gas: gas at the wellhead, plus the pipeline leg.
@@ -81,7 +90,14 @@ class NaturalGasSupply(Model):
     """
 
     produces = [NATURAL_GAS]
-    coverage = Coverage(time_range=(2000, 2050))
+    coverage = Coverage(
+        time_range=(2000, 2050),
+        context=(
+            ContextRange(
+                "pressure", "bar", DELIVERY_PRESSURE_BAR, DELIVERY_PRESSURE_BAR
+            ),
+        ),
+    )
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.

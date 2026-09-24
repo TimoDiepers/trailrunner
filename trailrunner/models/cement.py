@@ -13,8 +13,10 @@ demand carries, and the report names which one answered. Nothing in the
 library had to learn about measurement for that to work.
 """
 
+from dataclasses import replace
+
 from trailrunner.attribution import amortize
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
@@ -85,11 +87,16 @@ class CementPlant(Model):
 
     Pass a ``Fleet`` to also account for the kilns doing the calcining.
     Without one the model answers operation only, no capital.
+
+    Pass ``burner_pressure`` (bar) to ask for the kiln's gas at that
+    pressure. Without one the gas demand names no pressure, and any supplier
+    answers it.
     """
 
     produces = [CEMENT]
     coverage = Coverage(time_range=(2026, 2050))
     fleet: Fleet | None = None
+    burner_pressure: float | None = None
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.
@@ -101,10 +108,18 @@ class CementPlant(Model):
     non-``none`` run, for a problem it does not have.
     """
 
-    def __init__(self, settings=None, params=None, fleet: Fleet | None = None) -> None:
+    def __init__(
+        self,
+        settings=None,
+        params=None,
+        fleet: Fleet | None = None,
+        burner_pressure: float | None = None,
+    ) -> None:
         super().__init__(settings=settings, params=params)
         if fleet is not None:
             self.fleet = fleet
+        if burner_pressure is not None:
+            self.burner_pressure = burner_pressure
 
     def apply(self, demand: Demand) -> Result:
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
@@ -128,7 +143,9 @@ class CementPlant(Model):
             technosphere=[
                 Demand(flow=here(LIMESTONE), amount=limestone, unit="kg"),
                 Demand(
-                    flow=here(NATURAL_GAS), amount=fuel, unit=row.unit_of("fuel_demand")
+                    flow=self._gas(here(NATURAL_GAS)),
+                    amount=fuel,
+                    unit=row.unit_of("fuel_demand"),
                 ),
                 Demand(flow=here(LIME), amount=lime, unit=row.unit_of("lime_demand")),
                 Demand(
@@ -153,6 +170,12 @@ class CementPlant(Model):
             ],
             provenance={**row.provenance, "source": "modelled", **fleet_provenance},
         )
+
+    def _gas(self, flow: Flow) -> Flow:
+        """The kiln's gas, at the burner's pressure if the plant names one."""
+        if self.burner_pressure is None:
+            return flow
+        return replace(flow, context=(Property("pressure", self.burner_pressure, "bar"),))
 
     def _construction(self, demand: Demand) -> tuple[list[Demand], dict]:
         """One construction demand per operating kiln, in that kiln's build year.

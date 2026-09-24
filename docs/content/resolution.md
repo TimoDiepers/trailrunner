@@ -70,15 +70,16 @@ or passed as `settings=`, controls which dimensions are tried, in what order, an
 from trailrunner import ProxySettings
 
 ProxySettings(
-    order=("time", "location", "product"),                 # the default order
-    max_steps={"time": 1, "location": 3, "product": 2},    # the default budgets
-    time_tolerance=5,                                      # years
+    order=("time", "location", "context", "product"),                    # the default order
+    max_steps={"time": 1, "location": 3, "context": 1, "product": 2},    # the default budgets
+    time_tolerance=5,                                                    # years
+    context_tolerance={},                                                # no condition relaxed
 )
 ```
 
 A dimension missing from `max_steps`, or set to 0, is never relaxed. A step means the same
 in every dimension: one level up the location hierarchy, one level up the taxonomy, or one
-year snapped to. Each candidate that answers records a note such as
+year or context value snapped to. Each candidate that answers records a note such as
 `"location: CH -> RER"`, and it shows up in the tree as `[proxy: location: CH -> RER]`.
 
 **Location** widens along the [`LocationHierarchy`](../api/location.md), most specific
@@ -88,6 +89,29 @@ again at `RER`, then at `GLO`.
 **Time** snaps to the nearest year that some model declaring the product actually covers,
 within `time_tolerance`. A demand for 2030 with a model covering 2035–2050 and a tolerance
 of 5 is asked again for 2035. Years nothing claims are never tried.
+
+**Context** covers conditions other than place and year. A [`Flow`](../api/flow.md) can
+carry a `context` of named [`Property`](../api/flow.md) values, such as the pressure gas is wanted at.
+A model declares what it can answer with a `ContextRange` in its
+[`Coverage`](../api/coverage.md). A range only restricts flows that name that condition;
+a demand that names no pressure accepts any. When nothing matches, tier 2 snaps the
+condition into the nearest range some declaring model covers. It only does that for
+conditions listed in `context_tolerance`, and only within their `(below, above)` bounds,
+in the condition's own unit:
+
+```python
+# gas at a higher pressure can be throttled at the burner; at a lower one it cannot
+ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+```
+
+The tour's kiln burners ask for 4 bar and `NaturalGasSupply` delivers at 5:
+
+```text
+2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+```
+
+A 6-bar demand would not be moved down to 5, and a flow asking in `psi` is never
+compared with a range in `bar`. Units are not converted.
 
 **Product** climbs a [`Taxonomy`](../api/resolution.md)'s `skos:broader` relation,
 breadth-first: every concept one level up is tried before any concept two levels up, so the
@@ -225,7 +249,7 @@ Every node's resolution is a dict. Four keys mean the same thing in every tier:
 | --- | --- |
 | `tier` | `"model"`, `"generalising"` or `"background"` |
 | `model` | class name of the model that produced the result (`BackgroundDataset` for tier 3) |
-| `asked` | the demand as it came in: full IRI, `@location/year` |
+| `asked` | the demand as it came in: full IRI, `@location/year`, then `[context]` if it has any |
 | `answered` | the demand the model was applied to: equal to `asked` unless something was relaxed |
 
 Tier 2 adds `relaxations`. Tier 3 adds `dataset`, `source`, `basis`, `complete`,
@@ -240,7 +264,7 @@ for node_id, resolution in report.proxies.items():
         print(node_id, "incomplete borrow:", resolution["dataset"])
 ```
 
-`report.summary()` counts proxies and incomplete borrows (`5 proxies (4 incomplete)`), and
+`report.summary()` counts proxies and incomplete borrows (`6 proxies (4 incomplete)`), and
 `report.tree()` shows where each one sits. Both read the same keys, so they can't disagree.
 
 ## The vocabulary cache and offline runs
