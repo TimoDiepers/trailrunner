@@ -53,8 +53,9 @@ class ModelProvider:
         if not near_misses:
             return None
         names = ", ".join(type(model).__name__ for model in near_misses)
+        context = f" context={demand.flow.describe_context()!r}" if demand.flow.context else ""
         return (
             "coverage_excluded",
             f"{names} declares this product but its coverage does not cover "
-            f"location={demand.flow.location!r} time={demand.flow.time!r}",
+            f"location={demand.flow.location!r} time={demand.flow.time!r}{context}",
         )

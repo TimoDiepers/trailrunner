@@ -22,7 +22,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.orchestration.report import Report
 from trailrunner.orchestration.runner import Runner
-from trailrunner.params.coverage import Coverage
+from trailrunner.params.coverage import ContextRange, Coverage
 from trailrunner.params.fleet import Fleet, FleetSelection
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
@@ -51,6 +51,7 @@ __all__ = [
     "ValidationError",
     # Types and components.
     "AttributionSettings",
+    "ContextRange",
     "Coverage",
     "Demand",
     "Exchange",

@@ -8,8 +8,16 @@ def test_settings_defaults_are_the_conservative_ones():
     assert settings.attribution.allocation == "none"
     assert settings.attribution.capital == "per_output"
     assert settings.attribution.reuse == "first_life"
-    assert settings.proxy.order == ("time", "location", "product")
+    assert settings.proxy.order == ("time", "location", "context", "product")
     assert settings.proxy.time_tolerance == 5
+    # context is in the order but relaxes nothing until a condition is named.
+    assert settings.proxy.context_tolerance == {}
+
+
+@pytest.mark.parametrize("bounds", [(-1.0, 1.0), (0.0, -0.5), (1.0,)])
+def test_a_context_tolerance_must_be_two_non_negative_bounds(bounds):
+    with pytest.raises(ValueError, match="context tolerance"):
+        ProxySettings(context_tolerance={"pressure": bounds})
 
 
 def test_values_mapping_still_works_alongside_the_typed_fields():

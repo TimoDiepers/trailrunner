@@ -6,7 +6,7 @@ from typing import Any
 ALLOCATION_RULES = frozenset({"none", "mass", "economic", "energy", "substitution"})
 CAPITAL_RULES = frozenset({"per_output", "per_year", "first_life"})
 REUSE_RULES = frozenset({"first_life", "shared"})
-PROXY_DIMENSIONS = ("time", "location", "product")
+PROXY_DIMENSIONS = ("time", "location", "context", "product")
 
 
 def _check(value: str, allowed, label: str) -> None:
@@ -56,12 +56,17 @@ class ProxySettings:
     candidate that moved the member written first the least. None is in the
     default order: composing is a concession the practitioner opts into.
 
+    ``context`` sits before ``product`` in the default order because meeting
+    a condition a little differently -- gas at 5 bar for a burner asking 4 --
+    keeps the product itself, which a broader concept does not. It relaxes
+    nothing until ``context_tolerance`` names a condition.
+
     Frozen to prevent reassignment, but not hashable — ``max_steps`` is a dict.
     """
 
     order: tuple[str | tuple[str, ...], ...] = PROXY_DIMENSIONS
     max_steps: dict[str, int] = field(
-        default_factory=lambda: {"time": 1, "location": 3, "product": 2}
+        default_factory=lambda: {"time": 1, "location": 3, "context": 1, "product": 2}
     )
     """How many steps away from the original demand each dimension may go.
 
@@ -75,6 +80,16 @@ class ProxySettings:
 
     time_tolerance: int = 5
     """Years. How far a demand's year may be moved to meet a model's coverage."""
+
+    context_tolerance: dict[str, tuple[float, float]] = field(default_factory=dict)
+    """Per context condition, how far ``(below, above)`` the asked value it may move.
+
+    Two numbers, not one, because most conditions have a safe side. Gas at a
+    higher pressure than asked can be throttled down at the burner; gas at a
+    lower one cannot be pushed up there, so pressure wants ``(0.0, 1.0)``, not
+    ``1.0`` either way. Both are in the condition's own unit, and a condition
+    absent here is never relaxed: empty by default, so no condition is.
+    """
 
     def __post_init__(self) -> None:
         seen: set[frozenset[str]] = set()
@@ -104,6 +119,12 @@ class ProxySettings:
                 raise ValueError(
                     f"{entry!r} can never be tried: no max_steps budget for "
                     f"{', '.join(unbudgeted)}"
+                )
+        for name, bounds in self.context_tolerance.items():
+            if len(bounds) != 2 or any(bound < 0 for bound in bounds):
+                raise ValueError(
+                    f"{bounds!r} is not a valid context tolerance for {name!r}; "
+                    "must be (below, above), both >= 0"
                 )
         if self.time_tolerance < 0:
             raise ValueError(

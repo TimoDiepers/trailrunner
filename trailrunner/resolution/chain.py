@@ -35,9 +35,11 @@ from trailrunner.core.model import Model
 
 
 def describe(demand: Demand) -> str:
-    """What a demand is for, in one line: full IRI, location, year.
+    """What a demand is for, in one line: full IRI, location, year, context.
 
-    Unshortened on purpose. This is the machine-readable half of the record —
+    Context is appended in brackets only when there is some, so a relaxed
+    condition shows up as a difference between ``asked`` and ``answered``
+    like any other relaxation does. Unshortened on purpose. This is the machine-readable half of the record —
     it lands in ``report.proxies`` and in the log parquet, where a reader
     tracing a number back needs the IRI that was actually asked for.
     ``Report.tree()`` shortens separately, for the screen.
@@ -45,7 +47,10 @@ def describe(demand: Demand) -> str:
     flow = demand.flow
     location = flow.location if flow.location is not None else "-"
     time = flow.time if flow.time is not None else "-"
-    return f"{flow.iri} @{location}/{time}"
+    described = f"{flow.iri} @{location}/{time}"
+    if flow.context:
+        described += f" [{flow.describe_context()}]"
+    return described
 
 
 @dataclass(frozen=True)

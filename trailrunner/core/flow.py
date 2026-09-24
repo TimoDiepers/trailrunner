@@ -4,8 +4,25 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class Property:
+    """A quantified attribute: a name, a value and the unit it is in.
+
+    Two places use it. On an ``Exchange`` it is what an allocation rule
+    partitions co-production on -- mass, price, energy content. In a
+    ``Flow``'s ``context`` it is a condition the demand is made under -- the
+    pressure gas is wanted at -- and so part of what a model has to cover.
+    The unit travels with the value because a partition over ``price`` in EUR
+    and one in USD are not the same partition, and 4 bar is not 4 psi.
+    """
+
+    name: str
+    value: float
+    unit: str
+
+
+@dataclass(frozen=True)
 class Flow:
-    """Identity of a thing: what it is, where it is, when it is.
+    """Identity of a thing: what it is, where, when, and under which conditions.
 
     Carries no amount and no unit so that it stays hashable and can be used
     directly as an aggregation key.
@@ -23,19 +40,27 @@ class Flow:
     time: int | None = None
     """A year. ``None`` means the flow is not time-specific."""
 
+    context: tuple[Property, ...] = ()
+    """Conditions beyond place and year that decide who can answer the flow.
 
-@dataclass(frozen=True)
-class Property:
-    """A quantified attribute of an exchange, used to partition co-production.
-
-    Mass, price, energy content: whatever the allocation rule divides by. The
-    unit travels with the value because a partition over ``price`` in EUR and
-    one in USD are not the same partition.
+    The pressure gas is wanted at, the purity of a solvent: anything a
+    ``Coverage`` can declare a range for. A tuple rather than a mapping for
+    the same hashability reason as ``Exchange.properties``. Empty means the
+    flow asks for nothing beyond its IRI, location and year, and a coverage
+    range on a condition the flow does not name is no restriction on it --
+    only the demander knows what it needs.
     """
 
-    name: str
-    value: float
-    unit: str
+    def describe_context(self) -> str:
+        """The context as one short string, ``pressure=4 bar``; empty if there is none."""
+        return ", ".join(f"{entry.name}={entry.value:g} {entry.unit}" for entry in self.context)
+
+    def get_context(self, name: str) -> Property | None:
+        """The context entry called ``name``, or ``None``."""
+        for candidate in self.context:
+            if candidate.name == name:
+                return candidate
+        return None
 
 
 @dataclass(frozen=True)

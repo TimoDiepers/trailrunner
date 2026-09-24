@@ -55,9 +55,12 @@ def _namer(labels: Any) -> "Callable[[str], str]":
 
 
 def _where(flow: Flow) -> str:
-    if flow.location is None and flow.time is None:
-        return ""
-    return f" @{flow.location or '-'}/{flow.time if flow.time is not None else '-'}"
+    where = ""
+    if flow.location is not None or flow.time is not None:
+        where = f" @{flow.location or '-'}/{flow.time if flow.time is not None else '-'}"
+    if flow.context:
+        where += f" ({flow.describe_context()})"
+    return where
 
 
 @dataclass
