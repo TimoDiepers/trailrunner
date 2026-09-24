@@ -342,7 +342,7 @@ studies can be diffed with a single read.
 - **Inventories are time-explicit by construction.** Dates survive the
   traversal, so dynamic characterization needs no second model.
 - **The run is a file.** One parquet holds the graph, the gaps and the choices.
-- - **A process can depend on its demand.** Location, year, scale and feed
+- **A process can depend on its demand.** Location, year, scale and feed
   conditions live in the model, where a physical dependency belongs.
 - **A model can be a measurement.** Two models, one product, disjoint coverage:
   the year on the demand decides whether you get a meter reading or a
