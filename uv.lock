@@ -4108,6 +4108,8 @@ dev = [
 docs = [
     { name = "mkdocs-autorefs" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "nbconvert" },
+    { name = "nbformat" },
     { name = "pymdown-extensions" },
     { name = "zensical" },
 ]
@@ -4134,6 +4136,8 @@ requires-dist = [
     { name = "kaleido", marker = "extra == 'viz'", specifier = ">=0.2" },
     { name = "mkdocs-autorefs", marker = "extra == 'docs'" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.0" },
+    { name = "nbconvert", marker = "extra == 'docs'", specifier = ">=7" },
+    { name = "nbformat", marker = "extra == 'docs'", specifier = ">=5" },
     { name = "pandas", marker = "extra == 'dynamic'", specifier = ">=2" },
     { name = "pandas", marker = "extra == 'examples'", specifier = ">=2" },
     { name = "pandas", marker = "extra == 'viz'", specifier = ">=2" },
