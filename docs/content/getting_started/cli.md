@@ -53,7 +53,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1
+    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1
 ```
 
 ```text
@@ -63,7 +63,7 @@ uv run trailrunner run \
 attribution: allocation=none, capital=per_output
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
     68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
       0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
@@ -89,7 +89,7 @@ How to read it:
   its IRI), `@location/year`, any context in parentheses, and in brackets how it was
   answered.
 - **The kiln's gas is a proxy.** The kiln's burners ask for gas at 4 bar, the only
-  supplier delivers at 5, and `--context-tolerance pressure=0:1` accepts that.
+  supplier delivers at 5, and `--context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1` accepts that.
   [Section 4](#4-when-a-supplier-almost-matches-context-tolerance) explains the flag.
 - **The gas moved.** `NaturalGasSupply` places extraction and pipeline transport in `NO`,
   the gas's origin, not at the Danish consumer, and every model below it works with that.
@@ -108,7 +108,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2020 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1
+    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1
 ```
 
 ```text
@@ -137,11 +137,11 @@ declares in its `Coverage` which values it can deliver. Both sides are in Python
 the match is.
 
 By default it is exact. In the shipped chain the kiln's burners ask for gas at
-**4 bar** and `NaturalGasSupply` delivers at **5 bar**, so without any flag the kiln's gas
+**4 bar** and `NaturalGasSupply` delivers at **5 bar**, both as `http://qudt.org/vocab/quantitykind/Pressure` in `http://qudt.org/vocab/unit/BAR`, so without any flag the kiln's gas
 is not answered:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]
+  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [cutoff: coverage_excluded]
 ```
 
 `coverage_excluded` rather than `no_model_found`: a supplier exists, and its coverage is
@@ -150,10 +150,12 @@ what refused.
 ### Accept a nearby value: `--context-tolerance NAME=BELOW:ABOVE`
 
 ```bash
---context-tolerance pressure=0:1
+--context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1
 ```
 
-reads as: pressure may be met **up to 0 bar lower and up to 1 bar higher** than asked.
+reads as: the condition `http://qudt.org/vocab/quantitykind/Pressure` (the [QUDT](https://qudt.org) quantity kind *pressure*)
+may be met **up to 0 bar lower and up to 1 bar higher** than asked. The name is the IRI
+the models use, written in full; `pressure` would not match it.
 Both numbers are in the unit the demand uses; nothing is converted, and a supplier
 declaring another unit is never matched. Two numbers instead of one because most
 conditions have a safe side: gas at a higher pressure can be throttled down at the burner,
@@ -163,15 +165,14 @@ With the flag, the demand is moved to 5 bar, answered by `NaturalGasSupply`, and
 says so:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
 ```
 
 The parentheses show what was asked; the brackets show what was conceded. The summary
-counts it as `1 proxy`. A 6-bar demand would not be answered with `pressure=0:1`, because
+counts it as `1 proxy`. A 6-bar demand would not be answered with `0:1`, because
 5 is below 6.
 
-Repeat the flag for each condition, e.g.
-`--context-tolerance pressure=0:1 --context-tolerance temperature=0:10`. A condition given
+Repeat the flag once per condition. A condition given
 twice, or a malformed value, stops the run with exit code `2` before anything runs.
 
 ### Several conditions: `--proxy-order`
@@ -300,8 +301,8 @@ nothing relaxes; the CLI says so, and points at the IRI you probably meant:
 warning: no model declares a context condition named 'pressure', so its tolerance relaxes nothing; did you mean http://qudt.org/vocab/quantitykind/Pressure?
 ```
 
-The shipped cement chain above uses the plain name `pressure`, which is why
-`pressure=0:1` works there: the flag must name a condition exactly as the models do.
+The shipped cement chain uses the same `Pressure` IRI, which is why its commands spell it
+out in full: the flag must name a condition exactly as the models do.
 
 Every `context.<name>` in the order needs a `--context-tolerance` for that name, or the
 run stops with exit code `2` (`'context.<name>' can never be tried: no context_tolerance
@@ -353,7 +354,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1 \
+    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1 \
     --method gwp100.parquet
 ```
 
@@ -393,7 +394,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1 \
+    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1 \
     --dynamic radiative_forcing --horizon 100
 ```
 
@@ -456,7 +457,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1 --max-depth 2
+    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1 --max-depth 2
 ```
 
 ```text
@@ -467,7 +468,7 @@ attribution: allocation=none, capital=per_output
 traversal was truncated: max_depth or max_nodes was reached
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
     68.75 Nm3 natural-gas-at-production @NO/2030  [cutoff: max_depth]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [cutoff: max_depth]
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]

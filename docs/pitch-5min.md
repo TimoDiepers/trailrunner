@@ -117,19 +117,19 @@ makes. Best available, poor in substance. Not hidden.
 
 **Tier 2 also relaxes context.** Time and place are not the only things a
 demand asks for. The kiln burners want gas at **4 bar**, carried in the flow's
-`context`; `NaturalGasSupply` declares in its coverage that it delivers at
+`context` as the QUDT concept `http://qudt.org/vocab/quantitykind/Pressure` in `http://qudt.org/vocab/unit/BAR`; `NaturalGasSupply` declares in its coverage that it delivers at
 **5 bar**. Tier 1 misses. The practitioner allows pressure to be met up to
 1 bar higher, never lower — gas is throttled at the burner, not boosted:
 
 ```python
-ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})  # (below, above)
+ProxySettings(context_tolerance={"http://qudt.org/vocab/quantitykind/Pressure": (0.0, 1.0)})  # (below, above)
 ```
 
 ```text
        model: NaturalGasSupply
- relaxations: ['context: pressure 4 bar -> 5 bar']
-       asked: …/fi_12020 @DK/2030 [pressure=4 bar]
-    answered: …/fi_12020 @DK/2030 [pressure=5 bar]
+ relaxations: ['context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR']
+       asked: …/fi_12020 @DK/2030 [http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR]
+    answered: …/fi_12020 @DK/2030 [http://qudt.org/vocab/quantitykind/Pressure=5 http://qudt.org/vocab/unit/BAR]
         tier: generalising
 ```
 
@@ -147,7 +147,7 @@ One `while queue:` later — 1000 kg of Danish cement, every tier in one run:
 
 ```text
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
     68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
       0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]

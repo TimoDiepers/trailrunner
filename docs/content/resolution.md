@@ -93,6 +93,8 @@ of 5 is asked again for 2035. Years nothing claims are never tried.
 
 **Context** covers conditions other than place and year. A [`Flow`](../api/flow.md) can
 carry a `context` of named [`Property`](../api/flow.md) values, such as the pressure gas is wanted at.
+Name conditions and units by IRI, e.g. [QUDT](https://qudt.org) quantity kinds and units, so two
+models written by two people agree on what a condition means.
 A model declares what it can answer with a `ContextRange` in its
 [`Coverage`](../api/coverage.md). A range only restricts flows that name that condition;
 a demand that names no pressure accepts any. When nothing matches, tier 2 snaps the
@@ -102,17 +104,17 @@ in the condition's own unit:
 
 ```python
 # gas at a higher pressure can be throttled at the burner; at a lower one it cannot
-ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+ProxySettings(context_tolerance={"http://qudt.org/vocab/quantitykind/Pressure": (0.0, 1.0)})
 ```
 
 The tour's kiln burners ask for 4 bar and `NaturalGasSupply` delivers at 5:
 
 ```text
-2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
 ```
 
-A 6-bar demand would not be moved down to 5, and a flow asking in `psi` is never
-compared with a range in `bar`. Units are not converted.
+A 6-bar demand would not be moved down to 5, and a flow asking in QUDT `PSI` is never
+compared with a range in `BAR`. Units are not converted.
 
 **Product** climbs a [`Taxonomy`](../api/resolution.md)'s `skos:broader` relation,
 breadth-first: every concept one level up is tried before any concept two levels up, so the
@@ -216,7 +218,7 @@ Names and units are compared exactly, and printed in full, so an IRI always read
 The same rules apply as for any combined entry. Each condition stays within its own
 tolerance and budget; a `context.<name>` missing from `max_steps` takes the `context`
 budget. Conditions also combine with the other dimensions, e.g.
-`("location", "context.pressure")`. `ProxySettings` rejects a `context.<name>` with no
+`("location", f"context.{PRESSURE}")`. `ProxySettings` rejects a `context.<name>` with no
 `context_tolerance` for that name, since it could never be tried, and a combined entry that
 holds both `context` and one of its conditions, which would move the same condition twice.
 On the command line the same order is written

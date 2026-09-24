@@ -60,7 +60,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1
+    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1
 ```
 
 It prints a summary (how many nodes ran, how many demands went unanswered and why, how
@@ -68,20 +68,21 @@ many were answered by a stand-in), then the supply chain as a tree, one line per
 
 ```text
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
     68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     ...
   1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
 ```
 
-`@DK/2030` is where and when, `(pressure=4 bar)` is what the demand asked for beyond that,
+`@DK/2030` is where and when, `(http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)` is what the demand asked for beyond that,
 and the brackets say who answered: an exact `model`, a `proxy` with what was conceded, or a
 `cutoff` with the reason.
 
 **`--context-tolerance`** is what turned the gas into a proxy. The kiln's burners ask for
-gas at 4 bar; the only supplier delivers at 5. Matching is exact by default, so without
-the flag that gas is a `coverage_excluded` cutoff. `pressure=0:1` reads *up to 0 bar
-lower, up to 1 bar higher* than asked: higher-pressure gas can be throttled at the burner,
+gas at 4 bar; the only supplier delivers at 5. Both name the condition by the same IRI,
+the [QUDT](https://qudt.org) quantity kind `http://qudt.org/vocab/quantitykind/Pressure`, in the unit `http://qudt.org/vocab/unit/BAR`. Matching is exact by
+default, so without the flag that gas is a `coverage_excluded` cutoff. `http://qudt.org/vocab/quantitykind/Pressure=0:1` reads
+*up to 0 bar lower, up to 1 bar higher* than asked: higher-pressure gas can be throttled at the burner,
 lower can't be boosted. The move is written into the tree and counted as a proxy.
 
 | Flag | What it does |
@@ -89,7 +90,7 @@ lower can't be boosted. The move is written into the tree and counted as a proxy
 | `IRI`, `--amount`, `--unit` | what to demand, and how much (required) |
 | `--location`, `--year` | where and when; every model downstream receives them |
 | `--models FILE` | a `.py` file defining a `MODELS` list (required) |
-| `--context-tolerance NAME=BELOW:ABOVE` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in its own unit; `NAME` is written exactly as the models name it (`pressure` in the shipped chain, a full IRI where models use one); repeat per condition |
+| `--context-tolerance NAME=BELOW:ABOVE` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in its own unit; `NAME` is written exactly as the models name it, e.g. the QUDT IRI `http://qudt.org/vocab/quantitykind/Pressure` in the shipped chain; repeat per condition |
 | `--proxy-order ORDER` | which conditions to relax, in order: `,` between tries, `+` to move conditions together, each written `context.<name>`, e.g. `context.$P,context.$P+context.$T` with `$P`, `$T` holding condition IRIs such as `http://qudt.org/vocab/quantitykind/Pressure`; default is one condition at a time |
 | `--method FILE` | characterize with a method parquet and print a score |
 | `--dynamic METRIC`, `--horizon YEARS` | a time-explicit result, e.g. `radiative_forcing` |

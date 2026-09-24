@@ -51,11 +51,11 @@ attribution: allocation=none, capital=per_output
     84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
     12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
   1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]
+  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [cutoff: coverage_excluded]
   10 kg fi_37420 @DK/2030  [cutoff: no_model_found]
 ```
 
-The kiln's gas asks for `pressure=4 bar` and the only supplier delivers 5, so tier 1
+The kiln's gas asks for `http://qudt.org/vocab/quantitykind/Pressure` at 4 `http://qudt.org/vocab/unit/BAR` and the only supplier delivers 5, so tier 1
 reports it as `coverage_excluded`: a supplier exists, and its coverage is what to look
 at. A [`context_tolerance`](resolution.md#tier-2-generalising-a-demand) turns it into a
 recorded proxy instead.
@@ -73,7 +73,7 @@ part only when the demand names one:
 | --- | --- |
 | `[model: CementPlant]` | an exact match in tier 1 |
 | `[proxy: product: fi_37420 -> fi_374]` | answered by relaxing the demand, naming what was relaxed |
-| `[proxy: context: pressure 4 bar -> 5 bar]` | answered after moving a context condition within its tolerance |
+| `[proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]` | answered after moving a context condition within its tolerance |
 | `[background: cumulative]` | borrowed from a background pack, upstream included |
 | `[background: unit_process, incomplete]` | borrowed, direct emissions only, upstream missing |
 | `[cutoff: no_model_found]` | nothing answered, with the reason |

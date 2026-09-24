@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="NAME=BELOW:ABOVE",
         help="let a context condition be met this far below/above what was asked, "
-        "e.g. pressure=0:1; repeatable",
+        "e.g. http://qudt.org/vocab/quantitykind/Pressure=0:1; repeatable",
     )
     run.add_argument(
         "--proxy-order",

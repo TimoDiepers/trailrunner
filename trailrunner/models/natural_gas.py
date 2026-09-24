@@ -69,6 +69,16 @@ NM3 = "Nm3"
 
 KG_PER_TONNE = 1000.0
 
+PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
+BAR = "http://qudt.org/vocab/unit/BAR"
+"""The QUDT quantity kind and unit the delivery pressure is declared in.
+
+IRIs rather than ``"pressure"`` and ``"bar"``: a context condition matches
+only on the exact name and unit, so two models written by two people agree on
+a pressure only if they name the same concept. Spelled out here rather than
+imported from ``cement``, for the same reason ``NATURAL_GAS`` is.
+"""
+
 DELIVERY_PRESSURE_BAR = 5.0
 """Pressure the gas leaves this model at: a medium-pressure distribution grid.
 
@@ -93,9 +103,7 @@ class NaturalGasSupply(Model):
     coverage = Coverage(
         time_range=(2000, 2050),
         context=(
-            ContextRange(
-                "pressure", "bar", DELIVERY_PRESSURE_BAR, DELIVERY_PRESSURE_BAR
-            ),
+            ContextRange(PRESSURE, BAR, DELIVERY_PRESSURE_BAR, DELIVERY_PRESSURE_BAR),
         ),
     )
 
