@@ -80,36 +80,7 @@ Same vocabulary IRI in `produces` = found. No name matching, no unit
 guessing — that's what lets two models written by two different people
 compose at all.
 
-Pop a demand, ask who can answer it, push what comes back:
-
-```text
-       amount unit flow                             where  when  -> answered by
-pop      1000 kg   Portland cement, aluminous ceme… DK     2030  -> CementPlant
-pop      1125 kg   Gypsum; anhydrite; limestone fl… DK     2030  -> cutoff (nobody offered)
-pop      2475 MJ   Natural gas, liquefied or in th… DK     2030  -> NaturalGasSupply
-pop        10 kg   Quicklime, slaked lime and hydr… DK     2030  -> cutoff (nobody offered)
-pop       100 kWh  electricity                      DK     2030  -> GridElectricity
-pop     68.75 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
-pop     50.53 tkm  natural-gas-transport-offshore-… NO     2030  -> NaturalGasOffshorePipelineTransport
-pop     8.466 kWh  electricity-natural-gas          DK     2030  -> GasPower
-pop     84.66 kWh  electricity-wind                 DK     2030  -> cutoff (nobody offered)
-pop      12.7 kWh  electricity-hydro                DK     2030  -> cutoff (nobody offered)
-pop 8.995e-08 unit pipeline-natural-gas-long-dista… NO     2030  -> cutoff (nobody offered)
-pop   0.01306 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
-pop     16.54 MJ   natural-gas-burned-in-gas-turbi… NO     2030  -> cutoff (nobody offered)
-pop 5.862e-06 tkm  transport-freight-lorry-16t-32t  NO     2030  -> cutoff (nobody offered)
-pop 5.862e-05 kg   disposal-used-mineral-oil-10-pe… NO     2030  -> cutoff (nobody offered)
-pop     49.16 MJ   Natural gas, liquefied or in th… DK     2030  -> NaturalGasSupply
-pop     1.365 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
-pop     1.004 tkm  natural-gas-transport-offshore-… NO     2030  -> NaturalGasOffshorePipelineTransport
-pop 1.786e-09 unit pipeline-natural-gas-long-dista… NO     2030  -> cutoff (nobody offered)
-pop 0.0002594 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
-pop    0.3285 MJ   natural-gas-burned-in-gas-turbi… NO     2030  -> cutoff (nobody offered)
-pop 1.164e-07 tkm  transport-freight-lorry-16t-32t  NO     2030  -> cutoff (nobody offered)
-pop 1.164e-06 kg   disposal-used-mineral-oil-10-pe… NO     2030  -> cutoff (nobody offered)
-```
-
-The graph that walk leaves behind:
+One `while queue:` later:
 
 ```text
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
@@ -136,6 +107,44 @@ The graph that walk leaves behind:
   1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  [cutoff: no_model_found]
   10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [cutoff: no_model_found]
 ```
+
+The same walk, drawn — processes, the flows between them, and where each one
+ended:
+
+```mermaid
+%%{init: {'layout': 'elk'}}%%
+flowchart TB
+    D(["1000 kg cement @DK/2030"]) --> CP["CementPlant"]
+
+    CP -->|"2475 MJ natural gas"| NGS["NaturalGasSupply"]
+    CP -->|"100 kWh electricity"| GE["GridElectricity"]
+    CP -.->|"1125 kg limestone"| X1["cutoff"]
+    CP -.->|"10 kg lime"| X2["cutoff"]
+
+    NGS -->|"68.75 Nm3 gas at production"| NGE["NaturalGasExtraction"]
+    NGS -->|"50.53 tkm pipeline transport"| PT["OffshorePipelineTransport"]
+    PT -->|"0.013 Nm3 leaked gas"| NGE
+    PT -.->|"pipe · turbine fuel · lorry · oil disposal"| X3["4 cutoffs"]
+
+    GE -->|"8.47 kWh gas power"| GP["GasPower"]
+    GE -.->|"84.66 kWh wind · 12.7 kWh hydro"| X4["2 cutoffs"]
+    GP -->|"49.16 MJ natural gas"| NGS
+
+    CP ==>|"397.5 + 138.6 kg CO2"| INV[("inventory")]
+    GP ==>|"CO2"| INV
+    NGE ==>|"CO2 · gas in ground"| INV
+    PT ==>|"CH4 · ethane · Hg · NMVOC"| INV
+
+    classDef model fill:#f59e0b22,stroke:#f59e0b
+    classDef gap fill:#ef444422,stroke:#ef4444,stroke-dasharray:4 3
+    classDef record fill:#8b5cf622,stroke:#8b5cf6
+    class CP,NGS,NGE,PT,GE,GP model
+    class X1,X2,X3,X4 gap
+    class INV record
+```
+
+*Solid arrows are demands answered by a model, dashed ones are cutoffs, thick
+ones are elementary flows.*
 
 Nobody wired that gas chain up. Every miss stays in the report, with a reason.
 
