@@ -20,6 +20,7 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
+from trailrunner.core.time import in_year, when, year_of, year_range
 
 # Real BONSAI vocabulary concepts (verified live against
 # https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
@@ -74,7 +75,7 @@ class DirectAirCapture(Model):
     """
 
     produces = [CO2_CAPTURED]
-    coverage = Coverage(time_range=(2020, 2050))
+    coverage = Coverage(time_range=year_range(2020, 2050))
     fleet: Fleet | None = None
 
     supports = ALLOCATION_RULES
@@ -94,12 +95,12 @@ class DirectAirCapture(Model):
             self.fleet = fleet
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         penalty = ambient_penalty(row["temperature"], row["humidity"])
 
         heat = row["heat_demand"] * penalty * demand.amount
         electricity = row["electricity_demand"] * penalty * demand.amount
-        upstream = Flow(iri=HEAT, location=demand.flow.location, time=demand.flow.time)
+        upstream = Flow(iri=HEAT, location=demand.flow.location, **when(demand.flow))
 
         construction, fleet_provenance = self._construction(demand)
 
@@ -113,7 +114,7 @@ class DirectAirCapture(Model):
                     flow=Flow(
                         iri=ELECTRICITY,
                         location=demand.flow.location,
-                        time=demand.flow.time,
+                        **when(demand.flow),
                     ),
                     amount=electricity,
                     unit=row.unit_of("electricity_demand"),
@@ -125,7 +126,7 @@ class DirectAirCapture(Model):
                     flow=Flow(
                         iri=CO2_AIR,
                         location=demand.flow.location,
-                        time=demand.flow.time,
+                        **when(demand.flow),
                     ),
                     amount=-demand.amount,
                     unit=demand.unit,
@@ -162,7 +163,7 @@ class DirectAirCapture(Model):
             return [], {}
 
         selection = self.fleet.operating(
-            location=demand.flow.location, time=demand.flow.time
+            location=demand.flow.location, time=year_of(demand.flow)
         )
         capacity_column = self.fleet.capacity_column
         lifetime_column = self.fleet.lifetime_column
@@ -181,7 +182,7 @@ class DirectAirCapture(Model):
                 annual_output=capacity,
                 lifetime_output=capacity * lifetime,
                 lifetime_years=lifetime,
-                demand_year=demand.flow.time,
+                demand_year=year_of(demand.flow),
                 build_year=build_year,
             )
             construction.append(
@@ -192,7 +193,7 @@ class DirectAirCapture(Model):
                     flow=Flow(
                         iri=DAC_PLANT,
                         location=plant.get("location", demand.flow.location),
-                        time=build_year,
+                        **in_year(build_year),
                     ),
                     amount=amount,
                     unit=unit,

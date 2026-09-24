@@ -12,6 +12,7 @@ from pathlib import Path
 from trailrunner.core.errors import UnknownUnit
 from trailrunner.core.flow import Demand, Flow
 from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
+from trailrunner.core.time import in_year
 from trailrunner.core.units import default_catalog, symbol
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
@@ -151,7 +152,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     demand = Demand(
-        flow=Flow(iri=args.iri, location=args.location, time=args.year),
+        flow=Flow(
+            iri=args.iri,
+            location=args.location,
+            **(in_year(args.year) if args.year is not None else {}),
+        ),
         amount=args.amount,
         # A stop-gap: Task 11 replaces this with proper error handling for a
         # unit the catalog does not know.

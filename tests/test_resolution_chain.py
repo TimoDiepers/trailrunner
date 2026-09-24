@@ -8,11 +8,12 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import Coverage
 from trailrunner.resolution import ModelProvider, Offer, ResolutionChain
 from trailrunner.core.units import KG, MJ
+from trailrunner.core.time import in_year, year_range
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 
-DEMAND = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit=MJ)
+DEMAND = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=10.0, unit=MJ)
 
 
 class Boiler(Model):
@@ -74,7 +75,7 @@ def test_chain_returns_none_when_every_tier_declines():
 def test_explain_reports_a_coverage_miss_from_tier_one():
     class Dated(Model):
         produces = [HEAT]
-        coverage = Coverage(time_range=(2040, 2050))
+        coverage = Coverage(time_range=year_range(2040, 2050))
 
         def apply(self, demand):
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])

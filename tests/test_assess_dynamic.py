@@ -13,6 +13,7 @@ pytest.importorskip("dynamic_characterization")
 
 from trailrunner.assessment import assess_dynamic, inventory_dataframe  # noqa: E402
 from trailrunner.core.units import GRAM, KG, TONNE, W_PER_M2
+from trailrunner.core.time import in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 
@@ -42,13 +43,13 @@ def report_with(emissions) -> Report:
     for emission in emissions:
         year, amount = emission[0], emission[1]
         unit = emission[2] if len(emission) > 2 else KG
-        demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=year), amount=1.0, unit=KG)
+        demand = Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(year)), amount=1.0, unit=KG)
         log.write(
             demand,
             Result(
                 production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
                 biosphere=[
-                    Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=year), amount=amount, unit=unit)
+                    Exchange(flow=Flow(iri=CO2_IRI, location="CH", **in_year(year)), amount=amount, unit=unit)
                 ],
             ),
             model="DirectAirCapture",
@@ -132,19 +133,19 @@ def test_an_emission_ten_years_later_is_characterized_over_its_own_horizon():
 
 def test_an_unknown_flow_is_reported_rather_than_silently_dropped():
     log = Log()
-    demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit=KG)
+    demand = Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=1.0, unit=KG)
     unknown = "https://vocab.sentier.dev/flows/unobtainium"
     log.write(
         demand,
         Result(
             production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
-            biosphere=[Exchange(flow=Flow(iri=unknown, location="CH", time=2030), amount=1.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=unknown, location="CH", **in_year(2030)), amount=1.0, unit=KG)],
         ),
         model="Mystery",
     )
     assessment = assess_dynamic(Report.from_log(log))
     assert assessment.uncharacterized == [
-        (Flow(iri=unknown, location="CH", time=2030), KG, 1.0)
+        (Flow(iri=unknown, location="CH", **in_year(2030)), KG, 1.0)
     ]
     assert assessment.wrong_unit == []
     assert assessment.total == 0.0
@@ -166,7 +167,7 @@ def test_an_unknown_metric_is_rejected():
 def test_an_exchange_in_grams_is_reported_and_contributes_nothing():
     assessment = assess_dynamic(report_with([(2030, 10.0, GRAM)]), horizon=20)
     assert assessment.wrong_unit == [
-        (Flow(iri=CO2_IRI, location="CH", time=2030), GRAM, 10.0)
+        (Flow(iri=CO2_IRI, location="CH", **in_year(2030)), GRAM, 10.0)
     ]
     assert assessment.uncharacterized == []
     assert assessment.total == 0.0
@@ -176,7 +177,7 @@ def test_an_exchange_in_grams_is_reported_and_contributes_nothing():
 def test_an_exchange_in_tonnes_is_reported_and_contributes_nothing():
     assessment = assess_dynamic(report_with([(2030, 10.0, TONNE)]), horizon=20)
     assert assessment.wrong_unit == [
-        (Flow(iri=CO2_IRI, location="CH", time=2030), TONNE, 10.0)
+        (Flow(iri=CO2_IRI, location="CH", **in_year(2030)), TONNE, 10.0)
     ]
     assert assessment.total == 0.0
 
@@ -196,7 +197,7 @@ def test_a_mixed_report_characterizes_only_the_kilograms_and_reports_the_rest():
     mixed = assess_dynamic(report_with([(2030, 10.0, KG), (2030, 5.0, GRAM)]), horizon=20)
     assert mixed.total == pytest.approx(kilograms_only.total)
     assert mixed.wrong_unit == [
-        (Flow(iri=CO2_IRI, location="CH", time=2030), GRAM, 5.0)
+        (Flow(iri=CO2_IRI, location="CH", **in_year(2030)), GRAM, 5.0)
     ]
     assert mixed.uncharacterized == []
 
@@ -390,21 +391,21 @@ def test_an_uncharacterized_exchange_does_not_drag_the_anchor_back():
     therefore never the thing the horizon is anchored to."""
     log = Log()
     unknown = "https://vocab.sentier.dev/flows/unobtainium"
-    early = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2010), amount=1.0, unit=KG)
+    early = Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(2010)), amount=1.0, unit=KG)
     log.write(
         early,
         Result(
             production=[Exchange(flow=early.flow, amount=1.0, unit=KG)],
-            biosphere=[Exchange(flow=Flow(iri=unknown, location="CH", time=2010), amount=1.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=unknown, location="CH", **in_year(2010)), amount=1.0, unit=KG)],
         ),
         model="Mystery",
     )
-    late = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit=KG)
+    late = Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=1.0, unit=KG)
     log.write(
         late,
         Result(
             production=[Exchange(flow=late.flow, amount=1.0, unit=KG)],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=2030), amount=10.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="CH", **in_year(2030)), amount=10.0, unit=KG)],
         ),
         model="DirectAirCapture",
     )
@@ -424,7 +425,7 @@ def test_an_emission_past_the_horizon_is_reported_not_silently_dropped():
         report_with([(2030, 10.0), (2300, 10.0)]), horizon=20, fixed_time_horizon=True
     )
     assert assessment.beyond_horizon == [
-        (Flow(iri=CO2_IRI, location="CH", time=2300), KG, 10.0)
+        (Flow(iri=CO2_IRI, location="CH", **in_year(2300)), KG, 10.0)
     ]
     assert assessment.uncharacterized == []
     assert assessment.wrong_unit == []
@@ -440,17 +441,17 @@ def test_nothing_is_beyond_the_horizon_when_everything_fits():
 
 def test_the_dynamic_assessment_carries_the_inventorys_own_gaps():
     log = Log()
-    demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit=KG)
+    demand = Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=1.0, unit=KG)
     log.write(
         demand,
         Result(
             production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=2030), amount=10.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="CH", **in_year(2030)), amount=10.0, unit=KG)],
         ),
         model="DirectAirCapture",
     )
     log.unresolved(
-        Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=5.0, unit=KG),
+        Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=5.0, unit=KG),
         reason="max_depth",
         parent=0,
     )
@@ -518,9 +519,9 @@ def test_the_showcase_chain_characterizes_its_capture_as_cooling():
         GasPower(params=params("gas_power_params.parquet")),
     ]
     report = Orchestrator(Glossary(models)).calculate(
-        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG)
+        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG)
     )
-    assert report.inventory[(Flow(iri=CO2_AIR, location="CH", time=2030), KG)] == -1000.0
+    assert report.inventory[(Flow(iri=CO2_AIR, location="CH", **in_year(2030)), KG)] == -1000.0
 
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
     assert dynamic.uncharacterized == []
@@ -550,9 +551,9 @@ def test_the_showcase_chain_characterizes_its_cement_as_warming():
         Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
     )
     report = Orchestrator(Glossary(models)).calculate(
-        Demand(flow=Flow(iri=CEMENT, location="DK", time=2030), amount=1000.0, unit=KG)
+        Demand(flow=Flow(iri=CEMENT, location="DK", **in_year(2030)), amount=1000.0, unit=KG)
     )
-    direct = report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2030), KG)]
+    direct = report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", **in_year(2030)), KG)]
     # The plant's own two exchanges are 397.5 kg of calcination and 138.6 kg
     # of combustion. The inventory key aggregates every co2-fossil exchange at
     # this place and year, so the grid's gas share lands here too and the
@@ -587,11 +588,11 @@ def test_the_metered_year_reaches_the_meter_and_still_characterizes():
         Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
     )
     report = Orchestrator(Glossary(models)).calculate(
-        Demand(flow=Flow(iri=CEMENT, location="DK", time=2023), amount=1000.0, unit=KG)
+        Demand(flow=Flow(iri=CEMENT, location="DK", **in_year(2023)), amount=1000.0, unit=KG)
     )
     # Same aggregation as above: 562.0 kg off the meter, plus whatever the
     # grid burns to supply the plant's metered electricity.
-    assert report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2023), KG)] > 562.0
+    assert report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", **in_year(2023)), KG)] > 562.0
 
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
     assert not _greenhouse_gases_in(dynamic.uncharacterized)

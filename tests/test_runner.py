@@ -8,12 +8,13 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.runner import Runner
 from trailrunner.core.flow import Property
 from trailrunner.core.units import KG, MJ, PA, TONNE, VOCAB, UnitCatalog
+from trailrunner.core.time import in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
-DEMAND = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG)
+DEMAND = Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG)
 
 
 def make_runner(result: Result) -> Runner:
@@ -29,8 +30,8 @@ def make_runner(result: Result) -> Runner:
 def good_result() -> Result:
     return Result(
         production=[Exchange(flow=DEMAND.flow, amount=1000.0, unit=KG)],
-        technosphere=[Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=5000.0, unit=MJ)],
-        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", time=2030), amount=12.0, unit=KG)],
+        technosphere=[Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=5000.0, unit=MJ)],
+        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", **in_year(2030)), amount=12.0, unit=KG)],
     )
 
 

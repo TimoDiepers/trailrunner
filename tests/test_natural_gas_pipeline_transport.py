@@ -21,12 +21,13 @@ from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
 from trailrunner.core.units import KILOMETRE, M3, METRE, MJ, TONNE
+from trailrunner.core.time import GYEAR, in_year
 
 # A high-tier and a low-tier row, values taken directly from the source report
 # (Bussa et al. 2025, Tab. 4.4/4.6/4.7) -- see
 # "dev/reverse-engineering of BAFU pipeline transport datasets/build_pipeline_trailpack.py".
 HIGH = {
-    "location": "DZ", "time": 2025, "tier": "high",
+    "location": "DZ", "time": "2025", "tier": "high",
     "gas_density_kg_per_nm3": 0.735,
     "energy_rate_per_1000km": 0.022, "leakage_rate_per_1000km": 0.00204,
     "gas_turbine_mj_per_tkm": 0.795,
@@ -41,7 +42,15 @@ LOW = HIGH | {
     "gas_turbine_mj_per_tkm": 0.32733,
 }
 
-FIELDS = [{"name": name, "type": "string" if isinstance(value, str) else "number", "unit": None} for name, value in HIGH.items()]
+FIELDS = [
+    {
+        "name": name,
+        "type": "string" if isinstance(value, str) else "number",
+        "unit": None,
+        "time_standard": GYEAR if name == "time" else None,
+    }
+    for name, value in HIGH.items()
+]
 
 
 @pytest.fixture
@@ -54,7 +63,7 @@ def pipeline_params(tmp_path):
 def demand(location="DZ", amount=1.0, km=1.0, unit=KILOMETRE):
     """1 t over 1 km is the old 1 tkm functional unit, number for number."""
     return Demand(
-        flow=Flow(iri=TRANSPORT, location=location, time=2025,
+        flow=Flow(iri=TRANSPORT, location=location, **in_year(2025),
                   context=(Property(DISTANCE, km, unit),)),
         amount=amount,
         unit=TONNE,
@@ -78,7 +87,7 @@ def test_distance_in_metres_is_the_same_distance(pipeline_params):
 
 def test_a_demand_without_a_distance_is_refused(pipeline_params):
     model = NaturalGasOffshorePipelineTransport(params=pipeline_params)
-    bare = Demand(flow=Flow(iri=TRANSPORT, location="DZ", time=2025), amount=1.0, unit=TONNE)
+    bare = Demand(flow=Flow(iri=TRANSPORT, location="DZ", **in_year(2025)), amount=1.0, unit=TONNE)
     with pytest.raises(ValidationError, match="distance"):
         model.apply(bare)
 
@@ -141,9 +150,9 @@ def test_records_tier_in_provenance(pipeline_params):
 
 def test_out_of_coverage_location_is_not_resolved(pipeline_params):
     glossary = Glossary([NaturalGasOffshorePipelineTransport(params=pipeline_params)])
-    assert glossary.resolve(Flow(iri=TRANSPORT, location="CH", time=2025)) is None
+    assert glossary.resolve(Flow(iri=TRANSPORT, location="CH", **in_year(2025))) is None
 
 
 def test_in_coverage_location_is_resolved(pipeline_params):
     glossary = Glossary([NaturalGasOffshorePipelineTransport(params=pipeline_params)])
-    assert glossary.resolve(Flow(iri=TRANSPORT, location="DZ", time=2025)) is not None
+    assert glossary.resolve(Flow(iri=TRANSPORT, location="DZ", **in_year(2025))) is not None

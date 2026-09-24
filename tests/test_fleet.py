@@ -13,6 +13,7 @@ from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
 from trailrunner.core.units import DEG_C, KG, KWH, MJ, TONNE_PER_YEAR, UNITLESS, YEAR
+from trailrunner.core.time import GYEAR
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
@@ -26,7 +27,7 @@ FLEET_FIELDS = [
 
 DAC_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "time", "type": "string", "time_standard": GYEAR, "iri": None},
     {"name": "heat_demand", "type": "number", "unit": MJ, "iri": None},
     {"name": "electricity_demand", "type": "number", "unit": KWH, "iri": None},
     {"name": "temperature", "type": "number", "unit": DEG_C, "iri": None},
@@ -52,9 +53,9 @@ def fleet(tmp_path):
 @pytest.fixture
 def dac_params(tmp_path):
     rows = [
-        {"location": "CH", "time": 2030, "heat_demand": 5.0, "electricity_demand": 0.4,
+        {"location": "CH", "time": "2030", "heat_demand": 5.0, "electricity_demand": 0.4,
          "temperature": 10.0, "humidity": 0.70},
-        {"location": "RER", "time": 2030, "heat_demand": 5.5, "electricity_demand": 0.45,
+        {"location": "RER", "time": "2030", "heat_demand": 5.5, "electricity_demand": 0.45,
          "temperature": 12.0, "humidity": 0.65},
     ]
     path = write_parameter_parquet(tmp_path / "dac.parquet", rows, DAC_FIELDS)
@@ -134,9 +135,9 @@ def test_fleet_carries_the_units_of_its_columns(fleet):
     assert fleet.operating(location="CH", time=2030).unit_of("capacity") == TONNE_PER_YEAR
 
 
-def demand(location="CH", time=2030, amount=1000.0):
+def demand(location="CH", time="2030", time_standard=GYEAR, amount=1000.0):
     return Demand(
-        flow=Flow(iri=CO2_CAPTURED, location=location, time=time), amount=amount, unit=KG
+        flow=Flow(iri=CO2_CAPTURED, location=location, time=time, time_standard=time_standard), amount=amount, unit=KG
     )
 
 
@@ -156,7 +157,7 @@ def test_dac_demands_construction_of_every_operating_plant(dac_params, fleet):
 
 def test_construction_is_demanded_in_the_year_the_plant_was_built(dac_params, fleet):
     result = DirectAirCapture(params=dac_params, fleet=fleet).apply(demand())
-    assert sorted(d.flow.time for d in construction(result)) == [2026, 2029]
+    assert sorted(d.flow.time for d in construction(result)) == ["2026", "2029"]
 
 
 def test_construction_stays_at_the_location_of_the_plant_that_was_built(dac_params, fleet):
@@ -167,8 +168,8 @@ def test_construction_stays_at_the_location_of_the_plant_that_was_built(dac_para
 def test_construction_is_amortized_over_capacity_and_lifetime(dac_params, fleet):
     result = DirectAirCapture(params=dac_params, fleet=fleet).apply(demand())
     by_year = {d.flow.time: d.amount for d in construction(result)}
-    assert by_year[2026] == pytest.approx(1000.0 * 12000.0 / (52000.0 * 20.0))
-    assert by_year[2029] == pytest.approx(1000.0 * 40000.0 / (52000.0 * 20.0))
+    assert by_year["2026"] == pytest.approx(1000.0 * 12000.0 / (52000.0 * 20.0))
+    assert by_year["2029"] == pytest.approx(1000.0 * 40000.0 / (52000.0 * 20.0))
 
 
 def test_the_construction_demanded_is_the_fleet_share_of_a_lifetime(dac_params, fleet):
@@ -216,7 +217,7 @@ def test_construction_reaches_the_report_as_two_cutoffs_in_two_years(dac_params,
         for record in report.unresolved
         if record.demand.flow.iri == DAC_PLANT
     )
-    assert years == [2026, 2029]
+    assert years == ["2026", "2029"]
 
 
 def dac_under(rule, dac_params, fleet):
@@ -230,8 +231,8 @@ def dac_under(rule, dac_params, fleet):
 def test_per_output_spreads_construction_over_the_whole_life(dac_params, fleet):
     result = dac_under("per_output", dac_params, fleet).apply(demand())
     by_year = {d.flow.time: d.amount for d in construction(result)}
-    assert by_year[2026] == pytest.approx(11.538462, abs=1e-6)
-    assert by_year[2029] == pytest.approx(38.461538, abs=1e-6)
+    assert by_year["2026"] == pytest.approx(11.538462, abs=1e-6)
+    assert by_year["2029"] == pytest.approx(38.461538, abs=1e-6)
     assert sum(by_year.values()) == pytest.approx(50.0)
 
 
@@ -248,8 +249,8 @@ def test_per_year_agrees_with_per_output_on_a_flat_fleet(dac_params, fleet):
     per_year = {d.flow.time: d.amount for d in construction(
         dac_under("per_year", dac_params, fleet).apply(demand()))}
     assert per_year == pytest.approx(per_output)
-    assert per_year[2026] == pytest.approx(11.538462, abs=1e-6)
-    assert per_year[2029] == pytest.approx(38.461538, abs=1e-6)
+    assert per_year["2026"] == pytest.approx(11.538462, abs=1e-6)
+    assert per_year["2029"] == pytest.approx(38.461538, abs=1e-6)
 
 
 def test_first_life_attributes_no_construction_to_a_year_nothing_was_built_in(

@@ -14,6 +14,7 @@ import pytest
 from trailrunner import Demand, Flow, Model, Runner, ValidationError
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.core.units import KWH, MJ
+from trailrunner.core.time import in_year
 
 GUIDE = Path(__file__).resolve().parent.parent / "docs" / "content" / "writing_a_model.md"
 
@@ -31,7 +32,7 @@ def test_the_guide_shows_how_to_write_a_model():
     model = namespace["GasTurbine"]()
 
     product = list(model.produces)[0]
-    demand = Demand(flow=Flow(iri=product, location="CH", time=2030), amount=100.0, unit=KWH)
+    demand = Demand(flow=Flow(iri=product, location="CH", **in_year(2030)), amount=100.0, unit=KWH)
     result = Runner(Glossary([model])).apply(demand)
 
     assert result.biosphere, "the guide's model should emit something"

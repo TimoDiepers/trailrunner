@@ -13,11 +13,22 @@ from typing import Any
 
 import pyarrow.parquet as pq
 
-from trailrunner.core.errors import DuplicateFactor, MissingColumns, MissingUnit, UnknownUnit
+from trailrunner.core.errors import (
+    DuplicateFactor,
+    MissingColumns,
+    MissingTimeStandard,
+    MissingUnit,
+    UnknownUnit,
+)
 from trailrunner.core.flow import Flow
+from trailrunner.core.time import GYEAR, contains, interval
 from trailrunner.core.units import VOCAB, UnitCatalog, default_catalog
 from trailrunner.params.location import LocationHierarchy
-from trailrunner.params.parameter_set import DATAPACKAGE_KEY, _read_field_metadata
+from trailrunner.params.parameter_set import (
+    DATAPACKAGE_KEY,
+    _read_field_metadata,
+    read_time_standards,
+)
 
 
 @dataclass(frozen=True)
@@ -32,8 +43,10 @@ class CharacterizationFactor:
 class Method:
     """Characterization factors indexed by (flow IRI, flow unit, location).
 
-    ``time`` is read if the column is present, and matched exactly: a method
-    whose factors change by year says so per row. There is no interpolation
+    ``time`` is read if the column is present, in the method's
+    ``time_standard``, and a row answers a flow whose time lies inside the
+    row's period: a method whose factors change by year says so per row, and
+    its 2030 row answers a flow dated 2030-06-15. There is no interpolation
     between CFs, because a CF is a modelling convention rather than a measured
     quantity, and interpolating between two conventions produces neither.
 
@@ -71,8 +84,10 @@ class Method:
         hierarchy: LocationHierarchy | None = None,
         source: str | None = None,
         units: UnitCatalog | None = None,
+        time_standard: str | None = None,
     ) -> None:
         self.unit = unit
+        self._time_standard = time_standard
         self.name = name
         self.source = source
         self._hierarchy = hierarchy if hierarchy is not None else LocationHierarchy()
@@ -92,6 +107,13 @@ class Method:
             except KeyError as exc:
                 raise self._layout_error(source) from exc
             self._check_unit(flow_unit, source)
+            if time is not None:
+                if time_standard is None:
+                    raise MissingTimeStandard(
+                        f"{source or 'the method rows'} carry times in 'time' but no "
+                        f"time standard; declare one (e.g. {GYEAR})"
+                    )
+                interval(time, time_standard)  # a bad row fails here, not mid-assessment
             key = (iri, flow_unit, location, time)
             if key in seen:
                 # Last-wins would put a number in the score that appears in no
@@ -122,8 +144,8 @@ class Method:
             f"{source or 'the method rows'} is not a method file: a method needs "
             "the columns 'flow_iri' (string), 'flow_unit' (string) and 'cf' "
             "(number), plus the optional 'location' (string) and 'time' "
-            "(integer); the 'cf' column must declare its unit in the embedded "
-            "datapackage metadata"
+            "(string, with a timeStandard); the 'cf' column must declare its "
+            "unit in the embedded datapackage metadata"
         )
 
     @classmethod
@@ -144,7 +166,8 @@ class Method:
                 f"{path} is missing the column{'s' if len(missing) > 1 else ''} "
                 f"{', '.join(repr(column) for column in missing)}; a method needs "
                 "'flow_iri' (string), 'flow_unit' (string) and 'cf' (number), plus "
-                "the optional 'location' (string) and 'time' (integer), and the "
+                "the optional 'location' (string) and 'time' (string, with a "
+                "timeStandard), and the "
                 f"'cf' column must declare its unit (found: "
                 f"{', '.join(table.schema.names) or 'no columns at all'})"
             )
@@ -153,6 +176,13 @@ class Method:
             raise MissingUnit(
                 f"column 'cf' has no unit declared in {path}; the method's score "
                 "unit is read from it"
+            )
+        time_standard = read_time_standards(table.schema).get("time")
+        if "time" in table.schema.names and time_standard is None:
+            raise MissingTimeStandard(
+                f"column 'time' in {path} declares no time standard; add "
+                f'"timeStandard": "{GYEAR}" (or another registered standard) to its '
+                "field in the embedded datapackage"
             )
         raw = (table.schema.metadata or {}).get(DATAPACKAGE_KEY)
         name = "method"
@@ -165,6 +195,7 @@ class Method:
             hierarchy=hierarchy,
             source=str(path),
             units=units,
+            time_standard=time_standard,
         )
 
     def _locations(self, flow: Flow) -> list[str | None]:
@@ -227,11 +258,14 @@ class Method:
             if row_unit != unit and self._units.convertible(unit, row_unit):
                 yield row_unit, self._units.factor(unit, row_unit)
 
-    @staticmethod
-    def _match(entries, flow: Flow) -> tuple[float | None, Any]:
-        """The flow's own year first, then an undated row."""
-        for wanted in (flow.time, None):
+    def _match(self, entries, flow: Flow) -> tuple[float | None, Any]:
+        """A row whose period contains the flow's time, then an undated row."""
+        if flow.time is not None:
+            asked = interval(flow.time, flow.time_standard)
             for time, value in entries:
-                if time == wanted:
+                if time is not None and contains(interval(time, self._time_standard), asked):
                     return value, time
+        for time, value in entries:
+            if time is None:
+                return value, None
         return None, None

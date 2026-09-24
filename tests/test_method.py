@@ -1,12 +1,19 @@
 import pytest
 
 from trailrunner.assessment import Method
-from trailrunner.core.errors import DuplicateFactor, MissingColumns, MissingUnit, UnknownUnit
+from trailrunner.core.errors import (
+    DuplicateFactor,
+    MissingColumns,
+    MissingTimeStandard,
+    MissingUnit,
+    UnknownUnit,
+)
 from trailrunner.core.flow import Flow
 from trailrunner.params.location import LocationHierarchy
 
 from .conftest import CH4_IRI, CO2_IRI, write_method_parquet
 from trailrunner.core.units import GRAM, KG, M3, TONNE
+from trailrunner.core.time import DATE, GYEAR, in_year
 
 
 def test_exact_factor_is_found(method_parquet_file):
@@ -73,7 +80,7 @@ def test_a_cf_column_without_a_declared_unit_raises(tmp_path):
 
 
 STRING = {"type": "string", "unit": None, "iri": None}
-YEAR = {"type": "integer", "unit": None, "iri": None}
+YEAR = {"type": "string", "unit": None, "iri": None, "time_standard": GYEAR}
 CF = {"type": "number", "unit": KG, "iri": None}
 
 
@@ -98,11 +105,11 @@ def test_an_exact_year_is_matched(tmp_path):
     method = timed_method(
         tmp_path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
-            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2040, "cf": 2.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2040", "cf": 2.0},
         ],
     )
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2040), KG).value == 2.0
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO", **in_year(2040)), KG).value == 2.0
 
 
 def test_a_year_with_no_row_falls_through_to_the_untimed_row(tmp_path):
@@ -111,11 +118,11 @@ def test_a_year_with_no_row_falls_through_to_the_untimed_row(tmp_path):
     method = timed_method(
         tmp_path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0},
             {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": None, "cf": 9.0},
         ],
     )
-    factor = method.factor(Flow(iri=CO2_IRI, location="GLO", time=2035), KG)
+    factor = method.factor(Flow(iri=CO2_IRI, location="GLO", **in_year(2035)), KG)
     assert factor.value == 9.0
     assert factor.provenance["time_used"] is None
 
@@ -123,9 +130,9 @@ def test_a_year_with_no_row_falls_through_to_the_untimed_row(tmp_path):
 def test_a_year_with_no_row_and_no_untimed_row_is_uncharacterized(tmp_path):
     method = timed_method(
         tmp_path,
-        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0}],
+        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0}],
     )
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2035), KG) is None
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO", **in_year(2035)), KG) is None
 
 
 def test_location_outranks_time(tmp_path):
@@ -138,11 +145,11 @@ def test_location_outranks_time(tmp_path):
         tmp_path,
         [
             {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "CH", "time": None, "cf": 5.0},
-            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0},
         ],
         hierarchy=LocationHierarchy({"CH": "GLO"}),
     )
-    factor = method.factor(Flow(iri=CO2_IRI, location="CH", time=2030), KG)
+    factor = method.factor(Flow(iri=CO2_IRI, location="CH", **in_year(2030)), KG)
     assert factor.value == 5.0
     assert factor.provenance["location_used"] == "CH"
     assert factor.provenance["time_used"] is None
@@ -196,11 +203,11 @@ def test_two_factors_differing_only_by_time_are_not_duplicates(tmp_path):
     method = timed_method(
         tmp_path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
-            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2040, "cf": 2.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2040", "cf": 2.0},
         ],
     )
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2030), KG).value == 1.0
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO", **in_year(2030)), KG).value == 1.0
 
 
 def test_a_parquet_without_the_method_columns_names_the_file_and_the_layout(tmp_path):
@@ -295,3 +302,37 @@ def test_a_cf_unit_that_is_not_a_vocabulary_iri_is_refused():
             unit="kg CO2eq",
             name="handmade",
         )
+
+
+def test_a_year_row_answers_a_day_inside_it(tmp_path):
+    method = timed_method(
+        tmp_path,
+        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0}],
+    )
+    flow = Flow(iri=CO2_IRI, location="GLO", time="2030-06-15", time_standard=DATE)
+    factor = method.factor(flow, KG)
+    assert factor.value == 1.0
+    assert factor.provenance["time_used"] == "2030"
+
+
+def test_a_method_file_whose_time_column_has_no_standard_is_refused(tmp_path):
+    path = tmp_path / "undeclared.parquet"
+    write_method_parquet(
+        path,
+        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0}],
+        [
+            {"name": "flow_iri", **STRING},
+            {"name": "flow_unit", **STRING},
+            {"name": "location", **STRING},
+            {"name": "time", **STRING},
+            {"name": "cf", **CF},
+        ],
+    )
+    with pytest.raises(MissingTimeStandard, match="timeStandard"):
+        Method.from_parquet(path)
+
+
+def test_method_rows_with_times_need_a_standard():
+    rows = [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0}]
+    with pytest.raises(MissingTimeStandard):
+        Method(rows, unit=KG, name="m")

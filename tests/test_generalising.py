@@ -12,6 +12,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import ContextRange, Coverage
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, PystTaxonomy, StaticTaxonomy
+from trailrunner.core.time import DATE, GYEAR, in_year, year_range
 from trailrunner.core.units import KELVIN, KG, KILOMETRE, METRE, MJ, NUM, PA, TONNE
 
 HEAT = "https://vocab.sentier.dev/products/heat"
@@ -32,7 +33,7 @@ class RegionalBoiler(Model):
 
 class DatedBoiler(Model):
     produces = [HEAT]
-    coverage = Coverage(time_range=(2035, 2050))
+    coverage = Coverage(time_range=year_range(2035, 2050))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -89,14 +90,14 @@ def test_location_budget_is_respected():
 
 
 def test_time_is_snapped_to_a_covered_year_within_tolerance():
-    demand = Demand(flow=Flow(iri=HEAT, time=2032), amount=10.0, unit=MJ)
+    demand = Demand(flow=Flow(iri=HEAT, **in_year(2032)), amount=10.0, unit=MJ)
     offer = provider([DatedBoiler()]).offer(demand)
-    assert offer.demand.flow.time == 2035
+    assert offer.demand.flow.time == "2035"
     assert offer.resolution["relaxations"] == ["time: 2032 -> 2035"]
 
 
 def test_time_outside_the_tolerance_is_not_snapped():
-    demand = Demand(flow=Flow(iri=HEAT, time=2020), amount=10.0, unit=MJ)
+    demand = Demand(flow=Flow(iri=HEAT, **in_year(2020)), amount=10.0, unit=MJ)
     assert provider([DatedBoiler()]).offer(demand) is None
 
 
@@ -129,7 +130,7 @@ def test_product_relaxation_needs_a_taxonomy():
 
 def test_dimensions_are_tried_in_the_declared_order():
     """Location first finds the regional boiler; time first finds the dated one."""
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2032), amount=10.0, unit=MJ)
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2032)), amount=10.0, unit=MJ)
     location_first = provider(
         [RegionalBoiler(), DatedBoiler()],
         settings=ProxySettings(order=("location", "time")),
@@ -304,7 +305,7 @@ def test_every_tier_two_resolution_speaks_the_shared_vocabulary():
     """``tier``, ``model``, ``asked`` and ``answered`` mean the same thing in
     every tier, and ``asked`` describes the demand rather than restating an
     IRI that did not change."""
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit=MJ)
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=10.0, unit=MJ)
     resolution = provider([RegionalBoiler()]).offer(demand).resolution
     assert resolution["tier"] == "generalising"
     assert resolution["model"] == "RegionalBoiler"
@@ -333,7 +334,7 @@ class RegionalDatedBoiler(Model):
     """Answers only a demand that is both regional and late enough: no single
     relaxation of a Swiss 2032 demand reaches it."""
     produces = [HEAT]
-    coverage = Coverage(locations=frozenset({"RER"}), time_range=(2035, 2050))
+    coverage = Coverage(locations=frozenset({"RER"}), time_range=year_range(2035, 2050))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -341,13 +342,13 @@ class RegionalDatedBoiler(Model):
 
 class GlobalDatedBoiler(Model):
     produces = [HEAT]
-    coverage = Coverage(locations=frozenset({"GLO"}), time_range=(2033, 2050))
+    coverage = Coverage(locations=frozenset({"GLO"}), time_range=year_range(2033, 2050))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
 
-SWISS_2032 = Demand(flow=Flow(iri=HEAT, location="CH", time=2032), amount=10.0, unit=MJ)
+SWISS_2032 = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2032)), amount=10.0, unit=MJ)
 COMBINED = ProxySettings(
     order=("time", "location", ("location", "time")),
     max_steps={"time": 1, "location": 2},
@@ -363,7 +364,7 @@ def test_a_combined_entry_answers_what_no_single_dimension_can():
     offer = provider([RegionalDatedBoiler()], settings=COMBINED).offer(SWISS_2032)
     assert isinstance(offer.model, RegionalDatedBoiler)
     assert offer.demand.flow.location == "RER"
-    assert offer.demand.flow.time == 2035
+    assert offer.demand.flow.time == "2035"
     assert offer.resolution["relaxations"] == ["location: CH -> RER", "time: 2032 -> 2035"]
     assert offer.resolution["answered"] == f"{HEAT} @RER/2035"
 
@@ -373,7 +374,7 @@ def at(location, year):
 
     class Boiler(Model):
         produces = [HEAT]
-        coverage = Coverage(locations=frozenset({location}), time_range=(year, year))
+        coverage = Coverage(locations=frozenset({location}), time_range=year_range(year, year))
 
         def apply(self, demand):
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -390,7 +391,7 @@ def test_the_combined_search_tries_the_fewest_total_steps_first():
     settings = ProxySettings(order=(("location", "time"),), max_steps={"time": 3, "location": 2})
     offer = provider(models, settings=settings).offer(SWISS_2032)
     assert offer.demand.flow.location == "GLO"
-    assert offer.demand.flow.time == 2033
+    assert offer.demand.flow.time == "2033"
 
 
 def test_a_combined_entry_placed_before_product_beats_the_product_proxy():
@@ -517,7 +518,7 @@ class FiveBarGas(Model):
 
 def gas_at(pascal, unit=PA):
     return Demand(
-        flow=Flow(iri=GAS, location="CH", time=2030, context=(Property("pressure", pascal, unit),)),
+        flow=Flow(iri=GAS, location="CH", **in_year(2030), context=(Property("pressure", pascal, unit),)),
         amount=10.0,
         unit=MJ,
     )
@@ -588,7 +589,7 @@ def test_context_budget_is_respected():
 
 
 def test_a_demand_naming_no_pressure_is_answered_exactly():
-    demand = Demand(flow=Flow(iri=GAS, location="CH", time=2030), amount=10.0, unit=MJ)
+    demand = Demand(flow=Flow(iri=GAS, location="CH", **in_year(2030)), amount=10.0, unit=MJ)
     assert ModelProvider(Glossary([FiveBarGas()])).offer(demand).tier == "model"
 
 
@@ -679,3 +680,18 @@ def test_a_combined_context_entry_stays_within_each_tolerance():
         context_tolerance={"pressure": (0.0, 1e5, PA), "temperature": (0.0, 2.0, KELVIN)},
     )
     assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4e5, 295.0)) is None
+
+
+def test_a_day_outside_coverage_snaps_to_the_nearest_covered_year():
+    # DatedBoiler covers 2035..2050; a demand dated the last day of 2034
+    # is about half a year from 2035's midpoint.
+    demand = Demand(flow=Flow(iri=HEAT, time="2034-12-31", time_standard=DATE), amount=1.0, unit=MJ)
+    offer = provider([DatedBoiler()]).offer(demand)
+    assert (offer.demand.flow.time, offer.demand.flow.time_standard) == ("2035", GYEAR)
+    assert offer.resolution["relaxations"] == ["time: 2034-12-31 -> 2035"]
+
+
+def test_a_year_snaps_exactly_as_it_did_with_int_years():
+    demand = Demand(flow=Flow(iri=HEAT, **in_year(2034)), amount=1.0, unit=MJ)
+    offer = provider([DatedBoiler()]).offer(demand)
+    assert offer.resolution["relaxations"] == ["time: 2034 -> 2035"]

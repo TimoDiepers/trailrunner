@@ -3,15 +3,16 @@ from trailrunner.core.result import Result
 from trailrunner.orchestration.log import Log
 from trailrunner.orchestration.report import Report
 from trailrunner.core.units import KG, MJ, TONNE
+from trailrunner.core.time import in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
-CO2 = Flow(iri="https://vocab.sentier.dev/flows/co2-fossil", location="CH", time=2030)
-CH4 = Flow(iri="https://vocab.sentier.dev/flows/ch4-fossil", location="CH", time=2030)
+CO2 = Flow(iri="https://vocab.sentier.dev/flows/co2-fossil", location="CH", **in_year(2030))
+CH4 = Flow(iri="https://vocab.sentier.dev/flows/ch4-fossil", location="CH", **in_year(2030))
 
 
 def a_demand() -> Demand:
-    return Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit=KG)
+    return Demand(flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=1.0, unit=KG)
 
 
 def test_inventory_sums_the_same_flow_and_unit_across_nodes():

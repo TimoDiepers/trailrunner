@@ -107,3 +107,7 @@ class UnknownUnit(TrailrunnerError, ValueError):
     argument, a unit written in a notebook -- and callers catching the broad
     class for bad input should catch this one.
     """
+
+
+class MissingTimeStandard(TrailrunnerError):
+    """Times in a file or table with no standard saying how to read them."""

@@ -35,13 +35,18 @@ from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-from trailrunner.core.units import DEG_C, KG, KWH, M3, MJ, UNITLESS, YEAR
+from trailrunner.core.units import DEG_C, KG, KWH, M3, MJ, UNITLESS
+from trailrunner.core.time import GYEAR
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 
 
 def _write(name: str, rows: list[dict], fields: list[dict]) -> Path:
     path = EXAMPLES / f"{name}.parquet"
+    rows = [
+        {**row, "time": str(row["time"])} if row.get("time") is not None else row
+        for row in rows
+    ]
     table = pa.Table.from_pylist(rows)
     field_descriptors = [
         {
@@ -49,6 +54,7 @@ def _write(name: str, rows: list[dict], fields: list[dict]) -> Path:
             "type": field["type"],
             **({"unit": {"name": field["unit"]}} if field.get("unit") else {}),
             **({"rdfType": field["iri"]} if field.get("iri") else {}),
+            **({"timeStandard": field["time_standard"]} if field.get("time_standard") else {}),
         }
         for field in fields
     ]
@@ -67,18 +73,18 @@ def _write(name: str, rows: list[dict], fields: list[dict]) -> Path:
 
 
 LOCATION_FIELD = {"name": "location", "type": "string", "unit": None, "iri": None}
-TIME_FIELD = {"name": "time", "type": "integer", "unit": YEAR, "iri": None}
+TIME_FIELD = {"name": "time", "type": "string", "time_standard": GYEAR, "iri": None}
 
 
 # --- DAC: examples/dac.ipynb's DAC_ROWS, verbatim. ---------------------------
 DAC_ROWS = [
-    {"location": "CH", "time": 2020, "heat_demand": 6.0, "electricity_demand": 0.50,
+    {"location": "CH", "time": "2020", "heat_demand": 6.0, "electricity_demand": 0.50,
      "temperature": 9.0, "humidity": 0.75},
-    {"location": "CH", "time": 2030, "heat_demand": 5.0, "electricity_demand": 0.40,
+    {"location": "CH", "time": "2030", "heat_demand": 5.0, "electricity_demand": 0.40,
      "temperature": 10.0, "humidity": 0.70},
-    {"location": "RER", "time": 2020, "heat_demand": 6.6, "electricity_demand": 0.55,
+    {"location": "RER", "time": "2020", "heat_demand": 6.6, "electricity_demand": 0.55,
      "temperature": 11.0, "humidity": 0.68},
-    {"location": "RER", "time": 2030, "heat_demand": 5.5, "electricity_demand": 0.45,
+    {"location": "RER", "time": "2030", "heat_demand": 5.5, "electricity_demand": 0.45,
      "temperature": 12.0, "humidity": 0.65},
 ]
 DAC_FIELDS = [
@@ -96,21 +102,21 @@ DAC_FIELDS = [
 
 # --- Grid electricity: examples/dac.ipynb's GRID_ROWS, verbatim. -------------
 GRID_ROWS = [
-    {"location": "CH", "time": 2020, "share_gas": 0.06, "share_wind": 0.04,
+    {"location": "CH", "time": "2020", "share_gas": 0.06, "share_wind": 0.04,
      "share_hydro": 0.90, "grid_loss": 0.070},
-    {"location": "CH", "time": 2030, "share_gas": 0.02, "share_wind": 0.18,
+    {"location": "CH", "time": "2030", "share_gas": 0.02, "share_wind": 0.18,
      "share_hydro": 0.80, "grid_loss": 0.060},
-    {"location": "RER", "time": 2020, "share_gas": 0.50, "share_wind": 0.30,
+    {"location": "RER", "time": "2020", "share_gas": 0.50, "share_wind": 0.30,
      "share_hydro": 0.20, "grid_loss": 0.080},
-    {"location": "RER", "time": 2030, "share_gas": 0.25, "share_wind": 0.55,
+    {"location": "RER", "time": "2030", "share_gas": 0.25, "share_wind": 0.55,
      "share_hydro": 0.20, "grid_loss": 0.070},
     # Denmark, where the showcase's works sits. Given its own rows rather than
     # left to fall back to RER: a Danish kilowatt hour is most of the way to
     # wind already, and answering it with a European average would put a
     # visibly wrong number under the one demand the whole tour is about.
-    {"location": "DK", "time": 2020, "share_gas": 0.20, "share_wind": 0.56,
+    {"location": "DK", "time": "2020", "share_gas": 0.20, "share_wind": 0.56,
      "share_hydro": 0.24, "grid_loss": 0.060},
-    {"location": "DK", "time": 2030, "share_gas": 0.08, "share_wind": 0.80,
+    {"location": "DK", "time": "2030", "share_gas": 0.08, "share_wind": 0.80,
      "share_hydro": 0.12, "grid_loss": 0.055},
 ]
 GRID_FIELDS = [
@@ -126,8 +132,8 @@ GRID_FIELDS = [
 # on purpose, exactly as the notebook's comment says: the plant parameters
 # are European, and the lookup borrows through the hierarchy and says so.
 GAS_ROWS = [
-    {"location": "RER", "time": 2020, "efficiency": 0.55, "co2_factor": 0.056},
-    {"location": "RER", "time": 2030, "efficiency": 0.62, "co2_factor": 0.056},
+    {"location": "RER", "time": "2020", "efficiency": 0.55, "co2_factor": 0.056},
+    {"location": "RER", "time": "2030", "efficiency": 0.62, "co2_factor": 0.056},
 ]
 GAS_FIELDS = [
     LOCATION_FIELD,
@@ -203,13 +209,13 @@ PIPELINE_FIELDS = [
 # times as far and in the high-leakage tier. Energy content and density are
 # pipeline-quality gas (the density is the one the BAFU tier table uses).
 SUPPLY_ROWS = [
-    {"location": "DK", "time": 2020, "origin": "NO", "transport_distance_km": 1000.0,
+    {"location": "DK", "time": "2020", "origin": "NO", "transport_distance_km": 1000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
-    {"location": "DK", "time": 2050, "origin": "NO", "transport_distance_km": 1000.0,
+    {"location": "DK", "time": "2050", "origin": "NO", "transport_distance_km": 1000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
-    {"location": "RER", "time": 2020, "origin": "RU", "transport_distance_km": 4000.0,
+    {"location": "RER", "time": "2020", "origin": "RU", "transport_distance_km": 4000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
-    {"location": "RER", "time": 2050, "origin": "RU", "transport_distance_km": 4000.0,
+    {"location": "RER", "time": "2050", "origin": "RU", "transport_distance_km": 4000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
 ]
 SUPPLY_FIELDS = [
@@ -230,10 +236,10 @@ SUPPLY_FIELDS = [
 # lower, which is a stated assumption about where field practice is going --
 # not a measurement.
 EXTRACTION_ROWS = [
-    {"location": "NO", "time": 2020, "co2_kg_per_nm3": 0.075, "extracted_nm3_per_nm3": 1.02},
-    {"location": "NO", "time": 2050, "co2_kg_per_nm3": 0.055, "extracted_nm3_per_nm3": 1.02},
-    {"location": "RU", "time": 2020, "co2_kg_per_nm3": 0.110, "extracted_nm3_per_nm3": 1.05},
-    {"location": "RU", "time": 2050, "co2_kg_per_nm3": 0.090, "extracted_nm3_per_nm3": 1.05},
+    {"location": "NO", "time": "2020", "co2_kg_per_nm3": 0.075, "extracted_nm3_per_nm3": 1.02},
+    {"location": "NO", "time": "2050", "co2_kg_per_nm3": 0.055, "extracted_nm3_per_nm3": 1.02},
+    {"location": "RU", "time": "2020", "co2_kg_per_nm3": 0.110, "extracted_nm3_per_nm3": 1.05},
+    {"location": "RU", "time": "2050", "co2_kg_per_nm3": 0.090, "extracted_nm3_per_nm3": 1.05},
 ]
 EXTRACTION_FIELDS = [
     LOCATION_FIELD,
@@ -251,16 +257,16 @@ EXTRACTION_FIELDS = [
 # 2040 rows are off reference, which is what makes the beat-1 sensitivity
 # table show anything at all.
 CEMENT_ROWS = [
-    {"location": "DK", "time": 2030, "clinker_factor": 0.75, "fuel_demand": 3.3,
+    {"location": "DK", "time": "2030", "clinker_factor": 0.75, "fuel_demand": 3.3,
      "lime_demand": 0.010, "electricity_demand": 0.10,
      "moisture": 0.04, "temperature": 10.0},
-    {"location": "DK", "time": 2040, "clinker_factor": 0.68, "fuel_demand": 3.1,
+    {"location": "DK", "time": "2040", "clinker_factor": 0.68, "fuel_demand": 3.1,
      "lime_demand": 0.010, "electricity_demand": 0.10,
      "moisture": 0.04, "temperature": 11.0},
-    {"location": "RER", "time": 2030, "clinker_factor": 0.80, "fuel_demand": 3.5,
+    {"location": "RER", "time": "2030", "clinker_factor": 0.80, "fuel_demand": 3.5,
      "lime_demand": 0.012, "electricity_demand": 0.11,
      "moisture": 0.06, "temperature": 9.0},
-    {"location": "RER", "time": 2040, "clinker_factor": 0.72, "fuel_demand": 3.3,
+    {"location": "RER", "time": "2040", "clinker_factor": 0.72, "fuel_demand": 3.3,
      "lime_demand": 0.012, "electricity_demand": 0.11,
      "moisture": 0.055, "temperature": 10.0},
 ]
@@ -284,21 +290,21 @@ CEMENT_FIELDS = [
 # combustion as one plume and cannot separate them, and real kilns run above
 # stoichiometry.
 CEMENT_METERED_ROWS = [
-    {"location": "DK", "time": 2018, "metered_fuel": 2810.0, "metered_lime": 11.7,
+    {"location": "DK", "time": "2018", "metered_fuel": 2810.0, "metered_lime": 11.7,
      "metered_electricity": 116.0, "metered_co2": 601.0},
-    {"location": "DK", "time": 2019, "metered_fuel": 2775.0, "metered_lime": 11.5,
+    {"location": "DK", "time": "2019", "metered_fuel": 2775.0, "metered_lime": 11.5,
      "metered_electricity": 115.0, "metered_co2": 594.0},
-    {"location": "DK", "time": 2020, "metered_fuel": 2740.0, "metered_lime": 11.4,
+    {"location": "DK", "time": "2020", "metered_fuel": 2740.0, "metered_lime": 11.4,
      "metered_electricity": 113.0, "metered_co2": 587.0},
-    {"location": "DK", "time": 2021, "metered_fuel": 2702.0, "metered_lime": 11.3,
+    {"location": "DK", "time": "2021", "metered_fuel": 2702.0, "metered_lime": 11.3,
      "metered_electricity": 112.0, "metered_co2": 580.0},
-    {"location": "DK", "time": 2022, "metered_fuel": 2661.0, "metered_lime": 11.2,
+    {"location": "DK", "time": "2022", "metered_fuel": 2661.0, "metered_lime": 11.2,
      "metered_electricity": 110.0, "metered_co2": 571.0},
-    {"location": "DK", "time": 2023, "metered_fuel": 2610.0, "metered_lime": 11.0,
+    {"location": "DK", "time": "2023", "metered_fuel": 2610.0, "metered_lime": 11.0,
      "metered_electricity": 108.0, "metered_co2": 562.0},
-    {"location": "DK", "time": 2024, "metered_fuel": 2560.0, "metered_lime": 10.6,
+    {"location": "DK", "time": "2024", "metered_fuel": 2560.0, "metered_lime": 10.6,
      "metered_electricity": 106.0, "metered_co2": 551.0},
-    {"location": "DK", "time": 2025, "metered_fuel": 2518.0, "metered_lime": 10.4,
+    {"location": "DK", "time": "2025", "metered_fuel": 2518.0, "metered_lime": 10.4,
      "metered_electricity": 104.0, "metered_co2": 543.0},
 ]
 CEMENT_METERED_FIELDS = [

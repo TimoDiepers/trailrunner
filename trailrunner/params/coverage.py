@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from trailrunner.core.flow import Flow
+from trailrunner.core.time import TimeRange
 from trailrunner.core.units import UnitCatalog, default_catalog
 
 
@@ -47,7 +48,8 @@ class Coverage:
     """
 
     locations: frozenset[str] | None = None
-    time_range: tuple[int, int] | None = None
+    time_range: TimeRange | None = None
+    """A coarser range covers a finer time: ``year_range(2026, 2050)`` covers ``2050-12-31``."""
     context: tuple[ContextRange, ...] = ()
     units: frozenset[str] | None = None
     """Unit IRIs the model answers in; ``None`` means any unit, passed through.
@@ -67,8 +69,7 @@ class Coverage:
         if self.time_range is not None:
             if flow.time is None:
                 return False
-            earliest, latest = self.time_range
-            if not earliest <= flow.time <= latest:
+            if not self.time_range.contains(flow.time, flow.time_standard):
                 return False
         for declared in self.context:
             asked = flow.get_context(declared.name)

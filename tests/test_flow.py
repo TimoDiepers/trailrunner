@@ -1,14 +1,15 @@
 import pytest
 
 from trailrunner.core.flow import Demand, Exchange, Flow, Property
+from trailrunner.core.time import DATE, GYEAR, in_year
 from trailrunner.core.units import KG, MJ
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 
 
 def test_flow_is_hashable_and_value_equal():
-    a = Flow(iri="https://vocab.sentier.dev/products/co2-captured", location="CH", time=2030)
-    b = Flow(iri="https://vocab.sentier.dev/products/co2-captured", location="CH", time=2030)
+    a = Flow(iri="https://vocab.sentier.dev/products/co2-captured", location="CH", **in_year(2030))
+    b = Flow(iri="https://vocab.sentier.dev/products/co2-captured", location="CH", **in_year(2030))
     assert a == b
     assert hash(a) == hash(b)
     assert len({a, b}) == 1
@@ -21,10 +22,10 @@ def test_flow_location_and_time_are_optional():
 
 
 def test_flow_is_usable_as_an_aggregation_key():
-    flow = Flow(iri="co2", location="CH", time=2030)
+    flow = Flow(iri="co2", location="CH", **in_year(2030))
     totals: dict[Flow, float] = {}
     totals[flow] = totals.get(flow, 0.0) + 2.0
-    totals[Flow(iri="co2", location="CH", time=2030)] = totals.get(flow, 0.0) + 3.0
+    totals[Flow(iri="co2", location="CH", **in_year(2030))] = totals.get(flow, 0.0) + 3.0
     assert totals == {flow: 5.0}
 
 
@@ -76,3 +77,26 @@ def test_properties_do_not_affect_the_flow_aggregation_key():
     with_property = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit=MJ, properties=(mass,))
     without = Exchange(flow=Flow(iri=HEAT), amount=1.0, unit=MJ)
     assert with_property.flow == without.flow
+
+
+def test_time_is_a_string_in_a_standard():
+    flow = Flow(iri="x", **in_year(2030))
+    assert (flow.time, flow.time_standard) == ("2030", GYEAR)
+
+
+def test_an_int_year_is_refused_with_the_fix():
+    # Review focus 5.
+    with pytest.raises(TypeError, match=r"in_year\(2030\)"):
+        Flow(iri="x", time=2030)
+
+
+def test_time_and_standard_come_together():
+    with pytest.raises(ValueError, match="time_standard"):
+        Flow(iri="x", time="2030")
+    with pytest.raises(ValueError, match="time_standard"):
+        Flow(iri="x", time_standard=GYEAR)
+
+
+def test_a_value_that_does_not_parse_is_refused():
+    with pytest.raises(ValueError, match="xsd:date"):
+        Flow(iri="x", time="2030-02-30", time_standard=DATE)

@@ -104,8 +104,11 @@ class ProxySettings:
     ``context.<name>`` absent here takes the ``context`` budget.
     """
 
-    time_tolerance: int = 5
-    """Years. How far a demand's year may be moved to meet a model's coverage."""
+    time_tolerance: float = 5.0
+    """Years, measured between period midpoints.
+
+    How far a demand's time may be moved to meet a model's coverage.
+    """
 
     context_tolerance: dict[str, tuple[float, float, str]] = field(default_factory=dict)
     """Per context condition, how far ``(below, above, unit)`` the asked value may move.

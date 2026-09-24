@@ -40,6 +40,7 @@ from trailrunner.models.natural_gas_pipeline_transport import (
     TRANSPORT,
 )
 from trailrunner.params.coverage import ContextRange, Coverage
+from trailrunner.core.time import when, year_range
 
 NATURAL_GAS = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020"  # "Natural gas, liquefied or in the gaseous state"
 """Same IRI as ``electricity.NATURAL_GAS`` and ``cement.NATURAL_GAS``.
@@ -87,7 +88,7 @@ class NaturalGasSupply(Model):
 
     produces = [NATURAL_GAS]
     coverage = Coverage(
-        time_range=(2000, 2050),
+        time_range=year_range(2000, 2050),
         context=(
             ContextRange("pressure", PA, DELIVERY_PRESSURE_PA, DELIVERY_PRESSURE_PA),
         ),
@@ -104,7 +105,7 @@ class NaturalGasSupply(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         origin = row["origin"]
 
         volume_m3 = demand.amount / float(row["energy_content_mj_per_nm3"])
@@ -115,7 +116,7 @@ class NaturalGasSupply(Model):
         # property of where the pipeline runs, and asking for transport
         # "in Denmark" would hand the Norwegian leg to whatever Danish row
         # happened to exist -- or to no row at all.
-        there = dict(location=origin, time=demand.flow.time)
+        there = dict(location=origin, **when(demand.flow))
 
         return Result(
             production=[
@@ -153,14 +154,14 @@ class NaturalGasExtraction(Model):
     """
 
     produces = [NATURAL_GAS_AT_PRODUCTION]
-    coverage = Coverage(time_range=(2000, 2050), units=frozenset({M3}))
+    coverage = Coverage(time_range=year_range(2000, 2050), units=frozenset({M3}))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional. See NaturalGasSupply."""
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
-        here = dict(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
+        here = dict(location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[

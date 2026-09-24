@@ -18,6 +18,7 @@ def models_file(tmp_path):
             f'''
             from trailrunner import Demand, Exchange, Flow, Model, Result
             from trailrunner.core.settings import ALLOCATION_RULES
+            from trailrunner.core.time import when
             from trailrunner.core.units import KG
 
             HEAT = "{HEAT}"
@@ -35,7 +36,7 @@ def models_file(tmp_path):
                     return Result(
                         production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
                         biosphere=[Exchange(
-                            flow=Flow(iri=CO2, location=demand.flow.location, time=demand.flow.time),
+                            flow=Flow(iri=CO2, location=demand.flow.location, **when(demand.flow)),
                             amount=0.05 * demand.amount, unit=KG)],
                     )
 

@@ -20,13 +20,14 @@ from trailrunner.params.parameter_set import ParameterSet
 from trailrunner.resolution.models import ModelProvider
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS
+from trailrunner.core.time import GYEAR, in_year
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
 GRID_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "time", "type": "string", "time_standard": GYEAR, "iri": None},
     {"name": "share_gas", "type": "number", "unit": UNITLESS, "iri": None},
     {"name": "share_wind", "type": "number", "unit": UNITLESS, "iri": None},
     {"name": "share_hydro", "type": "number", "unit": UNITLESS, "iri": None},
@@ -35,7 +36,7 @@ GRID_FIELDS = [
 
 GAS_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "time", "type": "string", "time_standard": GYEAR, "iri": None},
     {"name": "efficiency", "type": "number", "unit": UNITLESS, "iri": None},
     {"name": "co2_factor", "type": "number", "unit": KG, "iri": None},
 ]
@@ -44,19 +45,19 @@ GAS_FIELDS = [
 @pytest.fixture
 def grid_params(tmp_path):
     rows = [
-        {"location": "CH", "time": 2020, "share_gas": 0.06, "share_wind": 0.04,
+        {"location": "CH", "time": "2020", "share_gas": 0.06, "share_wind": 0.04,
          "share_hydro": 0.90, "grid_loss": 0.07},
-        {"location": "CH", "time": 2030, "share_gas": 0.02, "share_wind": 0.18,
+        {"location": "CH", "time": "2030", "share_gas": 0.02, "share_wind": 0.18,
          "share_hydro": 0.80, "grid_loss": 0.06},
-        {"location": "RER", "time": 2020, "share_gas": 0.50, "share_wind": 0.30,
+        {"location": "RER", "time": "2020", "share_gas": 0.50, "share_wind": 0.30,
          "share_hydro": 0.20, "grid_loss": 0.08},
-        {"location": "RER", "time": 2030, "share_gas": 0.25, "share_wind": 0.55,
+        {"location": "RER", "time": "2030", "share_gas": 0.25, "share_wind": 0.55,
          "share_hydro": 0.20, "grid_loss": 0.07},
         # Hydro only: the zero shares must not become zero-amount demands.
-        {"location": "NO", "time": 2030, "share_gas": 0.0, "share_wind": 0.0,
+        {"location": "NO", "time": "2030", "share_gas": 0.0, "share_wind": 0.0,
          "share_hydro": 1.00, "grid_loss": 0.05},
         # Deliberately broken: the shares do not add up.
-        {"location": "XX", "time": 2030, "share_gas": 0.10, "share_wind": 0.10,
+        {"location": "XX", "time": "2030", "share_gas": 0.10, "share_wind": 0.10,
          "share_hydro": 0.60, "grid_loss": 0.05},
     ]
     path = write_parameter_parquet(tmp_path / "grid.parquet", rows, GRID_FIELDS)
@@ -66,15 +67,15 @@ def grid_params(tmp_path):
 @pytest.fixture
 def gas_params(tmp_path):
     rows = [
-        {"location": "RER", "time": 2020, "efficiency": 0.55, "co2_factor": 0.056},
-        {"location": "RER", "time": 2030, "efficiency": 0.62, "co2_factor": 0.056},
+        {"location": "RER", "time": "2020", "efficiency": 0.55, "co2_factor": 0.056},
+        {"location": "RER", "time": "2030", "efficiency": 0.62, "co2_factor": 0.056},
     ]
     path = write_parameter_parquet(tmp_path / "gas.parquet", rows, GAS_FIELDS)
     return ParameterSet.from_parquet(path, hierarchy=HIERARCHY)
 
 
-def kwh(iri=ELECTRICITY, location="CH", time=2030, amount=100.0):
-    return Demand(flow=Flow(iri=iri, location=location, time=time), amount=amount, unit=KWH)
+def kwh(iri=ELECTRICITY, location="CH", time="2030", time_standard=GYEAR, amount=100.0):
+    return Demand(flow=Flow(iri=iri, location=location, time=time, time_standard=time_standard), amount=amount, unit=KWH)
 
 
 def by_iri(demands):
@@ -113,10 +114,10 @@ def test_grid_sources_carry_the_shares_of_the_generated_amount(grid_params):
 
 
 def test_grid_sources_keep_the_place_time_and_unit_of_the_demand(grid_params):
-    result = GridElectricity(params=grid_params).apply(kwh(location="RER", time=2020))
+    result = GridElectricity(params=grid_params).apply(kwh(location="RER", **in_year(2020)))
     for demand in result.technosphere:
         assert demand.flow.location == "RER"
-        assert demand.flow.time == 2020
+        assert demand.flow.time == "2020"
         assert demand.unit == KWH
 
 
@@ -129,13 +130,13 @@ def test_grid_mix_differs_by_location(grid_params):
 
 def test_grid_mix_decarbonizes_over_time(grid_params):
     grid = GridElectricity(params=grid_params)
-    early = by_iri(grid.apply(kwh(location="RER", time=2020)).technosphere)
-    late = by_iri(grid.apply(kwh(location="RER", time=2030)).technosphere)
+    early = by_iri(grid.apply(kwh(location="RER", **in_year(2020))).technosphere)
+    late = by_iri(grid.apply(kwh(location="RER", **in_year(2030))).technosphere)
     assert late[ELECTRICITY_GAS].amount < early[ELECTRICITY_GAS].amount
 
 
 def test_grid_interpolates_the_mix_between_two_years(grid_params):
-    result = GridElectricity(params=grid_params).apply(kwh(location="RER", time=2025))
+    result = GridElectricity(params=grid_params).apply(kwh(location="RER", **in_year(2025)))
     generated = 100.0 / (1 - 0.075)
     assert by_iri(result.technosphere)[ELECTRICITY_GAS].amount == pytest.approx(
         0.375 * generated
@@ -170,7 +171,7 @@ def test_grid_records_the_mix_it_used_in_its_provenance(grid_params):
         ELECTRICITY_HYDRO: pytest.approx(0.80),
     }
     assert result.provenance["grid_loss"] == pytest.approx(0.06)
-    assert result.provenance["time_used"] == 2030
+    assert result.provenance["time_used"] == "2030"
 
 
 def test_gas_echoes_the_demanded_electricity(gas_params):
@@ -195,14 +196,14 @@ def test_gas_emits_co2_in_proportion_to_the_fuel_it_burned(gas_params):
 
 def test_gas_gets_more_efficient_over_time(gas_params):
     plant = GasPower(params=gas_params)
-    early = plant.apply(kwh(iri=ELECTRICITY_GAS, location="RER", time=2020))
-    late = plant.apply(kwh(iri=ELECTRICITY_GAS, location="RER", time=2030))
+    early = plant.apply(kwh(iri=ELECTRICITY_GAS, location="RER", **in_year(2020)))
+    late = plant.apply(kwh(iri=ELECTRICITY_GAS, location="RER", **in_year(2030)))
     assert late.biosphere[0].amount < early.biosphere[0].amount
 
 
 def test_gas_refuses_a_mass_demand_as_a_unit_mismatch(gas_params):
     demand = Demand(
-        flow=Flow(iri=ELECTRICITY_GAS, location="CH", time=2030), amount=100.0, unit=KG
+        flow=Flow(iri=ELECTRICITY_GAS, location="CH", **in_year(2030)), amount=100.0, unit=KG
     )
     provider = ModelProvider(Glossary([GasPower(params=gas_params)]))
     assert provider.offer(demand) is None
@@ -211,7 +212,7 @@ def test_gas_refuses_a_mass_demand_as_a_unit_mismatch(gas_params):
 
 def test_gas_is_handed_kwh_for_an_mj_demand(gas_params):
     demand = Demand(
-        flow=Flow(iri=ELECTRICITY_GAS, location="CH", time=2030), amount=3.6, unit=MJ
+        flow=Flow(iri=ELECTRICITY_GAS, location="CH", **in_year(2030)), amount=3.6, unit=MJ
     )
     offer = ModelProvider(Glossary([GasPower(params=gas_params)])).offer(demand)
     assert offer.demand.unit == KWH
@@ -227,7 +228,7 @@ def test_gas_is_handed_kwh_for_an_mj_demand(gas_params):
 
 DAC_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "time", "type": "string", "time_standard": GYEAR, "iri": None},
     {"name": "heat_demand", "type": "number", "unit": MJ, "iri": None},
     {"name": "electricity_demand", "type": "number", "unit": KWH, "iri": None},
     {"name": "temperature", "type": "number", "unit": DEG_C, "iri": None},
@@ -239,9 +240,9 @@ DAC_FIELDS = [
 def chain(tmp_path, grid_params, gas_params):
     """DAC, grid and gas plant registered together, plus the root demand."""
     rows = [
-        {"location": "CH", "time": 2030, "heat_demand": 5.0, "electricity_demand": 0.4,
+        {"location": "CH", "time": "2030", "heat_demand": 5.0, "electricity_demand": 0.4,
          "temperature": 10.0, "humidity": 0.70},
-        {"location": "RER", "time": 2030, "heat_demand": 5.5, "electricity_demand": 0.45,
+        {"location": "RER", "time": "2030", "heat_demand": 5.5, "electricity_demand": 0.45,
          "temperature": 12.0, "humidity": 0.65},
     ]
     path = write_parameter_parquet(tmp_path / "dac.parquet", rows, DAC_FIELDS)
@@ -254,7 +255,7 @@ def chain(tmp_path, grid_params, gas_params):
         ]
     )
     demand = Demand(
-        flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG
+        flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG
     )
     return glossary, demand
 
@@ -313,10 +314,10 @@ def test_the_grid_mix_puts_fossil_co2_against_the_captured_co2(chain):
 def test_the_fossil_co2_follows_the_grid_mix_of_the_location(chain, grid_params):
     glossary, _ = chain
     swiss = Orchestrator(glossary).calculate(
-        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG)
+        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG)
     )
     european = Orchestrator(glossary).calculate(
-        Demand(flow=Flow(iri=CO2_CAPTURED, location="RER", time=2030), amount=1000.0, unit=KG)
+        Demand(flow=Flow(iri=CO2_CAPTURED, location="RER", **in_year(2030)), amount=1000.0, unit=KG)
     )
 
     def fossil(report):

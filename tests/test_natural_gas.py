@@ -19,20 +19,21 @@ from trailrunner.resolution.models import ModelProvider
 
 from .conftest import write_parameter_parquet
 from trailrunner.core.units import KG, KILOMETRE, KWH, M3, MJ, TONNE
+from trailrunner.core.time import GYEAR, in_year
 
 SUPPLY_ROWS = [
-    {"location": "DK", "time": 2020, "origin": "NO", "transport_distance_km": 1000.0,
+    {"location": "DK", "time": "2020", "origin": "NO", "transport_distance_km": 1000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
-    {"location": "DK", "time": 2050, "origin": "NO", "transport_distance_km": 1000.0,
+    {"location": "DK", "time": "2050", "origin": "NO", "transport_distance_km": 1000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
-    {"location": "RER", "time": 2020, "origin": "RU", "transport_distance_km": 4000.0,
+    {"location": "RER", "time": "2020", "origin": "RU", "transport_distance_km": 4000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
-    {"location": "RER", "time": 2050, "origin": "RU", "transport_distance_km": 4000.0,
+    {"location": "RER", "time": "2050", "origin": "RU", "transport_distance_km": 4000.0,
      "energy_content_mj_per_nm3": 36.0, "gas_density_kg_per_nm3": 0.735},
 ]
 EXTRACTION_ROWS = [
-    {"location": "NO", "time": 2020, "co2_kg_per_nm3": 0.075, "extracted_nm3_per_nm3": 1.02},
-    {"location": "NO", "time": 2050, "co2_kg_per_nm3": 0.055, "extracted_nm3_per_nm3": 1.02},
+    {"location": "NO", "time": "2020", "co2_kg_per_nm3": 0.075, "extracted_nm3_per_nm3": 1.02},
+    {"location": "NO", "time": "2050", "co2_kg_per_nm3": 0.055, "extracted_nm3_per_nm3": 1.02},
 ]
 
 
@@ -43,6 +44,7 @@ def _fields(row, units=None):
             "name": name,
             "type": "string" if isinstance(value, str) else "number",
             "unit": units.get(name),
+            "time_standard": GYEAR if name == "time" else None,
         }
         for name, value in row.items()
     ]
@@ -66,17 +68,17 @@ def extraction(tmp_path):
     return NaturalGasExtraction(params=ParameterSet.from_parquet(path))
 
 
-def gas(location="DK", amount=2475.0, unit=MJ, time=2030):
+def gas(location="DK", amount=2475.0, unit=MJ, time="2030", time_standard=GYEAR):
     return Demand(
-        flow=Flow(iri=NATURAL_GAS, location=location, time=time),
+        flow=Flow(iri=NATURAL_GAS, location=location, time=time, time_standard=time_standard),
         amount=amount,
         unit=unit,
     )
 
 
-def wellhead(location="NO", amount=68.75, unit=M3, time=2030):
+def wellhead(location="NO", amount=68.75, unit=M3, time="2030", time_standard=GYEAR):
     return Demand(
-        flow=Flow(iri=NATURAL_GAS_AT_PRODUCTION, location=location, time=time),
+        flow=Flow(iri=NATURAL_GAS_AT_PRODUCTION, location=location, time=time, time_standard=time_standard),
         amount=amount,
         unit=unit,
     )
@@ -133,7 +135,7 @@ def test_supply_is_handed_mj_for_a_kwh_demand(supply):
 
 
 def test_extraction_scales_both_flows_with_the_volume(extraction):
-    result = extraction.apply(wellhead(amount=100.0, time=2020))
+    result = extraction.apply(wellhead(amount=100.0, **in_year(2020)))
     co2 = [e for e in result.biosphere if e.flow.iri == CO2_FOSSIL][0]
     resource = [e for e in result.biosphere if e.flow.iri == NATURAL_GAS_IN_GROUND][0]
     assert co2.amount == pytest.approx(7.5)
@@ -143,19 +145,19 @@ def test_extraction_scales_both_flows_with_the_volume(extraction):
 
 
 def test_extraction_takes_more_out_of_the_ground_than_it_delivers(extraction):
-    result = extraction.apply(wellhead(amount=1.0, time=2020))
+    result = extraction.apply(wellhead(amount=1.0, **in_year(2020)))
     resource = [e for e in result.biosphere if e.flow.iri == NATURAL_GAS_IN_GROUND][0]
     assert resource.amount > result.production[0].amount
 
 
 def test_extraction_is_a_leaf(extraction):
-    assert extraction.apply(wellhead(time=2020)).technosphere == []
+    assert extraction.apply(wellhead(**in_year(2020))).technosphere == []
 
 
 def test_extraction_refuses_a_mass_demand_as_a_unit_mismatch(extraction):
     provider = ModelProvider(Glossary([extraction]))
-    assert provider.offer(wellhead(unit=KG, time=2020)) is None
-    assert provider.explain(wellhead(unit=KG, time=2020))[0] == "unit_mismatch"
+    assert provider.offer(wellhead(unit=KG, **in_year(2020))) is None
+    assert provider.explain(wellhead(unit=KG, **in_year(2020)))[0] == "unit_mismatch"
 
 
 def test_the_two_models_chain_through_the_glossary(supply, extraction):

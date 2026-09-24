@@ -5,6 +5,7 @@ from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.result import Result
 from trailrunner.orchestration.log import Log
 from trailrunner.core.units import KG, MJ
+from trailrunner.core.time import in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
@@ -12,13 +13,13 @@ CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
 
 def a_demand(iri=CAPTURED, amount=1000.0, unit=KG) -> Demand:
-    return Demand(flow=Flow(iri=iri, location="CH", time=2030), amount=amount, unit=unit)
+    return Demand(flow=Flow(iri=iri, location="CH", **in_year(2030)), amount=amount, unit=unit)
 
 
 def a_result(demand: Demand) -> Result:
     return Result(
         production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", time=2030), amount=12.0, unit=KG)],
+        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", **in_year(2030)), amount=12.0, unit=KG)],
         provenance={"location_used": "RER", "location_fallback": True},
     )
 

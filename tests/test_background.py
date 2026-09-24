@@ -10,6 +10,7 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import BackgroundPack, BackgroundProvider
 from trailrunner.resolution.chain import ResolutionChain
 from trailrunner.core.units import KG, TONNE
+from trailrunner.core.time import in_year
 
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 STEEL = "https://vocab.sentier.dev/products/steel"
@@ -81,9 +82,9 @@ def test_the_borrowed_subtree_says_it_is_matrix_lca(pack_file):
 
 
 def test_the_biosphere_flows_carry_the_demands_time(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO", time=2030), amount=1.0, unit=KG)
+    demand = Demand(flow=Flow(iri=GAS, location="GLO", **in_year(2030)), amount=1.0, unit=KG)
     result = provider(pack_file).offer(demand).model.apply(demand)
-    assert all(exchange.flow.time == 2030 for exchange in result.biosphere)
+    assert all(exchange.flow.time == "2030" for exchange in result.biosphere)
 
 
 def test_location_falls_back_up_the_hierarchy(pack_file):
@@ -200,7 +201,7 @@ def test_an_unknown_basis_is_refused_on_load(tmp_path):
 def test_every_background_resolution_speaks_the_shared_vocabulary(pack_file):
     """``tier``, ``model``, ``asked`` and ``answered`` mean here what they
     mean in tiers 1 and 2 -- tier 3 used to carry no ``model`` at all."""
-    demand = Demand(flow=Flow(iri=GAS, location="GLO", time=2030), amount=1.0, unit=KG)
+    demand = Demand(flow=Flow(iri=GAS, location="GLO", **in_year(2030)), amount=1.0, unit=KG)
     resolution = provider(pack_file).offer(demand).resolution
     assert resolution["tier"] == "background"
     assert resolution["model"] == "BackgroundDataset"

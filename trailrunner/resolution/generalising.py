@@ -21,6 +21,7 @@ from typing import Protocol
 from trailrunner.core.flow import Demand, Property
 from trailrunner.core.model import Model
 from trailrunner.core.settings import ProxySettings, context_condition
+from trailrunner.core.time import interval, midpoint_year
 from trailrunner.core.units import symbol
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution.chain import Offer, describe
@@ -210,29 +211,36 @@ class GeneralisingProvider:
             yield replace(demand, flow=flow), f"location: {original} -> {location}", step
 
     def _time_candidates(self, demand: Demand, budget: int) -> Iterator[tuple[Demand, str, int]]:
-        """Snap to the nearest year a declaring model covers, within tolerance.
+        """Snap to the nearest period a declaring model covers, within tolerance.
 
-        Asks the registry rather than guessing: the only years worth trying are
-        the ones some model actually claims.
+        Asks the registry rather than guessing: the only periods worth trying
+        are the edges of ranges some model actually declares -- the nearer
+        edge of each. Distance is between period midpoints in decimal years,
+        which for year data is exactly the old ``abs(year - original)``. A
+        range that already covers the time offers nothing, as clamping a year
+        into its own range never moved it.
         """
-        original = demand.flow.time
-        if original is None:
+        original = demand.flow
+        if original.time is None:
             return
-        years: list[int] = []
-        for model in self.inner.glossary.declared_models(demand.flow):
+        here = midpoint_year(interval(original.time, original.time_standard))
+        found: dict[tuple[str, str], float] = {}
+        for model in self.inner.glossary.declared_models(original):
             window = getattr(model.coverage, "time_range", None) if model.coverage else None
-            if window is None:
+            if window is None or window.contains(original.time, original.time_standard):
                 continue
-            earliest, latest = window
-            years.append(min(max(original, earliest), latest))
-        candidates = (
-            year
-            for year in sorted(set(years), key=lambda candidate: abs(candidate - original))
-            if abs(year - original) <= self.settings.time_tolerance and year != original
-        )
-        for step, year in enumerate(islice(candidates, budget), 1):
-            flow = replace(demand.flow, time=year)
-            yield replace(demand, flow=flow), f"time: {original} -> {year}", step
+            distance, value = min(
+                (abs(midpoint_year(interval(edge, window.standard)) - here), edge)
+                for edge in window.edges()
+            )
+            key = (value, window.standard)
+            if distance > self.settings.time_tolerance or key == (original.time, original.time_standard):
+                continue
+            found[key] = min(found.get(key, distance), distance)
+        ranked = sorted(found.items(), key=lambda item: (item[1], item[0]))
+        for step, ((value, standard), _distance) in enumerate(islice(ranked, budget), 1):
+            flow = replace(original, time=value, time_standard=standard)
+            yield replace(demand, flow=flow), f"time: {original.time} -> {value}", step
 
     def _context_candidates(
         self, demand: Demand, budget: int, only: str | None = None

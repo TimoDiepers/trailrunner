@@ -13,6 +13,7 @@ receives a demand and returns what it produced, what it needs, and what it emitt
 
 ```python
 from trailrunner import Demand, Exchange, Flow, Model, Result
+from trailrunner.core.time import when
 from trailrunner.core.units import KG, KWH
 
 ELECTRICITY = "https://vocab.sentier.dev/products/electricity"
@@ -25,7 +26,7 @@ class GasTurbine(Model):
 
     def apply(self, demand: Demand) -> Result:
         fuel = demand.amount / 0.55  # kWh of gas per kWh of electricity
-        here = dict(location=demand.flow.location, time=demand.flow.time)
+        here = dict(location=demand.flow.location, **when(demand.flow))
 
         return Result(
             # what I made: the demand, echoed back
@@ -38,7 +39,8 @@ class GasTurbine(Model):
 ```
 
 Passing `location` and `time` on to every flow you create is what keeps the inventory
-placed and dated. Change them where the process really does happen elsewhere or at another
+placed and dated. `**when(demand.flow)` passes the time together with the standard it is
+written in. Change them where the process really does happen elsewhere or at another
 time: the shipped `NaturalGasSupply` puts extraction at the gas's origin, and a
 construction demand goes in the year the plant was built.
 
@@ -95,17 +97,18 @@ say which rows were used:
 
 ```python
 from trailrunner import Coverage, Demand, Exchange, Flow, Model, Result
+from trailrunner.core.time import when, year_range
 
 
 class DirectAirCapture(Model):
     produces = [CO2_CAPTURED]
-    coverage = Coverage(time_range=(2020, 2050))
+    coverage = Coverage(time_range=year_range(2020, 2050))
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         penalty = ambient_penalty(row["temperature"], row["humidity"])
         heat = row["heat_demand"] * penalty * demand.amount
-        heat_flow = Flow(iri=HEAT, location=demand.flow.location, time=demand.flow.time)
+        heat_flow = Flow(iri=HEAT, location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
@@ -131,10 +134,10 @@ row of stack-monitor data, normalised per tonne, and returns it:
 ```python
 class MeteredCementPlant(Model):
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2018, 2025))
+    coverage = Coverage(time_range=year_range(2018, 2025))
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         scale = demand.amount / 1000.0
         ...
         return Result(
@@ -147,7 +150,7 @@ class MeteredCementPlant(Model):
         )
 ```
 
-`CementPlant` declares the same product with `Coverage(time_range=(2026, 2050))`. The
+`CementPlant` declares the same product with `Coverage(time_range=year_range(2026, 2050))`. The
 ranges don't overlap, so the year on the demand decides whether a measurement or a
 calculation answers. The [CLI tutorial](getting_started/cli.md#3-change-the-year-and-a-different-model-answers)
 shows the switch.
@@ -159,11 +162,13 @@ either field means no restriction:
 
 ```python
 from trailrunner import Coverage
+from trailrunner.core.time import year_range
 
-coverage = Coverage(locations=frozenset({"CH", "DE"}), time_range=(2020, 2050))
+coverage = Coverage(locations=frozenset({"CH", "DE"}), time_range=year_range(2020, 2050))
 ```
 
-`time_range` includes both ends. A restricted field also rejects a flow that doesn't state
+`time_range` includes both ends, and covers any finer time inside them: `year_range(2020, 2050)`
+answers a demand dated `2050-12-31`. A restricted field also rejects a flow that doesn't state
 it: a model with a `time_range` never answers an undated demand. A flow outside the coverage means the glossary doesn't
 offer this model. If no model covers the flow but one declares the product, the demand is
 recorded as `coverage_excluded`, not `no_model_found`, and its `detail` names the model.
@@ -251,9 +256,10 @@ Two registered models that both cover the same product at the same place and yea
 
 ```python
 from trailrunner import Demand, Flow, Runner
+from trailrunner.core.time import in_year
 from trailrunner.core.units import KWH
 
-demand = Demand(flow=Flow(iri=ELECTRICITY, location="CH", time=2030), amount=10.0, unit=KWH)
+demand = Demand(flow=Flow(iri=ELECTRICITY, location="CH", **in_year(2030)), amount=10.0, unit=KWH)
 Runner.validate(demand, GasTurbine().apply(demand), model=GasTurbine())
 ```
 

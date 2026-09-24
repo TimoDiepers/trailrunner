@@ -65,6 +65,7 @@ from datetime import datetime
 from typing import Any
 
 from trailrunner.core.flow import Flow
+from trailrunner.core.time import interval
 from trailrunner.core.units import KG, W_PER_M2, symbol
 from trailrunner.orchestration.report import Report
 
@@ -344,13 +345,21 @@ def _lost_exchanges(
     return lost
 
 
+def _date(flow: Flow) -> datetime:
+    """Where on the axis an exchange sits: the start of its period, as naive UTC.
+
+    A year becomes 1 January, exactly as when time was an int; a finer time
+    lands where it says.
+    """
+    return interval(flow.time, flow.time_standard)[0].replace(tzinfo=None)
+
+
 def inventory_dataframe(report: Report) -> Any:
     """The report's biosphere exchanges as the four columns the library wants.
 
-    ``Flow.time`` is a year and ``characterize`` wants a timestamp, so year Y
-    becomes ``datetime(Y, 1, 1)``. That is an assumption, not a fact — a finer
-    ``Flow.time`` would change it — and it lives in this one function so the
-    change would be one edit.
+    ``characterize`` wants a timestamp, so an exchange is placed at the start
+    of its period (``_date``): year Y becomes ``datetime(Y, 1, 1)`` as before,
+    and a finer ``Flow.time`` lands where it says.
 
     Exchanges with no ``flow.time`` are **silently left out**: there is no
     place on the axis to put them and this function returns a frame, not a
@@ -363,7 +372,7 @@ def inventory_dataframe(report: Report) -> Any:
     pandas = _require("pandas")
     rows = [
         {
-            "date": datetime(exchange.flow.time, 1, 1),
+            "date": _date(exchange.flow),
             "amount": exchange.amount,
             "flow": exchange.flow.iri,
             "activity": _activity(node),
@@ -474,7 +483,7 @@ def assess_dynamic(
                     "characterized in one call — assess them separately"
                 )
             used[exchange.flow.iri] = (exchange.unit, function)
-            date = datetime(exchange.flow.time, 1, 1)
+            date = _date(exchange.flow)
             entered.setdefault((exchange.flow.iri, activity), []).append((date, record))
             rows.append(
                 {

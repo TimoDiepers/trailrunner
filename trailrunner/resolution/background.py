@@ -37,6 +37,7 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution.chain import Offer, describe
+from trailrunner.core.time import when
 
 CUMULATIVE = "cumulative"
 UNIT_PROCESS = "unit_process"
@@ -202,7 +203,7 @@ class BackgroundDataset(Model):
             technosphere=[],
             biosphere=[
                 Exchange(
-                    flow=Flow(iri=iri, location=demand.flow.location, time=demand.flow.time),
+                    flow=Flow(iri=iri, location=demand.flow.location, **when(demand.flow)),
                     amount=amount * demand.amount,
                     unit=unit,
                 )

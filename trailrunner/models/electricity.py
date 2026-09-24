@@ -20,6 +20,7 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.core.units import KWH, MJ
+from trailrunner.core.time import when, year_range
 
 # Real BONSAI vocabulary concepts (verified live against
 # https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
@@ -75,7 +76,7 @@ class GridElectricity(Model):
     """
 
     produces = [ELECTRICITY]
-    coverage = Coverage(time_range=(2000, 2050))
+    coverage = Coverage(time_range=year_range(2000, 2050))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.
@@ -89,7 +90,7 @@ class GridElectricity(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         shares = {iri: float(row[column]) for column, iri in SOURCES.items()}
 
         # A mix that does not add up is a hole in the data, and a hole that is
@@ -117,7 +118,7 @@ class GridElectricity(Model):
             technosphere=[
                 Demand(
                     flow=Flow(
-                        iri=iri, location=demand.flow.location, time=demand.flow.time
+                        iri=iri, location=demand.flow.location, **when(demand.flow)
                     ),
                     amount=share * generated,
                     unit=demand.unit,
@@ -138,7 +139,7 @@ class GasPower(Model):
     """
 
     produces = [ELECTRICITY_GAS]
-    coverage = Coverage(time_range=(2000, 2050), units=frozenset({ELECTRICITY_UNIT}))
+    coverage = Coverage(time_range=year_range(2000, 2050), units=frozenset({ELECTRICITY_UNIT}))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.
@@ -152,9 +153,9 @@ class GasPower(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         fuel = demand.amount * KWH_TO_MJ / float(row["efficiency"])
-        here = dict(location=demand.flow.location, time=demand.flow.time)
+        here = dict(location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[

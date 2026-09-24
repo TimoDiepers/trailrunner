@@ -17,7 +17,8 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS
+from trailrunner.core.time import GYEAR, in_year, when
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
@@ -26,14 +27,14 @@ HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 def dac_params(tmp_path):
     path = tmp_path / "dac.parquet"
     rows = [
-        {"location": "CH", "time": 2030, "heat_demand": 5.0, "electricity_demand": 0.4,
+        {"location": "CH", "time": "2030", "heat_demand": 5.0, "electricity_demand": 0.4,
          "temperature": 10.0, "humidity": 0.70},
-        {"location": "RER", "time": 2030, "heat_demand": 5.5, "electricity_demand": 0.45,
+        {"location": "RER", "time": "2030", "heat_demand": 5.5, "electricity_demand": 0.45,
          "temperature": 12.0, "humidity": 0.65},
     ]
     fields = [
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+        {"name": "time", "type": "string", "time_standard": GYEAR, "iri": None},
         {"name": "heat_demand", "type": "number", "unit": MJ, "iri": "https://vocab.sentier.dev/parameters/heat-demand"},
         {"name": "electricity_demand", "type": "number", "unit": KWH, "iri": "https://vocab.sentier.dev/parameters/electricity-demand"},
         {"name": "temperature", "type": "number", "unit": DEG_C, "iri": "https://vocab.sentier.dev/parameters/air-temperature"},
@@ -43,8 +44,8 @@ def dac_params(tmp_path):
     return ParameterSet.from_parquet(path, hierarchy=HIERARCHY)
 
 
-def demand(location="CH", time=2030, amount=1000.0):
-    return Demand(flow=Flow(iri=CO2_CAPTURED, location=location, time=time), amount=amount, unit=KG)
+def demand(location="CH", time="2030", time_standard=GYEAR, amount=1000.0):
+    return Demand(flow=Flow(iri=CO2_CAPTURED, location=location, time=time, time_standard=time_standard), amount=amount, unit=KG)
 
 
 def test_dac_produces_exactly_what_was_demanded(dac_params):
@@ -62,7 +63,7 @@ def test_dac_demands_heat_and_electricity_at_the_same_place_and_time(dac_params)
     assert by_iri[ELECTRICITY].unit == KWH
     for child in result.technosphere:
         assert child.flow.location == "CH"
-        assert child.flow.time == 2030
+        assert child.flow.time == "2030"
 
 
 def test_dac_takes_co2_from_air_as_a_negative_biosphere_flow(dac_params):
@@ -114,7 +115,7 @@ def test_dac_records_which_parameter_row_it_used(dac_params):
 
 def test_dac_is_out_of_coverage_before_2020(dac_params):
     glossary = Glossary([DirectAirCapture(params=dac_params)])
-    assert glossary.resolve(Flow(iri=CO2_CAPTURED, location="CH", time=1990)) is None
+    assert glossary.resolve(Flow(iri=CO2_CAPTURED, location="CH", **in_year(1990))) is None
 
 
 def test_end_to_end_traversal_with_a_heat_model(dac_params):
@@ -127,7 +128,7 @@ def test_end_to_end_traversal_with_a_heat_model(dac_params):
                 biosphere=[
                     Exchange(
                         flow=Flow(iri="https://vocab.sentier.dev/flows/co2-fossil",
-                                  location=d.flow.location, time=d.flow.time),
+                                  location=d.flow.location, **when(d.flow)),
                         amount=0.06 * d.amount,
                         unit=KG,
                     )
@@ -138,7 +139,7 @@ def test_end_to_end_traversal_with_a_heat_model(dac_params):
     report = Orchestrator(glossary).calculate(demand())
 
     assert len(report.nodes) == 2
-    uptake = report.inventory[(Flow(iri=CO2_AIR, location="CH", time=2030), KG)]
+    uptake = report.inventory[(Flow(iri=CO2_AIR, location="CH", **in_year(2030)), KG)]
     assert uptake == -1000.0
     # electricity has no model: it is a cutoff leaf, not a silent zero
     assert [r.demand.flow.iri for r in report.unresolved] == [ELECTRICITY]

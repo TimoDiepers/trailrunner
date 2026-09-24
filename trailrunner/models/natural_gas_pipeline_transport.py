@@ -34,6 +34,7 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.core.units import KG, KILOMETRE, M3, MJ, NUM, TONNE, default_catalog, symbol
+from trailrunner.core.time import when
 
 TRANSPORT = "https://vocab.sentier.dev/products/natural-gas-transport-offshore-pipeline-long-distance"
 PIPELINE_INFRASTRUCTURE = "https://vocab.sentier.dev/products/pipeline-natural-gas-long-distance-high-capacity-offshore"
@@ -129,12 +130,12 @@ class NaturalGasOffshorePipelineTransport(Model):
                 f"{type(self).__name__} was given a distance in "
                 f"{symbol(distance.unit)}, which is not a length"
             )
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         tkm = demand.amount * km
-        location, time = demand.flow.location, demand.flow.time
+        location = demand.flow.location
 
         def flow(iri: str) -> Flow:
-            return Flow(iri=iri, location=location, time=time)
+            return Flow(iri=iri, location=location, **when(demand.flow))
 
         leaked_nm3 = leaked_volume_nm3_per_tkm(row["leakage_rate_per_1000km"], row["gas_density_kg_per_nm3"]) * tkm
 

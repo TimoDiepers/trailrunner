@@ -23,6 +23,7 @@ from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
 from trailrunner.core.units import KG, PA
+from trailrunner.core.time import in_year, when, year_of, year_range
 
 # Real BONSAI vocabulary concepts, verified live against
 # https://vocab.sentier.dev on 2026-09-24 and cached by
@@ -95,7 +96,7 @@ class CementPlant(Model):
     """
 
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2026, 2050), units=frozenset({KG}))
+    coverage = Coverage(time_range=year_range(2026, 2050), units=frozenset({KG}))
     fleet: Fleet | None = None
     burner_pressure: float | None = None
 
@@ -123,7 +124,7 @@ class CementPlant(Model):
             self.burner_pressure = burner_pressure
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         penalty = moisture_penalty(row["moisture"], row["temperature"])
 
         clinker = row["clinker_factor"] * demand.amount
@@ -135,7 +136,7 @@ class CementPlant(Model):
         construction, fleet_provenance = self._construction(demand)
 
         def here(iri: str) -> Flow:
-            return Flow(iri=iri, location=demand.flow.location, time=demand.flow.time)
+            return Flow(iri=iri, location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[
@@ -206,7 +207,7 @@ class CementPlant(Model):
             return [], {}
 
         selection = self.fleet.operating(
-            location=demand.flow.location, time=demand.flow.time
+            location=demand.flow.location, time=year_of(demand.flow)
         )
         capacity_column = self.fleet.capacity_column
         lifetime_column = self.fleet.lifetime_column
@@ -225,7 +226,7 @@ class CementPlant(Model):
                 annual_output=capacity,
                 lifetime_output=capacity * lifetime,
                 lifetime_years=lifetime,
-                demand_year=demand.flow.time,
+                demand_year=year_of(demand.flow),
                 build_year=build_year,
             )
             construction.append(
@@ -236,7 +237,7 @@ class CementPlant(Model):
                     flow=Flow(
                         iri=CEMENT_KILN,
                         location=kiln.get("location", demand.flow.location),
-                        time=build_year,
+                        **in_year(build_year),
                     ),
                     amount=amount,
                     unit=unit,
@@ -271,7 +272,7 @@ class MeteredCementPlant(Model):
     """
 
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2018, 2025), units=frozenset({KG}))
+    coverage = Coverage(time_range=year_range(2018, 2025), units=frozenset({KG}))
 
     supports = ALLOCATION_RULES
     """Monofunctional, like :class:`CementPlant`, and for the same reason."""
@@ -279,11 +280,11 @@ class MeteredCementPlant(Model):
     REFERENCE_OUTPUT = 1000.0  # kg of cement the metered row is normalised to
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         scale = demand.amount / self.REFERENCE_OUTPUT
 
         def here(iri: str) -> Flow:
-            return Flow(iri=iri, location=demand.flow.location, time=demand.flow.time)
+            return Flow(iri=iri, location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[

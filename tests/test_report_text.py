@@ -3,21 +3,22 @@ from trailrunner.core.result import Result
 from trailrunner.orchestration.log import Log
 from trailrunner.orchestration.report import Report
 from trailrunner.core.units import KG, MJ
+from trailrunner.core.time import in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
-CO2 = Flow(iri="https://vocab.sentier.dev/flows/co2-fossil", location="CH", time=2030)
+CO2 = Flow(iri="https://vocab.sentier.dev/flows/co2-fossil", location="CH", **in_year(2030))
 
 
 def built_report() -> Report:
     """Root -> heat -> an unresolved gas demand, with one biosphere flow."""
     log = Log()
     root_demand = Demand(
-        flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG
+        flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG
     )
-    heat_demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=5000.0, unit=MJ)
-    gas_demand = Demand(flow=Flow(iri=GAS, location="CH", time=2030), amount=125.0, unit=KG)
+    heat_demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=5000.0, unit=MJ)
+    gas_demand = Demand(flow=Flow(iri=GAS, location="CH", **in_year(2030)), amount=125.0, unit=KG)
 
     root = log.write(
         root_demand,
@@ -142,7 +143,7 @@ def test_an_unrecognised_tier_is_never_labelled_an_exact_match():
     """tree() and proxies must agree: whatever summary() counts as a proxy,
     tree() must not print as a model."""
     log = Log()
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=1.0, unit=MJ)
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=1.0, unit=MJ)
     log.write(
         demand,
         Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=MJ)]),
@@ -199,7 +200,7 @@ def test_summary_says_nothing_extra_when_no_proxy_is_incomplete():
 def test_a_resolution_without_a_tier_is_treated_as_an_exact_match():
     """The absent-tier default is 'model' in both views, not just one."""
     log = Log()
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=1.0, unit=MJ)
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=1.0, unit=MJ)
     log.write(
         demand,
         Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=MJ)]),
