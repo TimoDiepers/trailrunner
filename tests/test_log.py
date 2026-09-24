@@ -1,11 +1,11 @@
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.result import Result
 from trailrunner.orchestration.log import Log
-from trailrunner.core.units import KG, MJ
-from trailrunner.core.time import in_year
+from trailrunner.core.units import KG, MJ, PA
+from trailrunner.core.time import DATE, in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
@@ -328,3 +328,37 @@ def test_a_nested_record_is_flattened_key_by_key(tmp_path):
         "window.earliest": "2020",
         "window.latest": "2030",
     }
+
+
+def test_the_parquet_carries_time_standard_interval_and_context(tmp_path):
+    from datetime import UTC, datetime
+
+    flow = Flow(
+        iri="https://example.org/gas",
+        time="2030-06-15",
+        time_standard=DATE,
+        context=(Property("pressure", 4e5, PA),),
+    )
+    log = Log()
+    demand = Demand(flow=flow, amount=1.0, unit=KG)
+    log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=flow, amount=1.0, unit=KG)],
+            biosphere=[Exchange(flow=flow, amount=2.0, unit=KG)],
+        ),
+        depth=0,
+        parent=None,
+        model="M",
+        resolution={"tier": "model"},
+    )
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    row = [r for r in pq.read_table(path).to_pylist() if r["kind"] == "biosphere"][0]
+    assert row["demand_time"] == "2030-06-15"
+    assert row["demand_time_standard"] == DATE
+    assert row["demand_time_start"] == datetime(2030, 6, 15, tzinfo=UTC)
+    assert row["demand_time_end"] == datetime(2030, 6, 16, tzinfo=UTC)
+    assert row["demand_context"] == "pressure=400000 Pa"
+    assert row["flow_time_start"] == datetime(2030, 6, 15, tzinfo=UTC)
+    assert row["flow_context"] == "pressure=400000 Pa"
