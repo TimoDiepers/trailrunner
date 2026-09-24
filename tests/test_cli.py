@@ -167,3 +167,46 @@ def test_a_context_tolerance_that_forbids_the_side_leaves_the_cutoff(capsys):
 def test_a_malformed_context_tolerance_is_rejected_before_anything_runs(bad, capsys):
     assert main([*CEMENT_RUN, "--context-tolerance", bad]) == 2
     assert "context tolerance" in capsys.readouterr().err
+
+
+def test_proxy_order_parses_entries_and_combinations():
+    from trailrunner.cli import parse_proxy_order
+
+    assert parse_proxy_order(None) == ("context",)
+    assert parse_proxy_order("context.pressure,context.pressure+context.temperature") == (
+        "context.pressure",
+        ("context.pressure", "context.temperature"),
+    )
+
+
+@pytest.mark.parametrize(
+    "order, message",
+    [
+        ("location", "not a context dimension"),
+        ("context.temperature", "no context_tolerance for 'temperature'"),
+    ],
+)
+def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, capsys):
+    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1", "--proxy-order", order])
+    assert code == 2
+    assert message in capsys.readouterr().err
+
+
+def test_a_context_tolerance_given_twice_is_rejected(capsys):
+    code = main([
+        *CEMENT_RUN,
+        "--context-tolerance", "pressure=0:1",
+        "--context-tolerance", "pressure=0:2",
+    ])
+    assert code == 2
+    assert "more than once" in capsys.readouterr().err
+
+
+def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
+    code = main([
+        *CEMENT_RUN,
+        "--context-tolerance", "pressure=0:1",
+        "--proxy-order", "context.pressure",
+    ])
+    assert code == 0
+    assert "[proxy: context: pressure 4 bar -> 5 bar]" in capsys.readouterr().out

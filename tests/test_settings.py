@@ -127,3 +127,39 @@ def test_a_combined_entry_needs_a_budget_for_every_member():
         ProxySettings(
             order=(("location", "product"),), max_steps={"location": 2}
         )
+
+
+def test_a_context_condition_is_a_dimension_of_its_own():
+    settings = ProxySettings(
+        order=("context.pressure", ("context.pressure", "location")),
+        context_tolerance={"pressure": (0.0, 1.0)},
+    )
+    # absent from max_steps, so it takes the context budget
+    assert settings.steps_allowed("context.pressure") == settings.steps_allowed("context")
+
+
+def test_a_context_condition_may_have_its_own_budget():
+    settings = ProxySettings(
+        order=("context.pressure",),
+        max_steps={"context.pressure": 3},
+        context_tolerance={"pressure": (0.0, 1.0)},
+    )
+    assert settings.steps_allowed("context.pressure") == 3
+
+
+def test_a_context_condition_without_a_tolerance_is_rejected():
+    with pytest.raises(ValueError, match="no context_tolerance for 'pressure'"):
+        ProxySettings(order=("context.pressure",))
+
+
+def test_context_cannot_be_combined_with_its_own_condition():
+    with pytest.raises(ValueError, match="combines context with one of its own"):
+        ProxySettings(
+            order=(("context", "context.pressure"),),
+            context_tolerance={"pressure": (0.0, 1.0)},
+        )
+
+
+def test_an_empty_context_condition_is_rejected():
+    with pytest.raises(ValueError, match="names no context condition"):
+        ProxySettings(order=("context.",))

@@ -20,7 +20,7 @@ from typing import Protocol
 
 from trailrunner.core.flow import Demand, Property
 from trailrunner.core.model import Model
-from trailrunner.core.settings import ProxySettings
+from trailrunner.core.settings import ProxySettings, context_condition
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution.chain import Offer, describe
 from trailrunner.resolution.models import ModelProvider
@@ -187,6 +187,8 @@ class GeneralisingProvider:
             yield from self._time_candidates(demand, budget)
         elif dimension == "context":
             yield from self._context_candidates(demand, budget)
+        elif context_condition(dimension) is not None:
+            yield from self._context_candidates(demand, budget, context_condition(dimension))
         elif dimension == "product":
             yield from self._product_candidates(demand, budget)
 
@@ -226,9 +228,14 @@ class GeneralisingProvider:
             yield replace(demand, flow=flow), f"time: {original} -> {year}", step
 
     def _context_candidates(
-        self, demand: Demand, budget: int
+        self, demand: Demand, budget: int, only: str | None = None
     ) -> Iterator[tuple[Demand, str, int]]:
         """Move one condition to the nearest value a declaring model covers.
+
+        ``only`` restricts this to one condition: that is the
+        ``context.<name>`` dimension, and what lets a combined entry move two
+        conditions together by nesting, as it nests location and time.
+        Without it, every tolerated condition is a candidate, one at a time.
 
         The same move as ``_time_candidates``, one condition at a time: ask
         the registry which ranges exist, snap into each, keep what lies within
@@ -240,6 +247,8 @@ class GeneralisingProvider:
         """
         found: dict[tuple[str, float], tuple[float, Property]] = {}
         for asked in demand.flow.context:
+            if only is not None and asked.name != only:
+                continue
             tolerance = self.settings.context_tolerance.get(asked.name)
             if tolerance is None:
                 continue

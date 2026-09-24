@@ -52,6 +52,9 @@ impact characterization of it.
 
 ## Running from the shell
 
+Demand one tonne of Portland cement (BONSAI `fi_37440`) in Denmark in 2030, using the
+models that ship in `examples/`:
+
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
@@ -60,12 +63,42 @@ uv run trailrunner run \
     --context-tolerance pressure=0:1
 ```
 
-prints the report's summary and the supply chain it walked. The kiln asks for gas at
-4 bar and the supplier delivers 5. `--context-tolerance pressure=0:1` lets pressure be met
-up to 1 bar higher, never lower, so the gas is answered as a recorded proxy
-(`[proxy: context: pressure 4 bar -> 5 bar]`) rather than cut off. Add `--method` for a score,
-`--dynamic radiative_forcing` for a time-explicit result and `--out run.parquet` for the
-full log; the [CLI tutorial](docs/content/getting_started/cli.md) goes through each.
+It prints a summary (how many nodes ran, how many demands went unanswered and why, how
+many were answered by a stand-in), then the supply chain as a tree, one line per demand:
+
+```text
+1000 kg fi_37440 @DK/2030  [model: CementPlant]
+  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+    ...
+  1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
+```
+
+`@DK/2030` is where and when, `(pressure=4 bar)` is what the demand asked for beyond that,
+and the brackets say who answered: an exact `model`, a `proxy` with what was conceded, or a
+`cutoff` with the reason.
+
+**`--context-tolerance`** is what turned the gas into a proxy. The kiln's burners ask for
+gas at 4 bar; the only supplier delivers at 5. Matching is exact by default, so without
+the flag that gas is a `coverage_excluded` cutoff. `pressure=0:1` reads *up to 0 bar
+lower, up to 1 bar higher* than asked: higher-pressure gas can be throttled at the burner,
+lower can't be boosted. The move is written into the tree and counted as a proxy.
+
+| Flag | What it does |
+| --- | --- |
+| `IRI`, `--amount`, `--unit` | what to demand, and how much (required) |
+| `--location`, `--year` | where and when; every model downstream receives them |
+| `--models FILE` | a `.py` file defining a `MODELS` list (required) |
+| `--context-tolerance NAME=BELOW:ABOVE` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in its own unit; repeat per condition |
+| `--proxy-order ORDER` | which conditions to relax, in order: `,` between tries, `+` to move conditions together, e.g. `context.pressure,context.pressure+context.temperature`; default is one condition at a time |
+| `--method FILE` | characterize with a method parquet and print a score |
+| `--dynamic METRIC`, `--horizon YEARS` | a time-explicit result, e.g. `radiative_forcing` |
+| `--allocation`, `--capital` | the run's normative choices for co-products and capital goods |
+| `--max-depth`, `--max-nodes` | bound the traversal |
+| `--out FILE` | write the full run log to parquet |
+
+The [CLI tutorial](docs/content/getting_started/cli.md) walks through each, including a
+two-condition example of `--proxy-order`.
 
 ## Development
 

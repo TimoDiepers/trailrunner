@@ -7,6 +7,8 @@ ALLOCATION_RULES = frozenset({"none", "mass", "economic", "energy", "substitutio
 CAPITAL_RULES = frozenset({"per_output", "per_year", "first_life"})
 REUSE_RULES = frozenset({"first_life", "shared"})
 PROXY_DIMENSIONS = ("time", "location", "context", "product")
+CONTEXT_PREFIX = "context."
+"""``context.pressure`` is a dimension of its own: one context condition."""
 
 
 def _check(value: str, allowed, label: str) -> None:
@@ -14,6 +16,20 @@ def _check(value: str, allowed, label: str) -> None:
         raise ValueError(
             f"{value!r} is not a known {label}; allowed: {', '.join(sorted(allowed))}"
         )
+
+
+def context_condition(dimension: str) -> str | None:
+    """``"context.pressure"`` -> ``"pressure"``; ``None`` for any other dimension."""
+    if dimension.startswith(CONTEXT_PREFIX):
+        return dimension[len(CONTEXT_PREFIX) :]
+    return None
+
+
+def _check_dimension(dimension: str) -> None:
+    if context_condition(dimension) == "":
+        raise ValueError(f"{dimension!r} names no context condition; write context.<name>")
+    if context_condition(dimension) is None:
+        _check(dimension, PROXY_DIMENSIONS + ("context.<name>",), "proxy dimension")
 
 
 @dataclass(frozen=True)
@@ -59,7 +75,16 @@ class ProxySettings:
     ``context`` sits before ``product`` in the default order because meeting
     a condition a little differently -- gas at 5 bar for a burner asking 4 --
     keeps the product itself, which a broader concept does not. It relaxes
-    nothing until ``context_tolerance`` names a condition.
+    nothing until ``context_tolerance`` names a condition, and then it moves
+    one tolerated condition at a time, never two together.
+
+    To relax conditions together, name each as a dimension of its own,
+    ``context.<name>``, and combine them like any other:
+    ``("context.pressure", "context.temperature",
+    ("context.pressure", "context.temperature"))`` tries pressure alone,
+    temperature alone, and only then both. A ``context.<name>`` entry needs
+    a ``context_tolerance`` for that name, and may not share a combined entry
+    with plain ``context``, which would move the same condition twice.
 
     Frozen to prevent reassignment, but not hashable — ``max_steps`` is a dict.
     """
@@ -72,10 +97,11 @@ class ProxySettings:
 
     A step means the same thing in every dimension: one level up the location
     hierarchy, one level up the product taxonomy's ``skos:broader``, or one
-    year snapped to. A single step can offer more than one candidate — a
-    concept with two broader concepts is one level up either way — and all of
-    a permitted level's candidates are tried. A dimension absent from this
-    dict is not relaxed at all.
+    year or context value snapped to. A single step can offer more than one
+    candidate — a concept with two broader concepts is one level up either
+    way — and all of a permitted level's candidates are tried. A dimension
+    absent from this dict is not relaxed at all, except that a
+    ``context.<name>`` absent here takes the ``context`` budget.
     """
 
     time_tolerance: int = 5
@@ -96,15 +122,25 @@ class ProxySettings:
         for entry in self.order:
             members = (entry,) if isinstance(entry, str) else tuple(entry)
             for dimension in members:
-                _check(dimension, PROXY_DIMENSIONS, "proxy dimension")
+                _check_dimension(dimension)
+                name = context_condition(dimension)
+                if name is not None and name not in self.context_tolerance:
+                    raise ValueError(
+                        f"{dimension!r} can never be tried: no context_tolerance for {name!r}"
+                    )
             if len(set(members)) != len(members):
                 raise ValueError(f"each proxy dimension may appear only once in {entry}")
+            if "context" in members and any(context_condition(m) for m in members):
+                raise ValueError(
+                    f"{entry!r} combines context with one of its own conditions; "
+                    "name the conditions instead"
+                )
             key = frozenset(members)
             if key in seen:
                 raise ValueError(f"each proxy entry may appear only once in {self.order}")
             seen.add(key)
         for dimension, budget in self.max_steps.items():
-            _check(dimension, PROXY_DIMENSIONS, "proxy dimension")
+            _check_dimension(dimension)
             if budget < 0:
                 raise ValueError(f"{budget!r} is not a valid proxy budget; must be >= 0")
         for entry in self.order:
@@ -132,8 +168,17 @@ class ProxySettings:
             )
 
     def steps_allowed(self, dimension: str) -> int:
-        """Budget for ``dimension``. Absent means zero: no accidental relaxation."""
-        return self.max_steps.get(dimension, 0)
+        """Budget for ``dimension``. Absent means zero: no accidental relaxation.
+
+        A ``context.<name>`` absent from ``max_steps`` falls back to the
+        ``context`` budget: its tolerance already had to be written, so it
+        cannot relax by accident.
+        """
+        if dimension in self.max_steps:
+            return self.max_steps[dimension]
+        if context_condition(dimension) is not None:
+            return self.max_steps.get("context", 0)
+        return 0
 
 
 @dataclass(frozen=True)

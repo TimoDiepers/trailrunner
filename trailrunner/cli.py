@@ -30,11 +30,17 @@ def load_models(path: Path) -> list:
 
 
 def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, float]]:
-    """``["pressure=0:1"]`` -> ``{"pressure": (0.0, 1.0)}``: below, then above."""
+    """``["pressure=0:1"]`` -> ``{"pressure": (0.0, 1.0)}``: below, then above.
+
+    A condition given twice is refused rather than the last one winning: two
+    tolerances for one condition is a typo, not a preference.
+    """
     tolerance: dict[str, tuple[float, float]] = {}
     for value in values or []:
         name, sep, bounds = value.partition("=")
         below, colon, above = bounds.partition(":")
+        if name in tolerance:
+            raise ValueError(f"context tolerance for {name!r} is given more than once")
         try:
             if not (name and sep and colon):
                 raise ValueError
@@ -45,6 +51,29 @@ def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, 
                 "e.g. pressure=0:1"
             ) from None
     return tolerance
+
+
+def parse_proxy_order(value: str | None) -> tuple[str | tuple[str, ...], ...]:
+    """``"context.pressure,context.pressure+context.temperature"`` -> an order.
+
+    Commas separate entries, tried left to right; ``+`` joins the members of
+    one combined entry. Only context dimensions: the CLI has no location
+    hierarchy or product taxonomy to relax along, and an order naming them
+    would promise relaxations it cannot make.
+    """
+    if value is None:
+        return ("context",)
+    order: list[str | tuple[str, ...]] = []
+    for entry in value.split(","):
+        members = tuple(member.strip() for member in entry.split("+"))
+        for member in members:
+            if member != "context" and not member.startswith("context."):
+                raise ValueError(
+                    f"{member!r} is not a context dimension; --proxy-order takes "
+                    "context and context.<name> only"
+                )
+        order.append(members[0] if len(members) == 1 else members)
+    return tuple(order)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,6 +99,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="let a context condition be met this far below/above what was asked, "
         "e.g. pressure=0:1; repeatable",
     )
+    run.add_argument(
+        "--proxy-order",
+        default=None,
+        metavar="ORDER",
+        help="which context relaxations to try, in order: comma-separated, + to relax "
+        "together, e.g. context.pressure,context.pressure+context.temperature "
+        "(default: context, one condition at a time)",
+    )
     run.add_argument("--max-depth", type=int, default=10)
     run.add_argument("--max-nodes", type=int, default=1000)
     run.add_argument("--out", default=None, help="write the parquet log here")
@@ -86,7 +123,10 @@ def main(argv: list[str] | None = None) -> int:
             # Context only. The CLI has no location hierarchy or taxonomy to
             # relax along, and a flag about pressure should not quietly start
             # moving years as well.
-            proxy=ProxySettings(order=("context",), context_tolerance=context_tolerance),
+            proxy=ProxySettings(
+                order=parse_proxy_order(args.proxy_order),
+                context_tolerance=context_tolerance,
+            ),
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
