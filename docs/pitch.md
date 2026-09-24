@@ -6,15 +6,23 @@ tags:
 
 # The pitch (3 min)
 
-**1000 kg Portland cement, Denmark, 2030 — what's the impact?**
+`trailrunner` treats one physical activity as one *model*, a piece of code
+for one process. Given a demand for one of its products, the model works out
+which inputs it needs and what it emits, reading its parameters from a
+[trailpack](https://github.com/TimoDiepers/trailpack) parquet file.
 
-`trailrunner`: computational process models, not static unit processes.
+Every flow is named by an IRI from the
+[sentier vocabulary](https://vocab.sentier.dev). The orchestrator reads a
+model's further demands, finds the models that produce them and calls those in
+turn, until nothing in the supply chain is left open.
 
-*More detail: [5-minute pitch](pitch-5min.md).*
+*The [5-minute pitch](pitch-5min.md) has more detail.*
 
 ---
 
-## Models instead of unit processes
+## One process, one model
+
+Our example is 1000 kg of Portland cement, made in Denmark in 2030.
 
 ```python
 answer = cement_model.apply(DEMAND)
@@ -31,9 +39,9 @@ answer = cement_model.apply(DEMAND)
     biosphere     138.6 kg   co2-fossil                                   DK     2030
 ```
 
-- Takes a `Demand`, returns a `Result`: made, needed, emitted
-- Names = concepts from the [sentier vocabulary](https://vocab.sentier.dev)
-- Physics-aware: fuel demand reacts to moisture & temperature
+The model takes a `Demand` and returns a `Result` with what it made, what it
+needs from upstream and what it emitted. Its fuel demand follows the moisture
+and temperature recorded for the place and year it was asked about.
 
 ```python
 row = params.at(location="DK", time=2030)
@@ -42,10 +50,10 @@ fuel = row["fuel_demand"] * clinker * penalty
 ```
 
 !!! info "trailpack"
-    Params from [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet — units & vocab IRIs embedded per column. BrightCon 2025 hackathon project.
+    Parameters come from a [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet file, which stores units and vocabulary IRIs per column. It started at the BrightCon 2025 hackathon.
 
-**Measured beats modelled, when it exists.** Same product, disjoint coverage
-— demand's year picks meter vs. model.
+**A model can be a measurement.** A metered plant covers 2023 and the modelled
+plant covers 2030, so the year on the demand decides which one answers.
 
 ```text
 2023  answered by MeteredCementPlant   source: measured    562.0 kg CO2
@@ -77,17 +85,18 @@ flowchart TB
     class I record
 ```
 
-`Orchestrator.calculate` = `while queue:`, little else. Pop a demand, ask who
-can answer it, push what comes back, write everything down. A model is found
-by the IRI it declares in `produces` — no wiring, no registry.
+`Orchestrator.calculate` is a `while queue:` loop. It pops a demand, asks who
+can answer it, pushes the new demands and logs each step. Models are found by
+the product IRIs they declare in `produces`.
 
 ---
 
 ## Finding fallback models
 
-Tier 1 = models. Every later tier = **concession**, written at the node.
+Tier 1 is a model that matches the demand exactly. Each later tier makes a
+concession, and the concession is written at the node.
 
-**Tier 2 generalises** one `skos:broader` step at a time:
+**Tier 2 generalises** the product one `skos:broader` step at a time.
 
 ```text
        model: BinderSupply
@@ -96,13 +105,12 @@ Tier 1 = models. Every later tier = **concession**, written at the node.
     answered: Plaster, lime and cement   (broader concept, 2 hops up)
 ```
 
-An average containing the very product this plant makes — best available,
-poor in substance, **written at the node**.
+The answer is an average that includes cement, the product this plant makes.
+It is the best data available, and the report says so.
 
-Not just time and place: a demand can carry a **context**, named by IRI
-(QUDT pressure, in bar). The kiln burners ask for gas at 4 bar; the supplier
-delivers 5. Pressure may be met up to 1 bar
-*higher*, never lower:
+A demand can also carry a **context**, such as a pressure named by its QUDT
+IRI. The kiln burners ask for gas at 4 bar and the supplier delivers at 5 bar.
+The study allows pressure to be met up to 1 bar higher.
 
 ```text
        model: NaturalGasSupply
@@ -117,7 +125,7 @@ delivers 5. Pressure may be met up to 1 bar
 
 ## The cement chain, end to end
 
-One `while queue:` later — every tier in one run:
+The full run, with every tier.
 
 ```text
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
@@ -200,15 +208,16 @@ flowchart TB
     linkStyle 16,17,18,19,20,21,22 stroke:#8b5cf6
 ```
 
-*Amber = tier 1, a model answered · blue = tier 2, a relaxed demand (broader
-concept, or pressure met higher) · teal = tier 3, borrowed dataset · red dashed = cutoff · violet =
+*Amber is tier 1, where a model answered. Blue is tier 2, a relaxed demand.
+Teal is tier 3, a borrowed dataset. Red dashed is a cutoff. Violet marks
 elementary flows into the inventory.*
 
-Kilns built **2026** and **2029**, cement **2030**, gas extracted in **NO**.
-Nothing was told about time or place — the flows carried both.
+The kilns are dated **2026** and **2029**, the cement **2030**, and the gas
+comes from **NO**. The loop itself knows nothing about time or place. Each flow
+carries both.
 
 !!! info "Where the pipeline model comes from"
-    Reverse-engineered from BAFU-2026 ecoinvent EcoSpold data and the Bussa et al. 2025 LCI report — not invented.
+    Reverse-engineered from BAFU-2026 ecoinvent EcoSpold data and the Bussa et al. 2025 LCI report.
 
 ---
 
@@ -220,21 +229,22 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 
 ![Marginal and cumulative radiative forcing over 100 years](assets/showcase/curve.svg)
 
-No matrix rebuilt, no second model. Dates were never lost.
+The curve is read from the same report. The dates came through the whole
+traversal.
 
 ---
 
 ## Why we want this
 
-- Supply chain **assembles itself** — vocabulary, not wiring
-- Demands match on **more than time and place** — pressure, or any declared condition
-- Missing data is **visible**, not silently zero
-- Concessions are **declared and recorded**, not buried
-- Inventories are **time-explicit by construction**
-- A process can **depend on its own demand** (location, year, conditions)
-- A model can **be a measurement** — same interface, disjoint coverage
+- The supply chain **assembles itself** from shared vocabulary IRIs
+- Demands match on **conditions** such as pressure, beyond time and place
+- Every **cutoff** is listed in the report with its reason
+- Every **concession** is recorded at its node
+- Inventories are **time-explicit** by construction
+- A process can **depend on its demand**, its location, year and conditions
+- A **measurement** fits the same interface as a model
 
 ---
 
-*More detail: [5-minute pitch](pitch-5min.md) · Full tour: [showcase.md](showcase.md) ·
-Notebook: [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)*
+*[5-minute pitch](pitch-5min.md) · [Full tour](showcase.md) ·
+[Notebook `examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)*

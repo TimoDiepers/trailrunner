@@ -6,15 +6,25 @@ tags:
 
 # The pitch (5 min)
 
-**1000 kg Portland cement, Denmark, 2030 — what's the impact?**
+`trailrunner` treats one physical activity as one *model*, a piece of code
+for one process. Given a demand for one of its products, the model works out
+which inputs it needs and what it emits, reading its parameters from a
+[trailpack](https://github.com/TimoDiepers/trailpack) parquet file. Because
+the demand is an argument, one model covers every place, year and scale it was
+written for. A model can also be a plain measurement read from the same file.
 
-`trailrunner`: computational process models, not static unit processes.
+Every flow is named by an IRI from the
+[sentier vocabulary](https://vocab.sentier.dev). The orchestrator reads a
+model's further demands, finds the models that produce them and calls those in
+turn, until nothing in the supply chain is left open.
 
-*Shorter version: [3-minute pitch](pitch.md).*
+*The [3-minute pitch](pitch.md) is the short version.*
 
 ---
 
-## Models instead of unit processes
+## One process, one model
+
+Our example is 1000 kg of Portland cement, made in Denmark in 2030.
 
 ```python
 answer = cement_model.apply(DEMAND)
@@ -31,9 +41,10 @@ answer = cement_model.apply(DEMAND)
     biosphere     138.6 kg   co2-fossil                                   DK     2030
 ```
 
-- Takes a `Demand`, returns a `Result`: made, needed, emitted
-- Names = concepts from the [sentier vocabulary](https://vocab.sentier.dev) — shared, so two models can compose with no name matching
-- Physics-aware: process can react to *where* and *when* it's asked
+The model takes a `Demand` and returns a `Result` with what it made, what it
+needs from upstream and what it emitted. Each flow is a shared vocabulary
+concept, so models written by different people connect directly. The process
+can also react to where and when it is asked for.
 
 ```python
 row = params.at(location="DK", time=2030)
@@ -48,10 +59,10 @@ fuel = row["fuel_demand"] * clinker * penalty
 ```
 
 !!! info "trailpack"
-    Params from [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet — units & vocab IRIs embedded per column. BrightCon 2025 hackathon project.
+    Parameters come from a [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet file, which stores units and vocabulary IRIs per column. It started at the BrightCon 2025 hackathon.
 
-**Measured beats modelled, when it exists.** Same product, disjoint
-coverage — year on the demand picks meter vs. model:
+**A model can be a measurement.** A metered plant covers 2023 and the modelled
+plant covers 2030, so the year on the demand decides which one answers.
 
 ```text
 2023  answered by MeteredCementPlant
@@ -65,7 +76,7 @@ coverage — year on the demand picks meter vs. model:
            138.6 kg
 ```
 
-Meter sees one plume. Model knows which kg came from where.
+The meter reports one CO2 total. The model reports each source separately.
 
 ---
 
@@ -92,17 +103,18 @@ flowchart TB
     class I record
 ```
 
-`Orchestrator.calculate` = `while queue:`, little else. Pop a demand, ask who
-can answer it, push what comes back, write everything down. A model is found
-by the IRI it declares in `produces` — no wiring, no registry.
+`Orchestrator.calculate` is a `while queue:` loop. It pops a demand, asks who
+can answer it, pushes the new demands and logs each step. Models are found by
+the product IRIs they declare in `produces`, so nobody wires them together.
 
 ---
 
 ## Finding fallback models
 
-Tier 1 = models. Every later tier = **concession**, written at the node.
+Tier 1 is a model that matches the demand exactly. Each later tier makes a
+concession, and the concession is written at the node.
 
-**Tier 2 generalises the demand** one `skos:broader` step at a time:
+**Tier 2 generalises the demand** one `skos:broader` step at a time.
 
 ```text
        model: BinderSupply
@@ -112,14 +124,16 @@ Tier 1 = models. Every later tier = **concession**, written at the node.
         tier: generalising
 ```
 
-"Plaster, lime **and cement**" — contains the very product this plant
-makes. Best available, poor in substance. Not hidden.
+"Plaster, lime **and cement**" includes the product this plant makes. It
+is the best data available, and the report says so.
 
-**Tier 2 also relaxes context.** Time and place are not the only things a
-demand asks for. The kiln burners want gas at **4 bar**, carried in the flow's
-`context` as the QUDT concept `http://qudt.org/vocab/quantitykind/Pressure` in `http://qudt.org/vocab/unit/BAR`; `NaturalGasSupply` declares in its coverage that it delivers at
-**5 bar**. Tier 1 misses. The practitioner allows pressure to be met up to
-1 bar higher, never lower — gas is throttled at the burner, not boosted:
+**Tier 2 also relaxes context.** The kiln burners want gas at **4 bar**. The
+flow's `context` carries this as the QUDT concept
+`http://qudt.org/vocab/quantitykind/Pressure` in
+`http://qudt.org/vocab/unit/BAR`. `NaturalGasSupply` declares in its coverage
+that it delivers at **5 bar**, so tier 1 finds no match. Gas can be throttled
+down at the burner, so the practitioner allows pressure to be met up to 1 bar
+higher.
 
 ```python
 ProxySettings(context_tolerance={"http://qudt.org/vocab/quantitykind/Pressure": (0.0, 1.0)})  # (below, above)
@@ -133,17 +147,17 @@ ProxySettings(context_tolerance={"http://qudt.org/vocab/quantitykind/Pressure": 
         tier: generalising
 ```
 
-The gas plant's own gas names no pressure, so any supplier answers it — a
-plain tier-1 match, same supplier, same run.
+`GasPower` asks for gas without a pressure, so the same supplier answers it
+at tier 1 in the same run.
 
 **Tier 3 borrows a dataset** from a curated background pack and tags it
-`incomplete`, because its own upstream is missing rather than deferred.
+`incomplete`, because the dataset's own upstream is missing.
 
 ---
 
 ## The cement chain, end to end
 
-One `while queue:` later — 1000 kg of Danish cement, every tier in one run:
+The full run for 1000 kg of Danish cement, with every tier.
 
 ```text
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
@@ -226,15 +240,14 @@ flowchart TB
     linkStyle 16,17,18,19,20,21,22 stroke:#8b5cf6
 ```
 
-*Amber = tier 1, a model answered · blue = tier 2, a relaxed demand (broader
-concept, or pressure met higher) · teal = tier 3, borrowed dataset · red dashed = cutoff · violet =
-elementary flows into the inventory.*
+*Amber is tier 1, where a model answered. Blue is tier 2, a relaxed demand
+(broader concept, or pressure met higher). Teal is tier 3, a borrowed dataset.
+Red dashed is a cutoff. Violet marks elementary flows into the inventory.*
 
-Read the years. The kilns were built in **2026** and **2029**, so their
-construction and the background steel behind it are dated there; the cement
-and the gas that fires it are **2030**; and the gas itself is extracted and
-piped in **NO**, not DK. Nothing in the loop was told about time or place —
-the flows carried both.
+The kilns were built in **2026** and **2029**, and their construction and the
+steel behind it carry those years. The cement and the gas that fires it are
+**2030**. The gas is extracted and piped in **NO**. The loop itself knows
+nothing about time or place. Each flow carries both.
 
 ```text
 18 nodes, 13 inventory entries
@@ -243,16 +256,18 @@ the flows carried both.
 attribution: allocation=none, capital=per_output
 ```
 
-`capital=per_output` — normative choice, stated next to the numbers.
+`capital=per_output` is a normative choice, and the report states it next to
+the numbers.
 
 !!! info "Where the pipeline model comes from"
-    Reverse-engineered from BAFU-2026 ecoinvent EcoSpold data and the Bussa et al. 2025 LCI report — not invented.
+    Reverse-engineered from BAFU-2026 ecoinvent EcoSpold data and the Bussa et al. 2025 LCI report.
 
 ---
 
 ## Tracing time and place for free
 
-Those dates survived the traversal, so the inventory is already a time series:
+The dates came through the traversal, so the inventory is already a time
+series.
 
 ```python
 dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
@@ -260,24 +275,24 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 
 ![Marginal and cumulative radiative forcing over 100 years](assets/showcase/curve.svg)
 
-- Kilns (2027/2029): barely register
-- 2031 cement production: 4 orders of magnitude bigger
-- No matrix rebuilt, no second model — dates were never lost
+The kilns show up in 2027 and 2029 and barely register. Cement production
+arrives in 2031, four orders of magnitude larger. The curve is read from the
+same report.
 
 ---
 
 ## Why we want this
 
-- **Supply chain assembles itself** — vocabulary IRIs, not wiring
-- **Missing data is visible** — every cutoff carries a reason and a position
-- **Concessions are declared and recorded** — not buried in an assumption
-- **Inventories are time-explicit by construction** — dynamic LCIA needs no second model
-- **The run is a file** — one parquet holds the graph, the gaps and the choices
-- **A process can depend on its demand** — location, year, scale, feed conditions live in the model
-- **Demands match on more than time and place** — a declared condition like pressure is covered, or relaxed on the record
-- **A model can be a measurement** — same interface, disjoint coverage, report says which answered
+- The supply chain **assembles itself** from shared vocabulary IRIs
+- Every **cutoff** is listed with its reason and its place in the chain
+- Every **concession** is declared and recorded at its node
+- Inventories are **time-explicit** by construction, ready for dynamic LCIA
+- The **run is a file**, one parquet holding the graph, the gaps and the choices
+- A process can **depend on its demand**, its location, year, scale and feed conditions
+- Demands match on **conditions** such as pressure, and any relaxation is recorded
+- A **measurement** fits the same interface as a model, and the report says which answered
 
 ---
 
-*Shorter cut: [3-minute pitch](pitch.md) · Full tour: [showcase.md](showcase.md) ·
-Notebook: [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)*
+*[3-minute pitch](pitch.md) · [Full tour](showcase.md) ·
+[Notebook `examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)*
