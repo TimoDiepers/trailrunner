@@ -96,6 +96,10 @@ flowchart TB
   2475 MJ Natural gas …                           [cutoff: no_model_found]
 ```
 
+That's what lets two models written by two different people compose at
+all — no bespoke wiring, no registry of who-connects-to-whom. Declare the
+right IRI and the orchestrator finds you.
+
 ---
 
 ## Nothing answers? Relax along the vocabulary — deliberately
@@ -123,6 +127,18 @@ and marks it `[proxy: incomplete]` rather than pretending it's whole:
     0.1 kg steel-low-alloyed @DK/2026 [background: unit_process, incomplete]
 ```
 
+Nothing is hidden by continuing anyway — the run tallies its own gaps:
+
+```text
+10 nodes, 3 inventory entries
+5 unresolved (generalisation_exhausted: 5)
+5 proxies (4 incomplete)
+attribution: allocation=none, capital=per_output
+```
+
+That's a normative choice too (`capital=per_output` — construction impact
+spread over the kiln's output), stated next to the numbers it produced.
+
 ---
 
 ## Time rides along, for free
@@ -139,27 +155,6 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 Kilns built 2027/2029 barely register; 2031's cement production is four
 orders of magnitude bigger. No matrix rebuilt, no second model — just a
 different reading of dates that were never lost.
-
----
-
-## The run *is* a file
-
-```python
-print(report.summary())
-report.log.to_parquet("showcase_log.parquet")
-```
-
-```text
-10 nodes, 3 inventory entries
-5 unresolved (generalisation_exhausted: 5)
-5 proxies (4 incomplete)
-wrote showcase_log.parquet: 142 rows, 19 columns
-```
-
-![Contribution to the GWP100 score by node](assets/showcase/contributions.svg)
-
-Every node, cutoff, parameter fallback and proxy — one row each. Two studies
-diff with a single `read_parquet`.
 
 ---
 

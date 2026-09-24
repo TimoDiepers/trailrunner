@@ -69,11 +69,23 @@ flowchart TB
     class I record
 ```
 
-Same vocabulary IRI in `produces` = found. No name matching, no unit guessing.
+Same vocabulary IRI in `produces` = found. No name matching, no unit
+guessing — that's what lets two models written by two different people
+compose at all.
+
+```text
+1000 kg Portland cement …                [model: CementPlant]
+  100 kWh electricity                     [model: GridElectricity]
+    8.47 kWh electricity-natural-gas       [model: GasPower]
+      49.16 MJ Natural gas …               [cutoff: no_model_found]
+  1125 kg Gypsum; limestone flux; …       [cutoff: no_model_found]
+```
+
+Two hits, three cutoffs — every miss stays in the report, with a reason.
 
 ---
 
-## Nothing answers? Relax along the vocabulary
+## Nothing answers? Relax along the vocabulary — deliberately
 
 ```text
        model: BinderSupply
@@ -82,7 +94,9 @@ Same vocabulary IRI in `produces` = found. No name matching, no unit guessing.
     answered: Plaster, lime and cement   (broader concept, 2 hops up)
 ```
 
-Every concession — generalised demand, borrowed dataset — **written at the node.**
+That answer is an average containing the very product this plant makes —
+best available, poor in substance. **Written at the node, not silently
+swallowed.** Every tier is a concession, and the tier that made it says so.
 
 ---
 
@@ -95,18 +109,6 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 ![Marginal and cumulative radiative forcing over 100 years](assets/showcase/curve.svg)
 
 No matrix rebuilt, no second model. Dates were never lost.
-
----
-
-## The run *is* a file
-
-```python
-report.log.to_parquet("showcase_log.parquet")
-```
-
-![Contribution to the GWP100 score by node](assets/showcase/contributions.svg)
-
-Every node, cutoff, proxy — one parquet row each. Diff two studies with a single read.
 
 ---
 
