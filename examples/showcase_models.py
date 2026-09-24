@@ -20,6 +20,7 @@ from pathlib import Path
 from trailrunner import LocationHierarchy, ParameterSet
 from trailrunner.models.cement import CementPlant, MeteredCementPlant
 from trailrunner.models.electricity import GasPower, GridElectricity
+from trailrunner.models.natural_gas import NaturalGasExtraction, NaturalGasSupply
 from trailrunner.models.natural_gas_pipeline_transport import (
     NaturalGasOffshorePipelineTransport,
 )
@@ -44,6 +45,12 @@ _gas_params = ParameterSet.from_parquet(_HERE / "gas_power_params.parquet", hier
 _pipeline_params = ParameterSet.from_parquet(
     _HERE / "pipeline_transport_params.parquet", hierarchy=_HIERARCHY
 )
+_gas_supply_params = ParameterSet.from_parquet(
+    _HERE / "natural_gas_supply_params.parquet", hierarchy=_HIERARCHY
+)
+_gas_extraction_params = ParameterSet.from_parquet(
+    _HERE / "natural_gas_extraction_params.parquet", hierarchy=_HIERARCHY
+)
 
 MODELS = [
     # Two models, one product IRI, disjoint Coverage year ranges: a demand
@@ -53,5 +60,11 @@ MODELS = [
     MeteredCementPlant(params=_cement_metered_params),
     GridElectricity(params=_grid_params),
     GasPower(params=_gas_params),
+    # The gas chain: the kiln and the gas plant both burn fi_12020, so
+    # NaturalGasSupply answers that, converts it to wellhead volume and route
+    # length, and hands the two on to the field and to the pipeline model --
+    # which was registered here long before anything demanded tkm from it.
+    NaturalGasSupply(params=_gas_supply_params),
     NaturalGasOffshorePipelineTransport(params=_pipeline_params),
+    NaturalGasExtraction(params=_gas_extraction_params),
 ]

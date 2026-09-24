@@ -158,32 +158,69 @@ push the `Result`'s technosphere demands back on, write everything to the
 ```text
 pop      1000 kg   Portland cement, aluminous ceme… -> CementPlant
 pop      1125 kg   Gypsum; anhydrite; limestone fl… -> cutoff (nobody offered)
-pop      2475 MJ   Natural gas, liquefied or in th… -> cutoff (nobody offered)
+pop      2475 MJ   Natural gas, liquefied or in th… -> NaturalGasSupply
 pop        10 kg   Quicklime, slaked lime and hydr… -> cutoff (nobody offered)
 pop       100 kWh  electricity                      -> GridElectricity
+pop     68.75 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop     50.53 tkm  natural-gas-transport-offshore-… -> NaturalGasOffshorePipelineTransport
 pop     8.466 kWh  electricity-natural-gas          -> GasPower
 pop     84.66 kWh  electricity-wind                 -> cutoff (nobody offered)
 pop      12.7 kWh  electricity-hydro                -> cutoff (nobody offered)
-pop     49.16 MJ   Natural gas, liquefied or in th… -> cutoff (nobody offered)
+pop 8.995e-08 unit pipeline-natural-gas-long-dista… -> cutoff (nobody offered)
+pop   0.01306 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop     16.54 MJ   natural-gas-burned-in-gas-turbi… -> cutoff (nobody offered)
+pop 5.862e-06 tkm  transport-freight-lorry-16t-32t  -> cutoff (nobody offered)
+pop 5.862e-05 kg   disposal-used-mineral-oil-10-pe… -> cutoff (nobody offered)
+pop     49.16 MJ   Natural gas, liquefied or in th… -> NaturalGasSupply
+pop     1.365 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop     1.004 tkm  natural-gas-transport-offshore-… -> NaturalGasOffshorePipelineTransport
+pop 1.786e-09 unit pipeline-natural-gas-long-dista… -> cutoff (nobody offered)
+pop 0.0002594 Nm3  natural-gas-at-production        -> NaturalGasExtraction
+pop    0.3285 MJ   natural-gas-burned-in-gas-turbi… -> cutoff (nobody offered)
+pop 1.164e-07 tkm  transport-freight-lorry-16t-32t  -> cutoff (nobody offered)
+pop 1.164e-06 kg   disposal-used-mineral-oil-10-pe… -> cutoff (nobody offered)
 ```
 
-Two pops found a model. The rest found nobody, and every one of those is in the
-report with a reason and a parent.
+The fuel is not a leaf any more. `NaturalGasSupply` answers the kiln's 2475 MJ,
+turns them into wellhead volume and route length, and hands those on to a gas
+field and to `NaturalGasOffshorePipelineTransport` — a model reverse-engineered
+from the BAFU/ecoinvent pipeline datasets, which sat in this list long before
+anything asked it for a tonne-kilometre. Note where the pipeline runs: the
+supply model places both demands at the **origin**, so Danish gas is
+transported in `NO` and its leakage is priced at the Norwegian shelf's
+low-leakage tier rather than at a Danish average that does not exist.
+
+Everything else found nobody, and every one of those is in the report with a
+reason and a parent.
 
 ```text
-3 nodes, 1 inventory entry
-6 unresolved (no_model_found: 6)
+11 nodes, 11 inventory entries
+12 unresolved (no_model_found: 12)
 0 proxies
 attribution: allocation=none, capital=per_output
 
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+      0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+      8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
+      16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
+      5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
+      5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
   100 kWh electricity @DK/2030  [model: GridElectricity]
     8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
-      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [cutoff: no_model_found]
+      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+        1.36542 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+        1.00358 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+          0.00025943 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+          1.78638e-09 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
+          0.328503 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
+          1.16416e-07 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
+          1.16416e-06 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
     84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
     12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
   1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  [cutoff: no_model_found]
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [cutoff: no_model_found]
   10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [cutoff: no_model_found]
 ```
 
@@ -226,16 +263,31 @@ kiln's construction in the year that kiln was built, and a construction model
 turns that into steel and aluminium taken from a curated background pack.
 
 ```text
-10 nodes, 3 inventory entries
-5 unresolved (generalisation_exhausted: 5)
+18 nodes, 13 inventory entries
+11 unresolved (generalisation_exhausted: 11)
 5 proxies (4 incomplete)
 attribution: allocation=none, capital=per_output
 
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+      0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+      8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: generalisation_exhausted]
+      16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: generalisation_exhausted]
+      5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: generalisation_exhausted]
+      5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: generalisation_exhausted]
   10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [proxy: product: fi_37420 -> fi_374]
   100 kWh electricity @DK/2030  [model: GridElectricity]
     8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
-      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [cutoff: generalisation_exhausted]
+      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+        1.36542 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+        1.00358 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+          0.00025943 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+          1.78638e-09 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: generalisation_exhausted]
+          0.328503 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: generalisation_exhausted]
+          1.16416e-07 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: generalisation_exhausted]
+          1.16416e-06 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: generalisation_exhausted]
     84.6561 kWh electricity-wind @DK/2030  [cutoff: generalisation_exhausted]
     12.6984 kWh electricity-hydro @DK/2030  [cutoff: generalisation_exhausted]
   8.33333 kg/year cement-kiln @DK/2026  [model: CementKilnConstruction]
@@ -245,7 +297,6 @@ attribution: allocation=none, capital=per_output
     0.2 kg steel-low-alloyed @DK/2029  [background: unit_process, incomplete]
     0.0133333 kg aluminium-primary @DK/2029  [background: unit_process, incomplete]
   1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  [cutoff: generalisation_exhausted]
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [cutoff: generalisation_exhausted]
 ```
 
 
@@ -268,14 +319,14 @@ dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
 ```
 
 ```text
-4.85247e-11 W·yr/m2
+4.897e-11 W·yr/m2
 metric: radiative_forcing, horizon: 100 years
 horizon anchored at: 2026-01-01
-0 uncharacterized exchanges
+18 uncharacterized exchanges
 0 wrong unit exchanges
 0 undated exchanges
 0 beyond-horizon exchanges
-5 unresolved
+11 unresolved
 5 proxies
 
 marginal radiative forcing, first years [W/m2]:
@@ -284,9 +335,17 @@ date
 2028    5.434073e-17
 2029    2.520040e-17
 2030    5.947499e-17
-2031    9.025044e-13
-2032    1.649192e-12
+2031    9.120960e-13
+2032    1.666609e-12
 ```
+
+The default characterization functions cover the CO<sub>2</sub> and the
+methane, which is where the calcination, the combustion and the pipeline's
+leakage are written. The 18 uncharacterized exchanges are the rest of what the
+gas chain emits — ethane, mercury, NMVOC, and the gas taken out of the ground —
+which no climate method scores. They are listed rather than dropped, because a
+flow silently worth zero and a flow genuinely worth zero read identically in a
+total.
 
 ![Marginal and cumulative radiative forcing over 100 years](assets/showcase/curve.svg)
 
@@ -310,12 +369,12 @@ report.log.to_parquet("showcase_log.parquet")
 ```
 
 ```text
-10 nodes, 3 inventory entries
-5 unresolved (generalisation_exhausted: 5)
+18 nodes, 13 inventory entries
+11 unresolved (generalisation_exhausted: 11)
 5 proxies (4 incomplete)
 attribution: allocation=none, capital=per_output
 
-wrote showcase_log.parquet: 142 rows, 19 columns
+wrote showcase_log.parquet: 298 rows, 19 columns
 kinds: ['attribution', 'biosphere', 'node', 'provenance', 'resolution', 'unresolved']
 ```
 

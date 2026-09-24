@@ -74,14 +74,18 @@ guessing — that's what lets two models written by two different people
 compose at all.
 
 ```text
-1000 kg Portland cement …                [model: CementPlant]
-  100 kWh electricity                     [model: GridElectricity]
-    8.47 kWh electricity-natural-gas       [model: GasPower]
-      49.16 MJ Natural gas …               [cutoff: no_model_found]
-  1125 kg Gypsum; limestone flux; …       [cutoff: no_model_found]
+1000 kg Portland cement …                     [model: CementPlant]
+  2475 MJ Natural gas …                        [model: NaturalGasSupply]
+    68.75 Nm3 natural-gas-at-production @NO     [model: NaturalGasExtraction]
+    50.53 tkm gas-transport-pipeline @NO        [model: …PipelineTransport]
+      16.54 MJ gas-burned-in-gas-turbine @NO     [cutoff: no_model_found]
+  100 kWh electricity                          [model: GridElectricity]
+    8.47 kWh electricity-natural-gas            [model: GasPower]
+    84.66 kWh electricity-wind                  [cutoff: no_model_found]
+  1125 kg Gypsum; limestone flux; …            [cutoff: no_model_found]
 ```
 
-Two hits, three cutoffs — every miss stays in the report, with a reason.
+Nobody wired that gas chain up. Every miss stays in the report, with a reason.
 
 ---
 

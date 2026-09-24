@@ -96,20 +96,26 @@ flowchart TB
 ```
 
 `Orchestrator.calculate` = `while queue:`, little else. Same IRI in
-`produces` → found. Two hits, six cutoffs, all logged:
+`produces` → found; everything else logged as a cutoff with a reason:
 
 ```text
 1000 kg Portland cement …                       [model: CementPlant]
+  2475 MJ Natural gas …                          [model: NaturalGasSupply]
+    68.75 Nm3 natural-gas-at-production @NO       [model: NaturalGasExtraction]
+    50.53 tkm gas-transport-pipeline @NO          [model: …PipelineTransport]
+      0.013 Nm3 natural-gas-at-production @NO      [model: NaturalGasExtraction]
+      16.54 MJ gas-burned-in-gas-turbine @NO       [cutoff: no_model_found]
   100 kWh electricity                            [model: GridElectricity]
     8.47 kWh electricity-natural-gas              [model: GasPower]
-      49.16 MJ Natural gas …                      [cutoff: no_model_found]
+      49.16 MJ Natural gas …                      [model: NaturalGasSupply]
     84.66 kWh electricity-wind                    [cutoff: no_model_found]
-    12.70 kWh electricity-hydro                    [cutoff: no_model_found]
   1125 kg Gypsum; limestone flux; …               [cutoff: no_model_found]
-  2475 MJ Natural gas …                           [cutoff: no_model_found]
 ```
 
-No bespoke wiring, no registry. Declare the right IRI, orchestrator finds you.
+Nobody wired that gas chain. The kiln asked for MJ; supply converted them to
+wellhead Nm3 and route tkm and placed both **at the origin**, so the pipeline
+model — reverse-engineered from BAFU/ecoinvent datasets — priced the leg on
+the Norwegian shelf, at its low-leakage tier.
 
 ---
 
@@ -138,8 +144,8 @@ makes. Best available, poor in substance. Not hidden.
 Run tallies its own gaps:
 
 ```text
-10 nodes, 3 inventory entries
-5 unresolved (generalisation_exhausted: 5)
+18 nodes, 13 inventory entries
+11 unresolved (generalisation_exhausted: 11)
 5 proxies (4 incomplete)
 attribution: allocation=none, capital=per_output
 ```
