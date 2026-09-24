@@ -114,26 +114,26 @@ ended:
 ```mermaid
 %%{init: {'layout': 'elk'}}%%
 flowchart TB
-    D(["1000 kg cement @DK/2030"]) --> CP["CementPlant"]
+    D(["1000 kg cement @DK/2030"]) --> CP["CementPlant<br/>DK · 2030"]
 
-    CP -->|"2475 MJ natural gas"| NGS["NaturalGasSupply"]
-    CP -->|"100 kWh electricity"| GE["GridElectricity"]
-    CP -.->|"1125 kg limestone"| X1["cutoff"]
-    CP -.->|"10 kg lime"| X2["cutoff"]
+    CP -->|"2475 MJ natural gas"| NGS["NaturalGasSupply<br/>DK · 2030"]
+    CP -->|"100 kWh electricity"| GE["GridElectricity<br/>DK · 2030"]
+    CP -.->|"1125 kg limestone"| X1["cutoff<br/>DK · 2030"]
+    CP -.->|"10 kg lime"| X2["cutoff<br/>DK · 2030"]
 
-    NGS -->|"68.75 Nm3 gas at production"| NGE["NaturalGasExtraction"]
-    NGS -->|"50.53 tkm pipeline transport"| PT["OffshorePipelineTransport"]
+    NGS -->|"68.75 Nm3 gas at production"| NGE["NaturalGasExtraction<br/>NO · 2030"]
+    NGS -->|"50.53 tkm pipeline transport"| PT["OffshorePipelineTransport<br/>NO · 2030"]
     PT -->|"0.013 Nm3 leaked gas"| NGE
-    PT -.->|"pipe · turbine fuel · lorry · oil disposal"| X3["4 cutoffs"]
+    PT -.->|"pipe · turbine fuel · lorry · oil disposal"| X3["4 cutoffs<br/>NO · 2030"]
 
-    GE -->|"8.47 kWh gas power"| GP["GasPower"]
-    GE -.->|"84.66 kWh wind · 12.7 kWh hydro"| X4["2 cutoffs"]
+    GE -->|"8.47 kWh gas power"| GP["GasPower<br/>DK · 2030"]
+    GE -.->|"84.66 kWh wind · 12.7 kWh hydro"| X4["2 cutoffs<br/>DK · 2030"]
     GP -->|"49.16 MJ natural gas"| NGS
 
-    CP ==>|"397.5 + 138.6 kg CO2"| INV[("inventory")]
-    GP ==>|"CO2"| INV
-    NGE ==>|"CO2 · gas in ground"| INV
-    PT ==>|"CH4 · ethane · Hg · NMVOC"| INV
+    CP -->|"397.5 + 138.6 kg CO2"| INV[("inventory")]
+    GP -->|"CO2"| INV
+    NGE -->|"CO2 · gas in ground"| INV
+    PT -->|"CH4 · ethane · Hg · NMVOC"| INV
 
     classDef model fill:#f59e0b22,stroke:#f59e0b
     classDef gap fill:#ef444422,stroke:#ef4444,stroke-dasharray:4 3
@@ -141,10 +141,14 @@ flowchart TB
     class CP,NGS,NGE,PT,GE,GP model
     class X1,X2,X3,X4 gap
     class INV record
+
+    linkStyle 3,4,8,10 stroke:#ef4444
+    %% the four edges into the inventory: elementary flows, not demands
+    linkStyle 12,13,14,15 stroke:#8b5cf6
 ```
 
-*Solid arrows are demands answered by a model, dashed ones are cutoffs, thick
-ones are elementary flows.*
+*Black arrows are demands answered by a model, dashed red ones are cutoffs,
+violet ones are elementary flows.*
 
 Nobody wired that gas chain up. Every miss stays in the report, with a reason.
 
