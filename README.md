@@ -58,7 +58,7 @@ models that ship in `examples/`:
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
     --context-tolerance "pressure=0:1e5 Pa"
 ```
@@ -67,6 +67,7 @@ It prints a summary (how many nodes ran, how many demands went unanswered and wh
 many were answered by a stand-in), then the supply chain as a tree, one line per demand:
 
 ```text
+time 2030 read as xsd:gYear
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
   2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
     68.75 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
@@ -88,8 +89,9 @@ catalog converts.
 
 | Flag | What it does |
 | --- | --- |
-| `IRI`, `--amount`, `--unit` | what to demand, and how much (required) |
-| `--location`, `--year` | where and when; every model downstream receives them |
+| `IRI`, `--amount`, `--unit` | what to demand, and how much; `--unit` takes an IRI, a vocabulary id (`KiloGM`) or a symbol (`kg`) (required) |
+| `--location`, `--time`, `--time-standard` | where and when; `--time` is a string (`2030`, `2030-06-15`, ...) in the standard `--time-standard` names, inferred from its shape when omitted, and always printed |
+| `--context "NAME=VALUE UNIT"` | a condition on the demand, e.g. `"pressure=4e5 Pa"`; repeatable |
 | `--models FILE` | a `.py` file defining a `MODELS` list (required) |
 | `--context-tolerance "NAME=BELOW:ABOVE UNIT"` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in `UNIT` (a symbol, vocabulary id or IRI); repeat per condition |
 | `--proxy-order ORDER` | which conditions to relax, in order: `,` between tries, `+` to move conditions together, e.g. `context.pressure,context.pressure+context.temperature`; default is one condition at a time |

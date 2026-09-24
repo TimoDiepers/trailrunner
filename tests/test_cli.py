@@ -50,7 +50,7 @@ def models_file(tmp_path):
 def test_a_run_exits_zero_and_prints_the_summary(models_file, capsys):
     code = main([
         "run", HEAT, "--amount", "100", "--unit", "MJ",
-        "--location", "CH", "--year", "2030", "--models", str(models_file),
+        "--location", "CH", "--time", "2030", "--models", str(models_file),
     ])
     out = capsys.readouterr().out
     assert code == 0
@@ -108,7 +108,7 @@ def test_an_unknown_allocation_is_rejected_before_anything_runs(models_file, cap
 def test_the_method_flag_prints_a_score(models_file, method_parquet_file, capsys):
     code = main([
         "run", HEAT, "--amount", "100", "--unit", "MJ",
-        "--location", "GLO", "--year", "2030", "--models", str(models_file),
+        "--location", "GLO", "--time", "2030", "--models", str(models_file),
         "--method", str(method_parquet_file),
     ])
     out = capsys.readouterr().out
@@ -127,7 +127,7 @@ def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
     pytest.importorskip("dynamic_characterization")
     code = main([
         "run", HEAT, "--amount", "100", "--unit", "MJ",
-        "--location", "GLO", "--year", "2030", "--models", str(models_file),
+        "--location", "GLO", "--time", "2030", "--models", str(models_file),
         "--dynamic", "radiative_forcing", "--horizon", "20",
     ])
     out = capsys.readouterr().out
@@ -140,7 +140,7 @@ SHOWCASE = Path(__file__).resolve().parent.parent / "examples" / "showcase_model
 CEMENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"
 CEMENT_RUN = [
     "run", CEMENT, "--amount", "1000", "--unit", "kg",
-    "--location", "DK", "--year", "2030", "--models", str(SHOWCASE),
+    "--location", "DK", "--time", "2030", "--models", str(SHOWCASE),
 ]
 
 
@@ -228,3 +228,41 @@ def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
     ])
     assert code == 0
     assert "[proxy: context: pressure 400000 Pa -> 500000 Pa]" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("unit", ["kg", "KiloGM", "https://vocab.sentier.dev/units/unit/KiloGM"])
+def test_unit_accepts_symbol_id_and_iri(models_file, capsys, unit):
+    assert main(["run", HEAT, "--amount", "1", "--unit", unit, "--models", str(models_file)]) == 0
+
+
+def test_an_unknown_unit_exits_2(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "tkm", "--models", str(models_file)]) == 2
+    assert "tkm" in capsys.readouterr().err
+
+
+def test_time_standard_is_inferred_and_said(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg", "--time", "2030-06-15",
+                 "--models", str(models_file)]) == 0
+    assert "time 2030-06-15 read as xsd:date" in capsys.readouterr().out
+
+
+def test_a_bad_time_exits_2(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg", "--time", "2030-02-30",
+                 "--models", str(models_file)]) == 2
+
+
+def test_context_is_parsed(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg",
+                 "--context", "pressure=4e5 Pa", "--models", str(models_file)]) == 0
+    # describe_context formats with :g: 4e5 prints as 400000, not 4e+05.
+    assert "pressure=400000 Pa" in capsys.readouterr().out
+
+
+def test_a_malformed_context_exits_2(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg",
+                 "--context", "pressure 4", "--models", str(models_file)]) == 2
+
+
+def test_year_is_gone(models_file):
+    with pytest.raises(SystemExit):
+        main(["run", HEAT, "--amount", "1", "--unit", "kg", "--year", "2030", "--models", str(models_file)])

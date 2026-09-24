@@ -23,9 +23,11 @@ uv run trailrunner run --help
 
 ```text
 usage: trailrunner run [-h] --amount AMOUNT --unit UNIT [--location LOCATION]
-                       [--year YEAR] --models MODELS [--method METHOD]
-                       [--dynamic DYNAMIC] [--horizon HORIZON]
-                       [--allocation ALLOCATION] [--capital CAPITAL]
+                       [--time TIME] [--time-standard TIME_STANDARD]
+                       [--context NAME=VALUE UNIT] --models MODELS
+                       [--method METHOD] [--dynamic DYNAMIC]
+                       [--horizon HORIZON] [--allocation ALLOCATION]
+                       [--capital CAPITAL]
                        [--context-tolerance NAME=BELOW:ABOVE UNIT]
                        [--proxy-order ORDER] [--max-depth MAX_DEPTH]
                        [--max-nodes MAX_NODES] [--out OUT]
@@ -38,8 +40,25 @@ Three things are required:
 - **`--amount` and `--unit`**, how much of it,
 - **`--models`**, a `.py` file that defines a list called `MODELS`.
 
-`--location` and `--year` place the demand. Every model downstream receives them on its
+**`--unit`** takes an IRI, a vocabulary id (`KiloGM`) or a symbol (`kg`) -- whichever is
+convenient -- and is resolved through the same catalog everything else in trailrunner
+uses. An unknown unit stops the run with exit code `2` before anything runs.
+
+`--location` and `--time` place the demand. Every model downstream receives them on its
 own demands, so they decide which parameter rows are read and which models are valid.
+`--time` is a string in a time standard -- `2030` (a year), `2030-06` (a month),
+`2030-06-15` (a day) or `2030-06-15T08:00:00Z` (an instant) -- and the standard is
+inferred from its shape unless `--time-standard` names the XSD datatype IRI explicitly.
+Whichever way it was read, the CLI prints it, because a time is never read silently:
+
+```text
+time 2030-06-15 read as xsd:date
+```
+
+**`--context`** states a named condition beyond place and time, such as the pressure gas
+is wanted at: `--context "pressure=4e5 Pa"`, repeatable for more than one condition. See
+[section 4](#4-when-a-supplier-almost-matches-context-tolerance) for how a model's
+coverage matches it, and `--context-tolerance` for letting a near match through.
 
 ## 2. Run the shipped cement chain
 
@@ -51,12 +70,13 @@ Portland cement (BONSAI `fi_37440`) in Denmark in 2030:
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
     --context-tolerance "pressure=0:1e5 Pa"
 ```
 
 ```text
+time 2030 read as xsd:gYear
 11 nodes, 11 inventory entries
 12 unresolved (no_model_found: 12)
 1 proxy
@@ -107,12 +127,13 @@ Ask for 2020 and the meter answers:
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2020 \
+    --amount 1000 --unit kg --location DK --time 2020 \
     --models examples/showcase_models.py \
     --context-tolerance "pressure=0:1e5 Pa"
 ```
 
 ```text
+time 2020 read as xsd:gYear
 11 nodes, 11 inventory entries
 11 unresolved (no_model_found: 11)
 0 proxies
@@ -186,7 +207,8 @@ see the difference, put this in `burner_models.py`: a burner that asks for gas a
 
 ```python title="burner_models.py"
 from trailrunner import ContextRange, Coverage, Demand, Exchange, Flow, Model, Property, Result
-from trailrunner.core.units import KELVIN, PA
+from trailrunner.core.time import when
+from trailrunner.core.units import KELVIN, KG, MJ, PA
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
@@ -200,12 +222,12 @@ class Burner(Model):
 
     def apply(self, demand: Demand) -> Result:
         gas = demand.amount / 0.9
-        where = dict(location=demand.flow.location, time=demand.flow.time)
+        where = dict(location=demand.flow.location, **when(demand.flow))
         wanted = (Property("pressure", 4e5, PA), Property("temperature", 280.0, KELVIN))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            technosphere=[Demand(flow=Flow(iri=GAS, context=wanted, **where), amount=gas, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit="kg")],
+            technosphere=[Demand(flow=Flow(iri=GAS, context=wanted, **where), amount=gas, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit=KG)],
         )
 
 
@@ -230,12 +252,13 @@ answer it:
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
-    --amount 100 --unit MJ --location CH --year 2030 \
+    --amount 100 --unit MJ --location CH --time 2030 \
     --models burner_models.py \
     --context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K"
 ```
 
 ```text
+time 2030 read as xsd:gYear
 100 MJ heat @CH/2030  [model: Burner]
   111.111 MJ natural-gas @CH/2030 (pressure=400000 Pa, temperature=280 K)  [cutoff: coverage_excluded]
 ```
@@ -247,13 +270,14 @@ condition is written `context.<name>`:
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
-    --amount 100 --unit MJ --location CH --year 2030 \
+    --amount 100 --unit MJ --location CH --time 2030 \
     --models burner_models.py \
     --context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K" \
     --proxy-order context.pressure,context.temperature,context.pressure+context.temperature
 ```
 
 ```text
+time 2030 read as xsd:gYear
 2 nodes, 1 inventory entry
 0 unresolved
 1 proxy
@@ -427,12 +451,13 @@ solved. `--max-depth` (default 10) limits how deep a branch goes. `--max-nodes` 
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
     --context-tolerance "pressure=0:1e5 Pa" --max-depth 2
 ```
 
 ```text
+time 2030 read as xsd:gYear
 3 nodes, 1 inventory entry
 7 unresolved (max_depth: 5, no_model_found: 2)
 1 proxy
@@ -479,6 +504,8 @@ is a complete two-model chain, a boiler burning gas and the gas supply behind it
 
 ```python title="my_models.py"
 from trailrunner import Demand, Exchange, Flow, Model, Result
+from trailrunner.core.time import when
+from trailrunner.core.units import KG, MJ
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
@@ -491,11 +518,11 @@ class Boiler(Model):
 
     def apply(self, demand: Demand) -> Result:
         gas = demand.amount / 0.9  # MJ of gas per MJ of heat
-        where = dict(location=demand.flow.location, time=demand.flow.time)
+        where = dict(location=demand.flow.location, **when(demand.flow))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            technosphere=[Demand(flow=Flow(iri=GAS, **where), amount=gas, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit="kg")],
+            technosphere=[Demand(flow=Flow(iri=GAS, **where), amount=gas, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit=KG)],
         )
 
 
@@ -503,10 +530,10 @@ class GasSupply(Model):
     produces = [GAS]
 
     def apply(self, demand: Demand) -> Result:
-        where = dict(location=demand.flow.location, time=demand.flow.time)
+        where = dict(location=demand.flow.location, **when(demand.flow))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            biosphere=[Exchange(flow=Flow(iri=CH4, **where), amount=0.0002 * demand.amount, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CH4, **where), amount=0.0002 * demand.amount, unit=KG)],
         )
 
 
@@ -517,7 +544,7 @@ Run all of it at once: traversal, score, curve and log.
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
-    --amount 100 --unit MJ --location CH --year 2030 \
+    --amount 100 --unit MJ --location CH --time 2030 \
     --models my_models.py \
     --method gwp100.parquet \
     --dynamic radiative_forcing \
@@ -525,6 +552,7 @@ uv run trailrunner run https://vocab.sentier.dev/products/heat \
 ```
 
 ```text
+time 2030 read as xsd:gYear
 2 nodes, 2 inventory entries
 0 unresolved
 0 proxies

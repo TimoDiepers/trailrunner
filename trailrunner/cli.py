@@ -10,10 +10,10 @@ import sys
 from pathlib import Path
 
 from trailrunner.core.errors import UnknownUnit
-from trailrunner.core.flow import Demand, Flow
+from trailrunner.core.flow import Demand, Flow, Property
 from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
-from trailrunner.core.time import in_year
-from trailrunner.core.units import default_catalog, symbol
+from trailrunner.core.time import infer_standard, short
+from trailrunner.core.units import UnitCatalog, default_catalog, symbol
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, ResolutionChain
@@ -65,6 +65,15 @@ def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, 
     return tolerance
 
 
+def _condition(text: str, catalog: UnitCatalog) -> Property:
+    """``"pressure=4e5 Pa"`` -> ``Property("pressure", 400000.0, PA)``."""
+    name, separator, rest = text.partition("=")
+    parts = rest.split(None, 1)
+    if not separator or not name.strip() or len(parts) != 2:
+        raise ValueError(f'{text!r} is not a condition; write "NAME=VALUE UNIT", e.g. "pressure=4e5 Pa"')
+    return Property(name.strip(), float(parts[0]), catalog.resolve(parts[1].strip()))
+
+
 def parse_proxy_order(value: str | None) -> tuple[str | tuple[str, ...], ...]:
     """``"context.pressure,context.pressure+context.temperature"`` -> an order.
 
@@ -95,9 +104,17 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="traverse a demand and report")
     run.add_argument("iri", help="product IRI to demand")
     run.add_argument("--amount", type=float, required=True)
-    run.add_argument("--unit", required=True)
+    run.add_argument("--unit", required=True, help="a unit IRI, vocabulary id (KiloGM) or symbol (kg)")
     run.add_argument("--location", default=None)
-    run.add_argument("--year", type=int, default=None)
+    run.add_argument("--time", default=None, help="2030, 2030-06, 2030-06-15 or 2030-06-15T08:00:00Z")
+    run.add_argument(
+        "--time-standard", default=None,
+        help="the IRI --time is written in; inferred from its form when omitted",
+    )
+    run.add_argument(
+        "--context", action="append", default=[], metavar="NAME=VALUE UNIT",
+        help='a condition on the demand, e.g. "pressure=4e5 Pa"; repeatable',
+    )
     run.add_argument("--models", required=True, help="a .py file exposing MODELS")
     run.add_argument("--method", default=None, help="a method parquet; prints a score")
     run.add_argument("--dynamic", default=None, help="a dynamic metric, e.g. radiative_forcing")
@@ -151,17 +168,25 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    demand = Demand(
-        flow=Flow(
-            iri=args.iri,
-            location=args.location,
-            **(in_year(args.year) if args.year is not None else {}),
-        ),
-        amount=args.amount,
-        # A stop-gap: Task 11 replaces this with proper error handling for a
-        # unit the catalog does not know.
-        unit=default_catalog().resolve(args.unit),
-    )
+    catalog = UnitCatalog()
+    try:
+        unit = catalog.resolve(args.unit)
+        standard = None
+        if args.time is not None:
+            standard = args.time_standard or infer_standard(args.time)
+        context = tuple(_condition(text, catalog) for text in args.context)
+        flow = Flow(
+            iri=args.iri, location=args.location,
+            time=args.time, time_standard=standard, context=context,
+        )
+    except (UnknownUnit, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if standard is not None:
+        # Inferred or not, the reading is printed: a time is never read silently.
+        print(f"time {args.time} read as {short(standard)}")
+    demand = Demand(flow=flow, amount=args.amount, unit=unit)
+
     tier1 = ModelProvider(Glossary(models))
     providers = [tier1]
     if context_tolerance:
