@@ -8,13 +8,9 @@ icon: lucide/compass
 
 ## 💡 The idea
 
-Treat one physical activity as one *model*. A model is a computational model (e.g., Python code) for one process. Given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted, reading its parameters from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than hard-coding them. Because the demand is an argument, one model covers every place, year and scale it was written for.
+Treat a physical activity as a computational *model* instead of a static unit process dataset. Given a demand for one of its products, it works out what other inputs it needs to produce that, and what it emitted. Model parameters are fetched from a [trailpack](https://github.com/TimoDiepers/trailpack) parquet file depending on context, e.g., place, time, specifications. A model can just as well be a plain measurement, such as metered emissions for this process at this location and time.
 
-A model need not compute anything at all. It can just as well be a plain measurement, such as metered emissions for this process at this location and time, read straight from the same trailpack parquet file.
-
-Every flow that crosses a model's boundary is identified by an IRI from the hierarchical [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can look at a model's further demands, work out which other models produce those flows, and call them in turn, cascading outward through the whole supply chain until nothing is left open.
-
-That cascade is the loop below. One demand goes in, and a handful of objects pass it around until the queue is empty.
+Every flow that crosses a model's boundary is identified by an IRI from the hierarchical [sentier vocabulary](https://vocab.sentier.dev). This allows an orchestrator to identify which model can fulfil which demand and call them in turn, cascading outward from an initial demand through the whole supply chain until all inputs are provided and a full list of environmental flows is recorded:
 
 ```mermaid
 %%{init: {'layout': 'elk'}}%%
@@ -46,7 +42,7 @@ flowchart TB
     class L,P record
 ```
 
-*Colors are a track, not a step order: resolution (teal), execution (amber), record (violet).*
+*Legend: resolution (teal), execution (amber), record (violet).*
 
 | Part | Its one job |
 | --- | --- |
