@@ -3,11 +3,13 @@ tags:
   - tutorial
 ---
 
-# The pitch
+# The pitch (3 min)
 
 **1000 kg Portland cement, Denmark, 2030 — what's the impact?**
 
 `trailrunner`: computational process models, not static unit processes.
+
+*More detail: [5-minute pitch](pitch-5min.md).*
 
 ---
 
@@ -119,4 +121,5 @@ Every node, cutoff, proxy — one parquet row each. Diff two studies with a sing
 
 ---
 
-*Full tour: [showcase.md](showcase.md) · Notebook: [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)*
+*More detail: [5-minute pitch](pitch-5min.md) · Full tour: [showcase.md](showcase.md) ·
+Notebook: [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)*

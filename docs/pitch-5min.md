@@ -1,0 +1,179 @@
+---
+tags:
+  - tutorial
+---
+
+# The pitch (5 min)
+
+**1000 kg Portland cement, Denmark, 2030 — what's the impact?**
+
+`trailrunner`: computational process models, not static unit processes.
+
+*Shorter version: [3-minute pitch](pitch.md).*
+
+---
+
+## A model is one method
+
+```python
+answer = cement_model.apply(DEMAND)
+```
+
+```text
+   production    1000.0 kg   Portland cement, aluminous cement, slag cem… @DK/2030
+ technosphere    1125.0 kg   Gypsum; anhydrite; limestone flux; limeston… @DK/2030
+ technosphere    2475.0 MJ   Natural gas, liquefied or in the gaseous st… @DK/2030
+ technosphere      10.0 kg   Quicklime, slaked lime and hydraulic lime    @DK/2030
+ technosphere     100.0 kWh  electricity                                  @DK/2030
+    biosphere     397.5 kg   co2-fossil                                   @DK/2030
+    biosphere     138.6 kg   co2-fossil                                   @DK/2030
+```
+
+- Takes a `Demand`, returns a `Result`: made, needed, emitted
+- Names = concepts from the [sentier vocabulary](https://vocab.sentier.dev) — shared, so two models can compose with no name matching
+- Physics-aware: process can react to *where* and *when* it's asked
+
+```python
+penalty = moisture_penalty(row["moisture"], row["temperature"])
+fuel = row["fuel_demand"] * clinker * penalty
+```
+
+```text
+ where   when  moisture   degC   penalty   gas [MJ]
+    DK   2030     0.040   10.0     1.000     2475.0
+   RER   2030     0.060    9.0     1.044     2923.2
+```
+
+**Measured beats modelled, when it exists.** `MeteredCementPlant` and
+`CementPlant` declare the same product, disjoint `Coverage` — the demand's
+year decides which one answers, nothing else changes.
+
+```text
+2023  answered by MeteredCementPlant   source: measured
+      direct CO2:  562.0 kg in 1 exchange(s)
+2030  answered by CementPlant          source: modelled
+      direct CO2:  536.1 kg in 2 exchange(s)   ← limestone vs. flame, split
+```
+
+A meter sees one plume. A model knows which kilogram came from where.
+
+---
+
+## Models find each other — no wiring
+
+```mermaid
+%%{init: {'layout': 'elk'}}%%
+flowchart TB
+    D([demand]) --> Q[[Queue]]
+    Q -->|pop| C{{ResolutionChain}}
+    C -->|who offers?| G[(Glossary)]
+    G -->|Offer| C
+    C -->|selected| R[Runner]
+    R -->|apply| M[Model]
+    M -->|Result| R
+    R -->|new demands| Q
+    R -->|flows| I[(inventory)]
+
+    classDef resolution fill:#2dd4bf22,stroke:#2dd4bf
+    classDef execution fill:#f59e0b22,stroke:#f59e0b
+    classDef record fill:#8b5cf622,stroke:#8b5cf6
+    class C,G resolution
+    class R,M execution
+    class I record
+```
+
+`Orchestrator.calculate` is `while queue:` and little else. Same IRI in
+`produces` = found. Two hits, six cutoffs — every cutoff logged, not dropped:
+
+```text
+1000 kg Portland cement …                       [model: CementPlant]
+  100 kWh electricity                            [model: GridElectricity]
+    8.47 kWh electricity-natural-gas              [model: GasPower]
+      49.16 MJ Natural gas …                      [cutoff: no_model_found]
+    84.66 kWh electricity-wind                    [cutoff: no_model_found]
+    12.70 kWh electricity-hydro                    [cutoff: no_model_found]
+  1125 kg Gypsum; limestone flux; …               [cutoff: no_model_found]
+  2475 MJ Natural gas …                           [cutoff: no_model_found]
+```
+
+---
+
+## Nothing answers? Relax along the vocabulary — deliberately
+
+Tier 1 = computational models. Every later tier is a **concession**, and
+the tier that made it writes what it conceded into the node.
+
+```text
+       model: BinderSupply
+ relaxations: ['product: fi_37420 -> fi_374']
+       asked: Quicklime, slaked lime and hydraulic lime
+    answered: Plaster, lime and cement
+        tier: generalising
+```
+
+That "Plaster, lime **and cement**" answer is an average containing the very
+product this plant makes — best available, poor in substance, and written at
+the node instead of silently swallowed.
+
+**Tier 3 borrows a dataset** — kiln construction, curated background pack —
+and marks it `[proxy: incomplete]` rather than pretending it's whole:
+
+```text
+  8.33 kg/year cement-kiln @DK/2026   [model: CementKilnConstruction]
+    0.1 kg steel-low-alloyed @DK/2026 [background: unit_process, incomplete]
+```
+
+---
+
+## Time rides along, for free
+
+Nothing in the loop was ever told about time — a `Flow` carries its year
+like it carries its location. So the inventory is a time series:
+
+```python
+dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
+```
+
+![Marginal and cumulative radiative forcing over 100 years](assets/showcase/curve.svg)
+
+Kilns built 2027/2029 barely register; 2031's cement production is four
+orders of magnitude bigger. No matrix rebuilt, no second model — just a
+different reading of dates that were never lost.
+
+---
+
+## The run *is* a file
+
+```python
+print(report.summary())
+report.log.to_parquet("showcase_log.parquet")
+```
+
+```text
+10 nodes, 3 inventory entries
+5 unresolved (generalisation_exhausted: 5)
+5 proxies (4 incomplete)
+wrote showcase_log.parquet: 142 rows, 19 columns
+```
+
+![Contribution to the GWP100 score by node](assets/showcase/contributions.svg)
+
+Every node, cutoff, parameter fallback and proxy — one row each. Two studies
+diff with a single `read_parquet`.
+
+---
+
+## Why it matters
+
+- **Supply chain assembles itself** — vocabulary IRIs, not wiring
+- **Missing data is visible** — every cutoff carries a reason and a position
+- **Concessions are declared and recorded** — not buried in an assumption
+- **Inventories are time-explicit by construction** — dynamic LCIA needs no second model
+- **The run is a file** — one parquet holds the graph, the gaps and the choices
+- **A process can depend on its demand** — location, year, scale, feed conditions live in the model
+- **A model can be a measurement** — same interface, disjoint coverage, report says which answered
+
+---
+
+*Shorter cut: [3-minute pitch](pitch.md) · Full tour: [showcase.md](showcase.md) ·
+Notebook: [`examples/showcase.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb)*
