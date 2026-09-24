@@ -187,14 +187,6 @@ flowchart TB
     B26 -->|"18 mg CO2"| INV
     B29 -->|"36 mg CO2"| INV
 
-    subgraph LEGEND ["how the demand was answered"]
-      direction LR
-      L1["tier 1<br/>a model"]
-      L2["tier 2<br/>generalised up the vocabulary"]
-      L3["tier 3<br/>borrowed background dataset"]
-      L4["no tier answered<br/>cutoff"]
-    end
-
     classDef t1 fill:#f59e0b22,stroke:#f59e0b
     classDef t2 fill:#3b82f622,stroke:#3b82f6
     classDef t3 fill:#14b8a622,stroke:#14b8a6
@@ -203,11 +195,7 @@ flowchart TB
     class CP,NGS,NGE,PT,GE,GP,K26,K29 t1
     class BS t2
     class B26,B29 t3
-    class XG,XP,XE,L4 gap
-    class L1 t1
-    class L2 t2
-    class L3 t3
-    style LEGEND fill:none,stroke:#94a3b8,stroke-dasharray:3 3
+    class XG,XP,XE gap
     class INV record
 
     linkStyle 3 stroke:#3b82f6
@@ -216,8 +204,9 @@ flowchart TB
     linkStyle 16,17,18,19,20,21,22 stroke:#8b5cf6
 ```
 
-*Arrows: black is a demand a model answered, red dashed is a cutoff, violet
-are the elementary flows landing in the inventory.*
+*Amber = tier 1, a model answered · blue = tier 2, generalised up the
+vocabulary · teal = tier 3, borrowed dataset · red dashed = cutoff · violet =
+elementary flows into the inventory.*
 
 Read the years. The kilns were built in **2026** and **2029**, so their
 construction and the background steel behind it are dated there; the cement
