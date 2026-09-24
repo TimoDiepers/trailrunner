@@ -13,25 +13,47 @@ Every flow that crosses a model's boundary is identified by an IRI from the hier
 That cascade is the loop below. One demand goes in, and a handful of objects pass it around until the queue is empty.
 
 ```mermaid
+%%{init: {'layout': 'elk'}}%%
 flowchart TB
-    D([initial demand]) --> Q[[Queue]]
-    Q -->|pop demand| C{{ResolutionChain}}
-    C -->|ask model tier: who can offer?| G[(Glossary: available models)]
-    G -->|Offer: model + demand| C
+    D([initial demand]) --> Q
+    Q[[Queue]]
+
+    Q -->|pop demand| C
+
+    subgraph RES["Resolution chain — who can answer this?"]
+        C{{ResolutionChain}}
+        G[(Glossary: available models)]
+        C -->|ask a tier: who offers?| G
+        G -->|Offer: model + demand| C
+    end
+
     C -->|nobody offers| X[cutoff, with a reason]
-    C -->|selected offer| R[Runner]
-    R -->|apply demand| M[Model: your code]
-    M -->|Result| R
-    R -->|Result - technosphere demands| Q
-    R -->|Result - biosphere flows| I[(inventory)]
-    X --> L[(Log)]
+    C -->|selected offer| R
+
+    subgraph EXEC["Runner — apply the model"]
+        R[Runner]
+        M[Model: your code]
+        R -->|apply demand| M
+        M -->|Result| R
+    end
+
+    R -->|Result: technosphere demands| Q
+    R -->|Result: biosphere flows| I[(inventory)]
+
+    subgraph REC["Log and Report — what happened"]
+        L[(Log)]
+        P([Report])
+        L --> P
+    end
+
+    X --> L
     R --> L
-    L --> P([Report])
 ```
 
 | Part | Its one job |
 | --- | --- |
 | [`Demand`](api/flow.md) | an amount and a unit of a `Flow`, which carries what, where and when |
+| `Orchestrator` | owns the queue and is the loop itself — `while queue:`, pop, ask, apply, log, push what came back |
 | [`Queue`](api/queue.md) | the demands still waiting. FIFO unless you hand it a priority |
 | [`ResolutionChain`](api/resolution.md) | who can answer this demand? It asks each tier in order. Tier 1 is the [`Glossary`](api/glossary.md), which offers a `(model, demand)` pair to run. A demand no tier offers for is logged as a cutoff |
 | [`Model`](api/model.md) | one process, as code. `apply(demand) -> Result` |

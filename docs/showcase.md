@@ -87,20 +87,41 @@ models written by two people compose at all, and it is what the orchestrator
 uses to walk outward.
 
 ```mermaid
+%%{init: {'layout': 'elk'}}%%
 flowchart TB
-    D([initial demand]) --> Q[[Queue]]
-    Q -->|pop demand| C{{ResolutionChain}}
-    C -->|ask model tier: who can offer?| G[(Glossary: available models)]
-    G -->|Offer: model + demand| C
+    D([initial demand]) --> Q
+    Q[[Queue]]
+
+    Q -->|pop demand| C
+
+    subgraph RES["Resolution chain — who can answer this?"]
+        C{{ResolutionChain}}
+        G[(Glossary: available models)]
+        C -->|ask a tier: who offers?| G
+        G -->|Offer: model + demand| C
+    end
+
     C -->|nobody offers| X[cutoff, with a reason]
-    C -->|selected offer| R[Runner]
-    R -->|apply demand| M[Model: your code]
-    M -->|Result| R
-    R -->|Result - technosphere demands| Q
-    R -->|Result - biosphere flows| I[(inventory)]
-    X --> L[(Log)]
+    C -->|selected offer| R
+
+    subgraph EXEC["Runner — apply the model"]
+        R[Runner]
+        M[Model: your code]
+        R -->|apply demand| M
+        M -->|Result| R
+    end
+
+    R -->|Result: technosphere demands| Q
+    R -->|Result: biosphere flows| I[(inventory)]
+
+    subgraph REC["Log and Report — what happened"]
+        L[(Log)]
+        P([Report])
+        L --> P
+    end
+
+    X --> L
     R --> L
-    L --> P([Report])
 ```
 
 `Orchestrator.calculate` is a `while queue:` and little else. Pop a demand, ask
