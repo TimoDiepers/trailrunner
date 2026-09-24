@@ -20,14 +20,14 @@ which runs offline from committed files.
 
 ---
 
-## 1. A process is something you run
+## 1. What a model does
 
 A [`Model`](api/model.md) has one method. It takes a [`Demand`](api/flow.md) and
 returns a [`Result`](api/result.md), answering three questions at once. What did
 I make, what do I need, what did I emit.
 
 ```python
-answer = works.apply(DEMAND)  # no orchestrator involved, a model is callable on its own
+answer = plant.apply(DEMAND)  # no orchestrator involved, a model is callable on its own
 ```
 
 ```text
@@ -53,7 +53,7 @@ model keeps them apart because it knows which is which. Beat 4 is about what
 happens when your data source does not.
 
 The demand arrives as an argument, so the answer can depend on it. Inside
-`CementPlant` the kiln fuel responds to the raw meal the works is fed, because
+`CementPlant` the kiln fuel responds to the raw meal the plant is fed, because
 water in the feed has to be boiled off before any limestone calcines.
 
 ```python
@@ -190,7 +190,7 @@ and the first offer wins. Tier 1 is the models. Every later tier is a
 concession, and the tier that made it writes what it conceded into the node's
 resolution.
 
-**Tier 2 generalises the demand.** The works blends in a little hydrated lime,
+**Tier 2 generalises the demand.** The plant blends in a little hydrated lime,
 so it asks for `fi_37420`, "Quicklime, slaked lime and hydraulic lime". Nobody
 produces it. One `skos:broader` step reaches `fi_3742` — spelled identically,
 and produced by nobody either. The *second* step reaches `fi_374`, "Plaster,
@@ -212,7 +212,7 @@ one step up would be: Quicklime, slaked lime and hydraulic lime -- same words, s
 
 Notice what that concession costs. `fi_374` is an average over plaster, lime
 **and cement** — so a lime demand was answered by a category containing the very
-product this works is making. It is the best answer available and a poor answer
+product this plant is making. It is the best answer available and a poor answer
 in substance, and it is written at the node rather than lost.
 
 Notice too that the step budget did work. The default allows two steps along
@@ -285,7 +285,7 @@ that it answers a demand, not that it calculates one — so a process that has
 been metered is a model too, reading its numbers from the same kind of parquet
 any other parameter comes from.
 
-The works has a stack monitor and years of readings. `MeteredCementPlant`
+The plant has a stack monitor and years of readings. `MeteredCementPlant`
 declares the same product IRI as `CementPlant` and a `Coverage` that ends where
 the other one begins. Nothing else changes:
 [`Glossary`](api/glossary.md)`.resolve` already filters candidates by coverage,
@@ -369,7 +369,7 @@ date
 
 The faint bars are the per-year forcing and the red line is its running total.
 The kilns show up in 2027 and 2029, and then 2031 arrives and the scale of the
-plot changes: building two cement works is four orders of magnitude below one
+plot changes: building two cement plants is four orders of magnitude below one
 year of making cement in them. That is not a flaw in the example. It is what the
 industry's problem actually looks like, and it is visible here only because the
 dates survived.
