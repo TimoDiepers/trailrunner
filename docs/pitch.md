@@ -13,7 +13,7 @@ tags:
 
 ---
 
-## A model is one method
+## Models instead of unit processes
 
 ```python
 answer = cement_model.apply(DEMAND)
@@ -32,9 +32,18 @@ answer = cement_model.apply(DEMAND)
 - Physics-aware: fuel demand reacts to moisture & temperature
 
 ```python
+row = params.at(location="DK", time=2030)
 penalty = moisture_penalty(row["moisture"], row["temperature"])
 fuel = row["fuel_demand"] * clinker * penalty
 ```
+
+!!! info "trailpack"
+    `row` ← [`trailpack`](https://github.com/TimoDiepers/trailpack) parquet —
+    units & vocab IRIs travel with the column, not hardcoded in the model.
+    `.at()`: exact match → widen location → interpolate years, all stamped
+    in `provenance`.
+
+    Born at BrightCon 2025's hackathon.
 
 **Measured beats modelled, when it exists.** Same product, disjoint coverage
 — demand's year picks meter vs. model.
@@ -46,7 +55,7 @@ fuel = row["fuel_demand"] * clinker * penalty
 
 ---
 
-## Models find each other — no wiring
+## Orchestrating multiple models
 
 ```mermaid
 %%{init: {'layout': 'elk'}}%%
@@ -88,9 +97,19 @@ compose at all.
 
 Nobody wired that gas chain up. Every miss stays in the report, with a reason.
 
+!!! info "Where the pipeline model comes from"
+    Not invented — reverse-engineered from the BAFU-2026 ecoinvent export
+    (11,947 raw EcoSpold files) plus the original LCI report behind it
+    (Bussa et al. 2025).
+
+    - Leakage & compressor energy from a **two-tier regional classification**
+      (Tab. 4.4/4.6), not one number per country
+    - Gas composition from Tab. 3.1 → 7 biosphere flows derived, not stored
+    - Cross-checked against the 14 country-specific processes in the raw corpus
+
 ---
 
-## Nothing answers? Relax along the vocabulary — deliberately
+## Finding fallback models
 
 That last cutoff — 10 kg of lime — retried:
 
@@ -107,7 +126,7 @@ swallowed.** Every tier is a concession, and the tier that made it says so.
 
 ---
 
-## Time rides along, for free
+## Tracing time and place for free
 
 ```python
 dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
@@ -119,7 +138,7 @@ No matrix rebuilt, no second model. Dates were never lost.
 
 ---
 
-## Why it matters
+## Why we want this
 
 - Supply chain **assembles itself** — vocabulary, not wiring
 - Missing data is **visible**, not silently zero
