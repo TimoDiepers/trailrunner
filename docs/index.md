@@ -47,7 +47,7 @@ flowchart TB
 | Part | Its one job |
 | --- | --- |
 | [`Demand`](api/flow.md) | an amount and a unit of a `Flow`, which carries what, where and when |
-| `Orchestrator` | owns the queue and is the loop itself — `while queue:`, pop, ask, apply, log, push what came back |
+| [`Orchestrator`](api/orchestrator.md) | owns the queue and is the loop itself — `while queue:`, pop, ask, apply, log, push what came back |
 | [`Queue`](api/queue.md) | the demands still waiting. FIFO unless you hand it a priority |
 | [`ResolutionChain`](api/resolution.md) | who can answer this demand? It asks each tier in order. Tier 1 is the [`Glossary`](api/glossary.md), which offers a `(model, demand)` pair to run. A demand no tier offers for is logged as a cutoff |
 | [`Model`](api/model.md) | one process, as code. `apply(demand) -> Result` |
