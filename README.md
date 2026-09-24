@@ -1,14 +1,21 @@
 # sentier-trailrunner
 
-`trailrunner` computes a life cycle inventory by orchestrating computational
-models instead of static unit-process datasets.
+`trailrunner` computes a life cycle inventory from the models and
+measurements that already describe a supply chain.
 
-A *model* stands for one process, most often Python code, and as readily a
-plain measurement such as metered emissions for this process at this location
-and time. Given a demand for one of its products it works out what other inputs
-it needs to produce that, and what it emitted, reading its parameters from a
-[trailpack](https://github.com/TimoDiepers/trailpack) parquet file rather than
-hard-coding them.
+A static unit process dataset fixes one set of numbers for a process that
+changes with place, time and operating conditions. Many of these
+processes are already described in more detail elsewhere, by plant models,
+sector models covering whole ranges of processes, energy system models and
+measurements from real sites. `trailrunner` lets an LCA use all of them, each in the part
+of the supply chain it describes.
+
+In `trailrunner` all of these are a *model*. Given a demand for one of its
+products, a model works out which inputs it needs to produce that and what it
+emitted. It can be a few lines of Python for one kiln, a wrapper around an
+energy system model, or metered emissions for one site and year. Parameters
+and measurements are read from
+[trailpack](https://github.com/TimoDiepers/trailpack) parquet files.
 
 Every flow crossing a model's boundary is an IRI from the hierarchical
 [sentier vocabulary](https://vocab.sentier.dev), so the orchestrator can take a

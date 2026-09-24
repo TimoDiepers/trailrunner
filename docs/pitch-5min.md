@@ -6,12 +6,21 @@ tags:
 
 # The pitch (5 min)
 
-`trailrunner` treats one physical activity as one *model*, a piece of code
-for one process. Given a demand for one of its products, the model works out
-which inputs it needs and what it emits, reading its parameters from a
-[trailpack](https://github.com/TimoDiepers/trailpack) parquet file. Because
-the demand is an argument, one model covers every place, year and scale it was
-written for. A model can also be a plain measurement read from the same file.
+A static unit process dataset fixes one set of numbers for a process that
+changes with place, time and operating conditions. Many of these
+processes are already described in more detail elsewhere, by plant models,
+sector models covering whole ranges of processes, energy system models and
+measurements from real sites.
+`trailrunner` builds the inventory from them, each in the part of the supply
+chain it describes.
+
+A *model* is whatever answers a demand for a product. It can be a few lines
+of Python for one kiln, a wrapper around an energy system model, or metered
+emissions for one site and year. It returns which inputs it needs and what it
+emits, with parameters read from a
+[trailpack](https://github.com/TimoDiepers/trailpack) parquet file. Each demand
+carries its full context, the place and year as well as any declared condition
+such as a pressure, and the model answers for that context.
 
 Every flow is named by an IRI from the
 [sentier vocabulary](https://vocab.sentier.dev). The orchestrator reads a
@@ -22,7 +31,7 @@ turn, until nothing in the supply chain is left open.
 
 ---
 
-## One process, one model
+## A model answers a demand
 
 Our example is 1000 kg of Portland cement, made in Denmark in 2030.
 
@@ -44,7 +53,7 @@ answer = cement_model.apply(DEMAND)
 The model takes a `Demand` and returns a `Result` with what it made, what it
 needs from upstream and what it emitted. Each flow is a shared vocabulary
 concept, so models written by different people connect directly. The process
-can also react to where and when it is asked for.
+can react to the full context it is asked in.
 
 ```python
 row = params.at(location="DK", time=2030)
@@ -288,7 +297,7 @@ same report.
 - Every **concession** is declared and recorded at its node
 - Inventories are **time-explicit** by construction, ready for dynamic LCIA
 - The **run is a file**, one parquet holding the graph, the gaps and the choices
-- A process can **depend on its demand**, its location, year, scale and feed conditions
+- A model answers for the **full context** of a demand, place and year and any declared condition
 - Demands match on **conditions** such as pressure, and any relaxation is recorded
 - A **measurement** fits the same interface as a model, and the report says which answered
 

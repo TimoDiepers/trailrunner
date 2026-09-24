@@ -6,9 +6,18 @@ tags:
 
 # The pitch (3 min)
 
-`trailrunner` treats one physical activity as one *model*, a piece of code
-for one process. Given a demand for one of its products, the model works out
-which inputs it needs and what it emits, reading its parameters from a
+A static unit process dataset fixes one set of numbers for a process that
+changes with place, time and operating conditions. Many of these
+processes are already described in more detail elsewhere, by plant models,
+sector models covering whole ranges of processes, energy system models and
+measurements from real sites.
+`trailrunner` builds the inventory from them.
+
+A *model* is whatever answers a demand for a product, from one plant to a
+whole energy system, or a site's metered emissions. Each demand carries its
+place, year and any declared condition, and the model answers for that
+context. It returns which inputs it needs and what it emits, with parameters
+read from a
 [trailpack](https://github.com/TimoDiepers/trailpack) parquet file.
 
 Every flow is named by an IRI from the
@@ -20,7 +29,7 @@ turn, until nothing in the supply chain is left open.
 
 ---
 
-## One process, one model
+## A model answers a demand
 
 Our example is 1000 kg of Portland cement, made in Denmark in 2030.
 
@@ -241,8 +250,8 @@ traversal.
 - Every **cutoff** is listed in the report with its reason
 - Every **concession** is recorded at its node
 - Inventories are **time-explicit** by construction
-- A process can **depend on its demand**, its location, year and conditions
-- A **measurement** fits the same interface as a model
+- A model answers for the **full context** of a demand, place and year and any declared condition
+- **Existing models and measurements** fit one interface, from one plant to a whole energy system
 
 ---
 
