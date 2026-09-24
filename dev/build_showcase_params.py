@@ -35,6 +35,7 @@ from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+from trailrunner.core.units import DEG_C, KG, KWH, M3, MJ, UNITLESS, YEAR
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 
@@ -66,7 +67,7 @@ def _write(name: str, rows: list[dict], fields: list[dict]) -> Path:
 
 
 LOCATION_FIELD = {"name": "location", "type": "string", "unit": None, "iri": None}
-TIME_FIELD = {"name": "time", "type": "integer", "unit": "year", "iri": None}
+TIME_FIELD = {"name": "time", "type": "integer", "unit": YEAR, "iri": None}
 
 
 # --- DAC: examples/dac.ipynb's DAC_ROWS, verbatim. ---------------------------
@@ -83,13 +84,13 @@ DAC_ROWS = [
 DAC_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    {"name": "heat_demand", "type": "number", "unit": "MJ",
+    {"name": "heat_demand", "type": "number", "unit": MJ,
      "iri": "https://vocab.sentier.dev/parameters/heat-demand"},
-    {"name": "electricity_demand", "type": "number", "unit": "kWh",
+    {"name": "electricity_demand", "type": "number", "unit": KWH,
      "iri": "https://vocab.sentier.dev/parameters/electricity-demand"},
-    {"name": "temperature", "type": "number", "unit": "degC",
+    {"name": "temperature", "type": "number", "unit": DEG_C,
      "iri": "https://vocab.sentier.dev/parameters/air-temperature"},
-    {"name": "humidity", "type": "number", "unit": "dimensionless",
+    {"name": "humidity", "type": "number", "unit": UNITLESS,
      "iri": "https://vocab.sentier.dev/parameters/relative-humidity"},
 ]
 
@@ -115,10 +116,10 @@ GRID_ROWS = [
 GRID_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    {"name": "share_gas", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "share_wind", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "share_hydro", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "grid_loss", "type": "number", "unit": "dimensionless", "iri": None},
+    {"name": "share_gas", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "share_wind", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "share_hydro", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "grid_loss", "type": "number", "unit": UNITLESS, "iri": None},
 ]
 
 # --- Gas power plant: examples/dac.ipynb's GAS_ROWS, verbatim. No CH row --
@@ -131,8 +132,8 @@ GAS_ROWS = [
 GAS_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    {"name": "efficiency", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "co2_factor", "type": "number", "unit": "kg", "iri": None},
+    {"name": "efficiency", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "co2_factor", "type": "number", "unit": KG, "iri": None},
 ]
 
 # --- Pipeline transport: examples/dac.ipynb section 10's four representative
@@ -178,7 +179,7 @@ PIPELINE_FIELDS = [
     TIME_FIELD,
     {"name": "tier", "type": "string", "unit": None, "iri": None},
     {"name": "gas_density_kg_per_nm3", "type": "number", "unit": "kg/Nm3", "iri": None},
-    {"name": "leakage_rate_per_1000km", "type": "number", "unit": "dimensionless", "iri": None},
+    {"name": "leakage_rate_per_1000km", "type": "number", "unit": UNITLESS, "iri": None},
     {"name": "gas_turbine_mj_per_tkm", "type": "number", "unit": "MJ/tkm", "iri": None},
     {"name": "ch4_frac", "type": "number", "unit": "kg/Nm3", "iri": None},
     {"name": "c2h6_frac", "type": "number", "unit": "kg/Nm3", "iri": None},
@@ -237,8 +238,8 @@ EXTRACTION_ROWS = [
 EXTRACTION_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    {"name": "co2_kg_per_nm3", "type": "number", "unit": "kg", "iri": None},
-    {"name": "extracted_nm3_per_nm3", "type": "number", "unit": "Nm3", "iri": None},
+    {"name": "co2_kg_per_nm3", "type": "number", "unit": KG, "iri": None},
+    {"name": "extracted_nm3_per_nm3", "type": "number", "unit": M3, "iri": None},
 ]
 
 
@@ -266,13 +267,13 @@ CEMENT_ROWS = [
 CEMENT_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    {"name": "clinker_factor", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "fuel_demand", "type": "number", "unit": "MJ", "iri": None},
-    {"name": "lime_demand", "type": "number", "unit": "kg", "iri": None},
-    {"name": "electricity_demand", "type": "number", "unit": "kWh",
+    {"name": "clinker_factor", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "fuel_demand", "type": "number", "unit": MJ, "iri": None},
+    {"name": "lime_demand", "type": "number", "unit": KG, "iri": None},
+    {"name": "electricity_demand", "type": "number", "unit": KWH,
      "iri": "https://vocab.sentier.dev/parameters/electricity-demand"},
-    {"name": "moisture", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "temperature", "type": "number", "unit": "degC",
+    {"name": "moisture", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "temperature", "type": "number", "unit": DEG_C,
      "iri": "https://vocab.sentier.dev/parameters/air-temperature"},
 ]
 
@@ -303,10 +304,10 @@ CEMENT_METERED_ROWS = [
 CEMENT_METERED_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    {"name": "metered_fuel", "type": "number", "unit": "MJ", "iri": None},
-    {"name": "metered_lime", "type": "number", "unit": "kg", "iri": None},
-    {"name": "metered_electricity", "type": "number", "unit": "kWh", "iri": None},
-    {"name": "metered_co2", "type": "number", "unit": "kg", "iri": None},
+    {"name": "metered_fuel", "type": "number", "unit": MJ, "iri": None},
+    {"name": "metered_lime", "type": "number", "unit": KG, "iri": None},
+    {"name": "metered_electricity", "type": "number", "unit": KWH, "iri": None},
+    {"name": "metered_co2", "type": "number", "unit": KG, "iri": None},
 ]
 
 

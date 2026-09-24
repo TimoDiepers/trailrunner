@@ -7,11 +7,12 @@ from trailrunner.core.result import Result
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import Coverage
 from trailrunner.resolution import ModelProvider, Offer, ResolutionChain
+from trailrunner.core.units import KG, MJ
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 
-DEMAND = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit="MJ")
+DEMAND = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit=MJ)
 
 
 class Boiler(Model):
@@ -44,7 +45,7 @@ def test_model_provider_offers_an_exact_match():
 
 
 def test_model_provider_declines_what_it_does_not_produce():
-    gas_demand = Demand(flow=Flow(iri=GAS), amount=1.0, unit="kg")
+    gas_demand = Demand(flow=Flow(iri=GAS), amount=1.0, unit=KG)
     assert ModelProvider(Glossary([Boiler()])).offer(gas_demand) is None
 
 
@@ -160,7 +161,7 @@ def test_no_model_found_is_reachable_with_a_generalising_tier_in_the_chain():
     unmodelled = Demand(
         flow=Flow(iri="https://vocab.sentier.dev/products/unobtainium"),
         amount=1.0,
-        unit="kg",
+        unit=KG,
     )
     assert chain.offer(unmodelled) is None
     reason, _detail = chain.explain(unmodelled)

@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from trailrunner.core.units import symbol
+
 
 @dataclass(frozen=True)
 class Property:
@@ -53,7 +55,9 @@ class Flow:
 
     def describe_context(self) -> str:
         """The context as one short string, ``pressure=4 bar``; empty if there is none."""
-        return ", ".join(f"{entry.name}={entry.value:g} {entry.unit}" for entry in self.context)
+        return ", ".join(
+            f"{entry.name}={entry.value:g} {symbol(entry.unit)}" for entry in self.context
+        )
 
     def get_context(self, name: str) -> Property | None:
         """The context entry called ``name``, or ``None``."""

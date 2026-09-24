@@ -33,6 +33,7 @@ from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
+from trailrunner.core.units import M3, MJ, symbol
 from trailrunner.models.natural_gas_pipeline_transport import (
     NATURAL_GAS_AT_PRODUCTION,
     TRANSPORT,
@@ -56,16 +57,6 @@ it surfaces in an assessment's ``uncharacterized`` list -- which is the
 correct answer for a resource under a climate method, and visible rather
 than dropped.
 """
-
-MJ = "MJ"
-"""The unit this model reasons in.
-
-Energy content is MJ/Nm3, so a demand in kg or Nm3 would be divided by a
-factor that does not apply to it. It is rejected instead.
-"""
-
-NM3 = "Nm3"
-"""Likewise for extraction: the emission factors below are per Nm3."""
 
 KG_PER_TONNE = 1000.0
 
@@ -113,7 +104,7 @@ class NaturalGasSupply(Model):
             raise ValidationError(
                 f"{type(self).__name__} was asked for {demand.unit!r} of "
                 f"{demand.flow.iri}; it converts energy to volume through an "
-                f"MJ/Nm3 energy content and only {MJ} can be read that way"
+                f"MJ/Nm3 energy content and only {symbol(MJ)} can be read that way"
             )
 
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
@@ -137,7 +128,7 @@ class NaturalGasSupply(Model):
                 Demand(
                     flow=Flow(iri=NATURAL_GAS_AT_PRODUCTION, **there),
                     amount=volume_nm3,
-                    unit=NM3,
+                    unit=M3,
                 ),
                 Demand(flow=Flow(iri=TRANSPORT, **there), amount=tkm, unit="tkm"),
             ],
@@ -163,11 +154,11 @@ class NaturalGasExtraction(Model):
     """Every rule, because this model is monofunctional. See NaturalGasSupply."""
 
     def apply(self, demand: Demand) -> Result:
-        if demand.unit != NM3:
+        if demand.unit != M3:
             raise ValidationError(
                 f"{type(self).__name__} was asked for {demand.unit!r} of "
-                f"{demand.flow.iri}; its factors are per {NM3} and only "
-                f"{NM3} can be read that way"
+                f"{demand.flow.iri}; its factors are per {symbol(M3)} and only "
+                f"{symbol(M3)} can be read that way"
             )
 
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
@@ -186,7 +177,7 @@ class NaturalGasExtraction(Model):
                 Exchange(
                     flow=Flow(iri=NATURAL_GAS_IN_GROUND, **here),
                     amount=demand.amount * float(row["extracted_nm3_per_nm3"]),
-                    unit=NM3,
+                    unit=M3,
                 ),
             ],
             provenance=dict(row.provenance),

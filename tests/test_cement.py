@@ -17,6 +17,7 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
@@ -57,13 +58,13 @@ def cement_params(tmp_path):
     ]
     fields = [
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "time", "type": "integer", "unit": "year", "iri": None},
-        {"name": "clinker_factor", "type": "number", "unit": "dimensionless", "iri": None},
-        {"name": "fuel_demand", "type": "number", "unit": "MJ", "iri": None},
-        {"name": "lime_demand", "type": "number", "unit": "kg", "iri": None},
-        {"name": "electricity_demand", "type": "number", "unit": "kWh", "iri": None},
-        {"name": "moisture", "type": "number", "unit": "dimensionless", "iri": None},
-        {"name": "temperature", "type": "number", "unit": "degC", "iri": None},
+        {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+        {"name": "clinker_factor", "type": "number", "unit": UNITLESS, "iri": None},
+        {"name": "fuel_demand", "type": "number", "unit": MJ, "iri": None},
+        {"name": "lime_demand", "type": "number", "unit": KG, "iri": None},
+        {"name": "electricity_demand", "type": "number", "unit": KWH, "iri": None},
+        {"name": "moisture", "type": "number", "unit": UNITLESS, "iri": None},
+        {"name": "temperature", "type": "number", "unit": DEG_C, "iri": None},
     ]
     write_parameter_parquet(path, rows, fields)
     return ParameterSet.from_parquet(path, hierarchy=HIERARCHY)
@@ -71,7 +72,7 @@ def cement_params(tmp_path):
 
 def cement_demand(location="CH", time=2030, amount=1000.0):
     return Demand(
-        flow=Flow(iri=CEMENT, location=location, time=time), amount=amount, unit="kg"
+        flow=Flow(iri=CEMENT, location=location, time=time), amount=amount, unit=KG
     )
 
 
@@ -79,17 +80,17 @@ def test_cement_plant_produces_exactly_what_was_demanded(cement_params):
     result = CementPlant(params=cement_params).apply(cement_demand())
     assert result.production[0].flow.iri == CEMENT
     assert result.production[0].amount == 1000.0
-    assert result.production[0].unit == "kg"
+    assert result.production[0].unit == KG
 
 
 def test_cement_plant_demands_limestone_gas_steam_and_electricity(cement_params):
     result = CementPlant(params=cement_params).apply(cement_demand())
     by_iri = {d.flow.iri: d for d in result.technosphere}
     assert set(by_iri) == {LIMESTONE, NATURAL_GAS, LIME, ELECTRICITY}
-    assert by_iri[LIMESTONE].unit == "kg"
-    assert by_iri[NATURAL_GAS].unit == "MJ"
-    assert by_iri[LIME].unit == "kg"
-    assert by_iri[ELECTRICITY].unit == "kWh"
+    assert by_iri[LIMESTONE].unit == KG
+    assert by_iri[NATURAL_GAS].unit == MJ
+    assert by_iri[LIME].unit == KG
+    assert by_iri[ELECTRICITY].unit == KWH
     for child in result.technosphere:
         assert child.flow.location == "CH"
         assert child.flow.time == 2030
@@ -131,7 +132,7 @@ def test_calcination_and_combustion_are_two_separate_biosphere_exchanges(cement_
     assert amounts[0] == pytest.approx(138.6)
     assert amounts[1] == pytest.approx(397.5)
     for exchange in result.biosphere:
-        assert exchange.unit == "kg"
+        assert exchange.unit == KG
         assert exchange.amount > 0
 
 
@@ -183,11 +184,11 @@ def metered_params(tmp_path):
     ]
     fields = [
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "time", "type": "integer", "unit": "year", "iri": None},
-        {"name": "metered_fuel", "type": "number", "unit": "MJ", "iri": None},
-        {"name": "metered_lime", "type": "number", "unit": "kg", "iri": None},
-        {"name": "metered_electricity", "type": "number", "unit": "kWh", "iri": None},
-        {"name": "metered_co2", "type": "number", "unit": "kg", "iri": None},
+        {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+        {"name": "metered_fuel", "type": "number", "unit": MJ, "iri": None},
+        {"name": "metered_lime", "type": "number", "unit": KG, "iri": None},
+        {"name": "metered_electricity", "type": "number", "unit": KWH, "iri": None},
+        {"name": "metered_co2", "type": "number", "unit": KG, "iri": None},
     ]
     write_parameter_parquet(path, rows, fields)
     return ParameterSet.from_parquet(path, hierarchy=HIERARCHY)
@@ -206,7 +207,7 @@ def test_metered_plant_emits_one_merged_stack_figure(metered_params):
     assert len(result.biosphere) == 1
     assert result.biosphere[0].flow.iri == CO2_FOSSIL
     assert result.biosphere[0].amount == pytest.approx(562.0)
-    assert result.biosphere[0].unit == "kg"
+    assert result.biosphere[0].unit == KG
 
 
 def test_metered_plant_still_sends_its_purchased_energy_upstream(metered_params):

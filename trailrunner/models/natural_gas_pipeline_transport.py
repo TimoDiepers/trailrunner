@@ -27,6 +27,7 @@ from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
+from trailrunner.core.units import KG, M3, MJ, NUM
 
 TRANSPORT = "https://vocab.sentier.dev/products/natural-gas-transport-offshore-pipeline-long-distance"
 PIPELINE_INFRASTRUCTURE = "https://vocab.sentier.dev/products/pipeline-natural-gas-long-distance-high-capacity-offshore"
@@ -116,31 +117,31 @@ class NaturalGasOffshorePipelineTransport(Model):
         leaked_nm3 = leaked_volume_nm3_per_tkm(row["leakage_rate_per_1000km"], row["gas_density_kg_per_nm3"]) * amount
 
         technosphere = [
-            Demand(flow=flow(PIPELINE_INFRASTRUCTURE), amount=row["infra_factor"] * amount, unit="unit"),
-            Demand(flow=flow(NATURAL_GAS_AT_PRODUCTION), amount=leaked_nm3, unit="Nm3"),
+            Demand(flow=flow(PIPELINE_INFRASTRUCTURE), amount=row["infra_factor"] * amount, unit=NUM),
+            Demand(flow=flow(NATURAL_GAS_AT_PRODUCTION), amount=leaked_nm3, unit=M3),
             Demand(
                 flow=flow(NATURAL_GAS_BURNED_IN_GAS_TURBINE),
                 amount=row["gas_turbine_mj_per_tkm"] * amount,
-                unit="MJ",
+                unit=MJ,
             ),
             Demand(flow=flow(FREIGHT_LORRY), amount=row["lorry_factor"] * amount, unit="tkm"),
             Demand(
                 flow=flow(MINERAL_OIL_DISPOSAL),
                 amount=row["mineral_oil_disposal_factor"] * amount,
-                unit="kg",
+                unit=KG,
             ),
         ]
 
         biosphere = [
-            Exchange(flow=flow(iri), amount=leaked_nm3 * row[column], unit="kg")
+            Exchange(flow=flow(iri), amount=leaked_nm3 * row[column], unit=KG)
             for iri, column in _COMPOSITION_FLOWS
             if row[column] is not None
         ]
         biosphere.append(
-            Exchange(flow=flow(HALON_1211), amount=row["halon1211_rate_kg_per_tkm"] * amount, unit="kg")
+            Exchange(flow=flow(HALON_1211), amount=row["halon1211_rate_kg_per_tkm"] * amount, unit=KG)
         )
         biosphere.append(
-            Exchange(flow=flow(HFC_23), amount=row["hfc23_rate_kg_per_tkm"] * amount, unit="kg")
+            Exchange(flow=flow(HFC_23), amount=row["hfc23_rate_kg_per_tkm"] * amount, unit=KG)
         )
 
         return Result(

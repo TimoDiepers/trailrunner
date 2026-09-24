@@ -6,12 +6,13 @@ from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.runner import Runner
+from trailrunner.core.units import KG, MJ, TONNE
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
-DEMAND = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg")
+DEMAND = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG)
 
 
 def make_runner(result: Result) -> Runner:
@@ -26,9 +27,9 @@ def make_runner(result: Result) -> Runner:
 
 def good_result() -> Result:
     return Result(
-        production=[Exchange(flow=DEMAND.flow, amount=1000.0, unit="kg")],
-        technosphere=[Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=5000.0, unit="MJ")],
-        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", time=2030), amount=12.0, unit="kg")],
+        production=[Exchange(flow=DEMAND.flow, amount=1000.0, unit=KG)],
+        technosphere=[Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=5000.0, unit=MJ)],
+        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", time=2030), amount=12.0, unit=KG)],
     )
 
 
@@ -36,7 +37,7 @@ def test_apply_resolves_the_model_and_returns_its_result():
     runner = make_runner(good_result())
     result = runner.apply(DEMAND)
     assert result.production[0].amount == 1000.0
-    assert result.technosphere[0].unit == "MJ"
+    assert result.technosphere[0].unit == MJ
 
 
 def test_apply_raises_when_nothing_produces_the_demand():
@@ -57,7 +58,7 @@ def test_apply_uses_a_model_passed_in_without_resolving():
 
 
 def test_production_must_include_the_demanded_product():
-    runner = make_runner(Result(production=[Exchange(flow=Flow(iri=HEAT), amount=1.0, unit="MJ")]))
+    runner = make_runner(Result(production=[Exchange(flow=Flow(iri=HEAT), amount=1.0, unit=MJ)]))
     with pytest.raises(ValidationError) as excinfo:
         runner.apply(DEMAND)
     assert CAPTURED in str(excinfo.value)
@@ -65,15 +66,15 @@ def test_production_must_include_the_demanded_product():
 
 def test_production_unit_must_match_the_demand_unit():
     runner = make_runner(
-        Result(production=[Exchange(flow=DEMAND.flow, amount=1000.0, unit="tonne")])
+        Result(production=[Exchange(flow=DEMAND.flow, amount=1000.0, unit=TONNE)])
     )
     with pytest.raises(ValidationError) as excinfo:
         runner.apply(DEMAND)
-    assert "tonne" in str(excinfo.value)
+    assert TONNE in str(excinfo.value)
 
 
 def test_production_amount_must_be_positive():
-    runner = make_runner(Result(production=[Exchange(flow=DEMAND.flow, amount=0.0, unit="kg")]))
+    runner = make_runner(Result(production=[Exchange(flow=DEMAND.flow, amount=0.0, unit=KG)]))
     with pytest.raises(ValidationError):
         runner.apply(DEMAND)
 
@@ -87,8 +88,8 @@ def test_production_below_the_demand_is_rejected():
     """
     runner = make_runner(
         Result(
-            production=[Exchange(flow=DEMAND.flow, amount=1.0, unit="kg")],
-            biosphere=[Exchange(flow=Flow(iri=CO2), amount=0.01, unit="kg")],
+            production=[Exchange(flow=DEMAND.flow, amount=1.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=CO2), amount=0.01, unit=KG)],
         )
     )
     with pytest.raises(ValidationError) as excinfo:
@@ -103,8 +104,8 @@ def test_production_split_over_several_entries_is_summed():
     runner = make_runner(
         Result(
             production=[
-                Exchange(flow=DEMAND.flow, amount=400.0, unit="kg"),
-                Exchange(flow=DEMAND.flow, amount=600.0, unit="kg"),
+                Exchange(flow=DEMAND.flow, amount=400.0, unit=KG),
+                Exchange(flow=DEMAND.flow, amount=600.0, unit=KG),
             ]
         )
     )
@@ -114,7 +115,7 @@ def test_production_split_over_several_entries_is_summed():
 def test_production_within_relative_tolerance_of_the_demand_is_accepted():
     """Interpolated parameters do not round-trip to the last bit."""
     runner = make_runner(
-        Result(production=[Exchange(flow=DEMAND.flow, amount=1000.0 * (1 - 1e-12), unit="kg")])
+        Result(production=[Exchange(flow=DEMAND.flow, amount=1000.0 * (1 - 1e-12), unit=KG)])
     )
     assert runner.apply(DEMAND).production[0].amount < 1000.0
 
@@ -122,7 +123,7 @@ def test_production_within_relative_tolerance_of_the_demand_is_accepted():
 def test_over_production_is_allowed():
     """A process may legitimately make more than was asked of it."""
     runner = make_runner(
-        Result(production=[Exchange(flow=DEMAND.flow, amount=1500.0, unit="kg")])
+        Result(production=[Exchange(flow=DEMAND.flow, amount=1500.0, unit=KG)])
     )
     assert runner.apply(DEMAND).production[0].amount == 1500.0
 
@@ -140,7 +141,7 @@ def test_a_missing_unit_is_reported_even_when_the_amount_is_also_wrong():
 def test_every_exchange_must_carry_a_unit():
     runner = make_runner(
         Result(
-            production=[Exchange(flow=DEMAND.flow, amount=1000.0, unit="kg")],
+            production=[Exchange(flow=DEMAND.flow, amount=1000.0, unit=KG)],
             biosphere=[Exchange(flow=Flow(iri=CO2), amount=12.0, unit="")],
         )
     )

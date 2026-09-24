@@ -19,6 +19,7 @@ from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
+from trailrunner.core.units import KWH, MJ, symbol
 
 # Real BONSAI vocabulary concepts (verified live against
 # https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
@@ -56,7 +57,7 @@ interpolation between two years' rows round the way floats do.
 
 KWH_TO_MJ = 3.6
 
-ELECTRICITY_UNIT = "kWh"
+ELECTRICITY_UNIT = KWH
 """The unit this module reasons in.
 
 ``GasPower`` converts to MJ of fuel with a fixed factor, so a demand in any
@@ -155,8 +156,8 @@ class GasPower(Model):
             raise ValidationError(
                 f"{type(self).__name__} was asked for {demand.unit!r} of "
                 f"{demand.flow.iri}; it converts to fuel through a fixed "
-                f"{KWH_TO_MJ} MJ/{ELECTRICITY_UNIT} factor and only "
-                f"{ELECTRICITY_UNIT} can be read that way"
+                f"{KWH_TO_MJ} MJ/{symbol(ELECTRICITY_UNIT)} factor and only "
+                f"{symbol(ELECTRICITY_UNIT)} can be read that way"
             )
 
         row = self.params.at(location=demand.flow.location, time=demand.flow.time)
@@ -168,7 +169,7 @@ class GasPower(Model):
                 Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)
             ],
             technosphere=[
-                Demand(flow=Flow(iri=NATURAL_GAS, **here), amount=fuel, unit="MJ")
+                Demand(flow=Flow(iri=NATURAL_GAS, **here), amount=fuel, unit=MJ)
             ],
             biosphere=[
                 Exchange(

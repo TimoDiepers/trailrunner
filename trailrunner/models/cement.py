@@ -22,6 +22,7 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
+from trailrunner.core.units import KG
 
 # Real BONSAI vocabulary concepts, verified live against
 # https://vocab.sentier.dev on 2026-09-24 and cached by
@@ -141,7 +142,7 @@ class CementPlant(Model):
                 Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)
             ],
             technosphere=[
-                Demand(flow=here(LIMESTONE), amount=limestone, unit="kg"),
+                Demand(flow=here(LIMESTONE), amount=limestone, unit=KG),
                 Demand(
                     flow=self._gas(here(NATURAL_GAS)),
                     amount=fuel,
@@ -162,10 +163,10 @@ class CementPlant(Model):
                 Exchange(
                     flow=here(CO2_FOSSIL),
                     amount=CLINKER_CALCINATION_CO2 * clinker,
-                    unit="kg",
+                    unit=KG,
                 ),
                 Exchange(
-                    flow=here(CO2_FOSSIL), amount=GAS_CO2_PER_MJ * fuel, unit="kg"
+                    flow=here(CO2_FOSSIL), amount=GAS_CO2_PER_MJ * fuel, unit=KG
                 ),
             ],
             provenance={**row.provenance, "source": "modelled", **fleet_provenance},

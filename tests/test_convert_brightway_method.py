@@ -15,6 +15,7 @@ from trailrunner.assessment import Method
 from trailrunner.core.errors import DuplicateFactor
 
 from .conftest import write_method_parquet
+from trailrunner.core.units import KG
 
 SCRIPT = Path(__file__).resolve().parent.parent / "dev" / "convert_brightway_method.py"
 
@@ -86,13 +87,13 @@ def test_two_rows_with_one_key_raise_rather_than_last_wins(tmp_path):
         [
             {
                 "flow_iri": "https://x/carbon-dioxide-fossil",
-                "flow_unit": "kg",
+                "flow_unit": KG,
                 "location": "GLO",
                 "cf": 1.0,
             },
             {
                 "flow_iri": "https://x/carbon-dioxide-fossil",
-                "flow_unit": "kg",
+                "flow_unit": KG,
                 "location": "GLO",
                 "cf": 0.0,
             },
@@ -101,7 +102,7 @@ def test_two_rows_with_one_key_raise_rather_than_last_wins(tmp_path):
             {"name": "flow_iri", "type": "string", "unit": None, "iri": None},
             {"name": "flow_unit", "type": "string", "unit": None, "iri": None},
             {"name": "location", "type": "string", "unit": None, "iri": None},
-            {"name": "cf", "type": "number", "unit": "kg CO2eq", "iri": None},
+            {"name": "cf", "type": "number", "unit": KG, "iri": None},
         ],
     )
     with pytest.raises(DuplicateFactor):

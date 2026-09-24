@@ -12,13 +12,14 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import AttributionSettings, Settings
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.runner import Runner
+from trailrunner.core.units import KG, MJ
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 POWER = "https://vocab.sentier.dev/products/electricity"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
-HEAT_DEMAND = Demand(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ")
+HEAT_DEMAND = Demand(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit=MJ)
 
 
 class CHP(Model):
@@ -31,18 +32,18 @@ class CHP(Model):
         return Result(
             production=[
                 Exchange(
-                    flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ",
+                    flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit=MJ,
                     properties=(Property("energy", 100.0, "MJ"), Property("price", 3.0, "EUR"),
                                 Property("mass", 0.0, "kg")),
                 ),
                 Exchange(
-                    flow=Flow(iri=POWER, location="CH"), amount=50.0, unit="MJ",
+                    flow=Flow(iri=POWER, location="CH"), amount=50.0, unit=MJ,
                     properties=(Property("energy", 50.0, "MJ"), Property("price", 9.0, "EUR"),
                                 Property("mass", 0.0, "kg")),
                 ),
             ],
-            technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit="kg")],
+            technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit=KG)],
         )
 
 
@@ -75,20 +76,20 @@ def test_a_product_split_across_exchanges_is_not_double_counted():
             return Result(
                 production=[
                     Exchange(
-                        flow=Flow(iri=HEAT, location="CH"), amount=50.0, unit="MJ",
+                        flow=Flow(iri=HEAT, location="CH"), amount=50.0, unit=MJ,
                         properties=(Property("energy", 50.0, "MJ"),),
                     ),
                     Exchange(
-                        flow=Flow(iri=HEAT, location="CH"), amount=50.0, unit="MJ",
+                        flow=Flow(iri=HEAT, location="CH"), amount=50.0, unit=MJ,
                         properties=(Property("energy", 50.0, "MJ"),),
                     ),
                     Exchange(
-                        flow=Flow(iri=POWER, location="CH"), amount=50.0, unit="MJ",
+                        flow=Flow(iri=POWER, location="CH"), amount=50.0, unit=MJ,
                         properties=(Property("energy", 50.0, "MJ"),),
                     ),
                 ],
-                technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit="MJ")],
-                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit="kg")],
+                technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit=MJ)],
+                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit=KG)],
             )
 
     result = runner_for(SplitHeat(), "energy").apply(HEAT_DEMAND)
@@ -153,7 +154,7 @@ def test_a_single_product_model_is_untouched_by_a_rule_it_ignores():
         def apply(self, demand):
             return Result(
                 production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=5.0, unit="kg")],
+                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=5.0, unit=KG)],
             )
 
     result = runner_for(Boiler(), "economic").apply(HEAT_DEMAND)
@@ -194,13 +195,13 @@ def test_a_negative_property_is_refused_rather_than_partitioned_over():
         def apply(self, demand):
             return Result(
                 production=[
-                    Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ",
+                    Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit=MJ,
                              properties=(Property("price", 10.0, "EUR"),)),
-                    Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0, unit="MJ",
+                    Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0, unit=MJ,
                              properties=(Property("price", -8.0, "EUR"),)),
                 ],
-                technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit="MJ")],
-                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit="kg")],
+                technosphere=[Demand(flow=Flow(iri=GAS, location="CH"), amount=200.0, unit=MJ)],
+                biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0, unit=KG)],
             )
 
     with pytest.raises(MissingProperty, match="waste"):
@@ -214,9 +215,9 @@ def test_the_total_being_positive_does_not_excuse_a_negative_part():
         def apply(self, demand):
             result = super().apply(demand)
             result.production = [
-                Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ",
+                Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit=MJ,
                          properties=(Property("mass", 10.0, "kg"),)),
-                Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0, unit="MJ",
+                Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0, unit=MJ,
                          properties=(Property("mass", -8.0, "kg"),)),
             ]
             return result

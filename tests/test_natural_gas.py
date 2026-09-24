@@ -17,6 +17,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
+from trailrunner.core.units import KG, M3, MJ
 
 SUPPLY_ROWS = [
     {"location": "DK", "time": 2020, "origin": "NO", "transport_distance_km": 1000.0,
@@ -59,12 +60,12 @@ def extraction(tmp_path):
     path = write_parameter_parquet(
         tmp_path / "extraction.parquet",
         EXTRACTION_ROWS,
-        _fields(EXTRACTION_ROWS[0], units={"co2_kg_per_nm3": "kg"}),
+        _fields(EXTRACTION_ROWS[0], units={"co2_kg_per_nm3": KG}),
     )
     return NaturalGasExtraction(params=ParameterSet.from_parquet(path))
 
 
-def gas(location="DK", amount=2475.0, unit="MJ", time=2030):
+def gas(location="DK", amount=2475.0, unit=MJ, time=2030):
     return Demand(
         flow=Flow(iri=NATURAL_GAS, location=location, time=time),
         amount=amount,
@@ -72,7 +73,7 @@ def gas(location="DK", amount=2475.0, unit="MJ", time=2030):
     )
 
 
-def wellhead(location="NO", amount=68.75, unit="Nm3", time=2030):
+def wellhead(location="NO", amount=68.75, unit=M3, time=2030):
     return Demand(
         flow=Flow(iri=NATURAL_GAS_AT_PRODUCTION, location=location, time=time),
         amount=amount,
@@ -84,7 +85,7 @@ def test_supply_converts_energy_to_wellhead_volume(supply):
     result = supply.apply(gas())
     volume = [d for d in result.technosphere if d.flow.iri == NATURAL_GAS_AT_PRODUCTION][0]
     assert volume.amount == pytest.approx(2475.0 / 36.0)
-    assert volume.unit == "Nm3"
+    assert volume.unit == M3
 
 
 def test_supply_converts_volume_to_tonne_kilometres(supply):
@@ -116,7 +117,7 @@ def test_supply_emits_nothing_itself(supply):
 
 def test_supply_rejects_a_unit_its_energy_content_cannot_read(supply):
     with pytest.raises(ValidationError, match="MJ/Nm3"):
-        supply.apply(gas(unit="kg"))
+        supply.apply(gas(unit=KG))
 
 
 def test_extraction_scales_both_flows_with_the_volume(extraction):
@@ -124,9 +125,9 @@ def test_extraction_scales_both_flows_with_the_volume(extraction):
     co2 = [e for e in result.biosphere if e.flow.iri == CO2_FOSSIL][0]
     resource = [e for e in result.biosphere if e.flow.iri == NATURAL_GAS_IN_GROUND][0]
     assert co2.amount == pytest.approx(7.5)
-    assert co2.unit == "kg"
+    assert co2.unit == KG
     assert resource.amount == pytest.approx(102.0)
-    assert resource.unit == "Nm3"
+    assert resource.unit == M3
 
 
 def test_extraction_takes_more_out_of_the_ground_than_it_delivers(extraction):
@@ -140,8 +141,8 @@ def test_extraction_is_a_leaf(extraction):
 
 
 def test_extraction_rejects_a_unit_its_factors_cannot_read(extraction):
-    with pytest.raises(ValidationError, match="Nm3"):
-        extraction.apply(wellhead(unit="kg", time=2020))
+    with pytest.raises(ValidationError, match="m3"):
+        extraction.apply(wellhead(unit=KG, time=2020))
 
 
 def test_the_two_models_chain_through_the_glossary(supply, extraction):

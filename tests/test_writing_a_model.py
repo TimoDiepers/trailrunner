@@ -13,6 +13,7 @@ import pytest
 
 from trailrunner import Demand, Flow, Model, Runner, ValidationError
 from trailrunner.orchestration.glossary import Glossary
+from trailrunner.core.units import KWH, MJ
 
 GUIDE = Path(__file__).resolve().parent.parent / "docs" / "content" / "writing_a_model.md"
 
@@ -30,7 +31,7 @@ def test_the_guide_shows_how_to_write_a_model():
     model = namespace["GasTurbine"]()
 
     product = list(model.produces)[0]
-    demand = Demand(flow=Flow(iri=product, location="CH", time=2030), amount=100.0, unit="kWh")
+    demand = Demand(flow=Flow(iri=product, location="CH", time=2030), amount=100.0, unit=KWH)
     result = Runner(Glossary([model])).apply(demand)
 
     assert result.biosphere, "the guide's model should emit something"
@@ -44,7 +45,7 @@ def test_the_guide_model_satisfies_the_production_contract():
     product = list(model.produces)[0]
 
     for amount in (1.0, 250.0, 1e6):
-        demand = Demand(flow=Flow(iri=product), amount=amount, unit="kWh")
+        demand = Demand(flow=Flow(iri=product), amount=amount, unit=KWH)
         Runner.validate(demand, model.apply(demand), model=model)
 
 
@@ -64,6 +65,6 @@ def test_a_model_that_ignores_the_documented_contract_is_rejected():
 
             return Result(production=[])
 
-    demand = Demand(flow=Flow(iri="https://vocab.sentier.dev/products/heat"), amount=1.0, unit="MJ")
+    demand = Demand(flow=Flow(iri="https://vocab.sentier.dev/products/heat"), amount=1.0, unit=MJ)
     with pytest.raises(ValidationError):
         Runner(Glossary([Forgetful()])).apply(demand)

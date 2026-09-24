@@ -8,12 +8,13 @@ from trailrunner.core.settings import AttributionSettings, Settings
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.orchestration.runner import Runner
+from trailrunner.core.units import KG, MJ
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 POWER = "https://vocab.sentier.dev/products/electricity"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
-HEAT_DEMAND = Demand(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit="MJ")
+HEAT_DEMAND = Demand(flow=Flow(iri=HEAT, location="CH"), amount=100.0, unit=MJ)
 
 
 class CHP(Model):
@@ -36,12 +37,12 @@ class CHP(Model):
         scale = abs(demand.amount) / reference
         return Result(
             production=[
-                Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0 * scale, unit="MJ",
+                Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0 * scale, unit=MJ,
                          properties=(Property("price", 3.0, "EUR"),)),
-                Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0 * scale, unit="MJ",
+                Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0 * scale, unit=MJ,
                          properties=(Property("price", 9.0, "EUR"),)),
             ],
-            biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0 * scale, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0 * scale, unit=KG)],
         )
 
 
@@ -55,7 +56,7 @@ class Grid(Model):
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
             biosphere=[
-                Exchange(flow=Flow(iri=CO2, location="CH"), amount=0.1 * demand.amount, unit="kg")
+                Exchange(flow=Flow(iri=CO2, location="CH"), amount=0.1 * demand.amount, unit=KG)
             ],
         )
 
@@ -95,7 +96,7 @@ def test_the_rule_is_recorded_with_what_was_credited():
 
 def test_a_negative_demand_passes_validation():
     """Production must cover the demand in magnitude, with the same sign."""
-    credit = Demand(flow=Flow(iri=POWER, location="CH"), amount=-50.0, unit="MJ")
+    credit = Demand(flow=Flow(iri=POWER, location="CH"), amount=-50.0, unit=MJ)
     result = substituting_runner([Grid()]).apply(credit)
     assert result.production[0].amount == -50.0
 
@@ -122,7 +123,7 @@ def test_under_delivered_credit_is_rejected():
     like it "exceeds" the demand. Comparing magnitudes (via the sign
     multiplier) is what catches it.
     """
-    credit = Demand(flow=Flow(iri=POWER, location="CH"), amount=-100.0, unit="MJ")
+    credit = Demand(flow=Flow(iri=POWER, location="CH"), amount=-100.0, unit=MJ)
     with pytest.raises(ValidationError):
         substituting_runner([HalfHeartedGrid()]).apply(credit)
 
@@ -216,11 +217,11 @@ class TwinPlant(Model):
             scale = demand.amount / 100.0
             return Result(
                 production=[
-                    Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0 * scale, unit="MJ"),
-                    Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0 * scale, unit="MJ"),
+                    Exchange(flow=Flow(iri=HEAT, location="CH"), amount=100.0 * scale, unit=MJ),
+                    Exchange(flow=Flow(iri=POWER, location="CH"), amount=50.0 * scale, unit=MJ),
                 ],
                 biosphere=[
-                    Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0 * scale, unit="kg")
+                    Exchange(flow=Flow(iri=CO2, location="CH"), amount=12.0 * scale, unit=KG)
                 ],
             )
         return Result(
@@ -229,7 +230,7 @@ class TwinPlant(Model):
                 Exchange(
                     flow=Flow(iri=CO2, location="CH"),
                     amount=self.co2_per_mj * demand.amount,
-                    unit="kg",
+                    unit=KG,
                 )
             ],
         )

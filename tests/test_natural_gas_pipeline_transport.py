@@ -17,6 +17,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
+from trailrunner.core.units import M3, MJ
 
 # A high-tier and a low-tier row, values taken directly from the source report
 # (Bussa et al. 2025, Tab. 4.4/4.6/4.7) -- see
@@ -76,9 +77,9 @@ def test_gas_turbine_and_at_production_amounts_are_tier_constants(pipeline_param
     result = NaturalGasOffshorePipelineTransport(params=pipeline_params).apply(demand(location="DZ", amount=2.0))
     by_iri = {d.flow.iri: d for d in result.technosphere}
     assert by_iri[NATURAL_GAS_BURNED_IN_GAS_TURBINE].amount == pytest.approx(0.795 * 2.0)
-    assert by_iri[NATURAL_GAS_BURNED_IN_GAS_TURBINE].unit == "MJ"
+    assert by_iri[NATURAL_GAS_BURNED_IN_GAS_TURBINE].unit == MJ
     assert by_iri[NATURAL_GAS_AT_PRODUCTION].amount == pytest.approx(0.0027755 * 2.0, rel=1e-4)
-    assert by_iri[NATURAL_GAS_AT_PRODUCTION].unit == "Nm3"
+    assert by_iri[NATURAL_GAS_AT_PRODUCTION].unit == M3
 
 
 def test_location_invariant_exchanges_do_not_depend_on_tier(pipeline_params):

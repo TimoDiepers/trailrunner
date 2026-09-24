@@ -11,6 +11,7 @@ from pathlib import Path
 
 from trailrunner.core.flow import Demand, Flow
 from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
+from trailrunner.core.units import default_catalog, symbol
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, ResolutionChain
@@ -141,7 +142,9 @@ def main(argv: list[str] | None = None) -> int:
     demand = Demand(
         flow=Flow(iri=args.iri, location=args.location, time=args.year),
         amount=args.amount,
-        unit=args.unit,
+        # A stop-gap: Task 11 replaces this with proper error handling for a
+        # unit the catalog does not know.
+        unit=default_catalog().resolve(args.unit),
     )
     tier1 = ModelProvider(Glossary(models))
     providers = [tier1]
@@ -175,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         # for radiative forcing those are different dimensions.
         print(
             f"{dynamic.metric} over {dynamic.horizon} years: "
-            f"{dynamic.total:g} {dynamic.cumulative_unit}"
+            f"{dynamic.total:g} {symbol(dynamic.cumulative_unit)}"
         )
         # The gaps travel with the number, the same way the static path's do.
         print(dynamic.summary())

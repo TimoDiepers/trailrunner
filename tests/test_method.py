@@ -6,23 +6,24 @@ from trailrunner.core.flow import Flow
 from trailrunner.params.location import LocationHierarchy
 
 from .conftest import CH4_IRI, CO2_IRI, write_method_parquet
+from trailrunner.core.units import KG, TONNE
 
 
 def test_exact_factor_is_found(method_parquet_file):
     method = Method.from_parquet(method_parquet_file)
-    factor = method.factor(Flow(iri=CO2_IRI, location="GLO"), "kg")
+    factor = method.factor(Flow(iri=CO2_IRI, location="GLO"), KG)
     assert factor.value == 1.0
 
 
 def test_score_unit_comes_from_the_cf_column_metadata(method_parquet_file):
-    assert Method.from_parquet(method_parquet_file).unit == "kg CO2eq"
+    assert Method.from_parquet(method_parquet_file).unit == KG
 
 
 def test_location_falls_back_up_the_hierarchy(method_parquet_file):
     method = Method.from_parquet(
         method_parquet_file, hierarchy=LocationHierarchy({"CH": "RER", "RER": "GLO"})
     )
-    factor = method.factor(Flow(iri=CH4_IRI, location="CH"), "kg")
+    factor = method.factor(Flow(iri=CH4_IRI, location="CH"), KG)
     assert factor.value == 27.0
     assert factor.provenance["location_used"] == "RER"
     assert factor.provenance["location_fallback"] is True
@@ -32,25 +33,25 @@ def test_exact_location_is_preferred_over_the_fallback(method_parquet_file):
     method = Method.from_parquet(
         method_parquet_file, hierarchy=LocationHierarchy({"CH": "RER", "RER": "GLO"})
     )
-    factor = method.factor(Flow(iri=CH4_IRI, location="RER"), "kg")
+    factor = method.factor(Flow(iri=CH4_IRI, location="RER"), KG)
     assert factor.value == 27.0
     assert factor.provenance["location_fallback"] is False
 
 
 def test_a_flow_with_no_factor_returns_none(method_parquet_file):
     method = Method.from_parquet(method_parquet_file)
-    assert method.factor(Flow(iri="https://vocab.sentier.dev/flows/sox"), "kg") is None
+    assert method.factor(Flow(iri="https://vocab.sentier.dev/flows/sox"), KG) is None
 
 
 def test_a_factor_for_a_different_unit_does_not_match(method_parquet_file):
     """String equality, no conversion: a CF per kg says nothing about tonnes."""
     method = Method.from_parquet(method_parquet_file)
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO"), "tonne") is None
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO"), TONNE) is None
 
 
 def test_a_flow_without_a_location_matches_the_root_row(method_parquet_file):
     method = Method.from_parquet(method_parquet_file)
-    factor = method.factor(Flow(iri=CO2_IRI), "kg")
+    factor = method.factor(Flow(iri=CO2_IRI), KG)
     assert factor.value == 1.0
     assert factor.provenance["location_fallback"] is False
 
@@ -59,7 +60,7 @@ def test_a_cf_column_without_a_declared_unit_raises(tmp_path):
     path = tmp_path / "unitless.parquet"
     write_method_parquet(
         path,
-        [{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0}],
+        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0}],
         [
             {"name": "flow_iri", "type": "string", "unit": None, "iri": None},
             {"name": "flow_unit", "type": "string", "unit": None, "iri": None},
@@ -73,7 +74,7 @@ def test_a_cf_column_without_a_declared_unit_raises(tmp_path):
 
 STRING = {"type": "string", "unit": None, "iri": None}
 YEAR = {"type": "integer", "unit": None, "iri": None}
-CF = {"type": "number", "unit": "kg CO2eq", "iri": None}
+CF = {"type": "number", "unit": KG, "iri": None}
 
 
 def timed_method(tmp_path, rows, hierarchy=None):
@@ -97,11 +98,11 @@ def test_an_exact_year_is_matched(tmp_path):
     method = timed_method(
         tmp_path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": 2030, "cf": 1.0},
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": 2040, "cf": 2.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2040, "cf": 2.0},
         ],
     )
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2040), "kg").value == 2.0
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2040), KG).value == 2.0
 
 
 def test_a_year_with_no_row_falls_through_to_the_untimed_row(tmp_path):
@@ -110,11 +111,11 @@ def test_a_year_with_no_row_falls_through_to_the_untimed_row(tmp_path):
     method = timed_method(
         tmp_path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": 2030, "cf": 1.0},
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": None, "cf": 9.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": None, "cf": 9.0},
         ],
     )
-    factor = method.factor(Flow(iri=CO2_IRI, location="GLO", time=2035), "kg")
+    factor = method.factor(Flow(iri=CO2_IRI, location="GLO", time=2035), KG)
     assert factor.value == 9.0
     assert factor.provenance["time_used"] is None
 
@@ -122,9 +123,9 @@ def test_a_year_with_no_row_falls_through_to_the_untimed_row(tmp_path):
 def test_a_year_with_no_row_and_no_untimed_row_is_uncharacterized(tmp_path):
     method = timed_method(
         tmp_path,
-        [{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": 2030, "cf": 1.0}],
+        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0}],
     )
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2035), "kg") is None
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2035), KG) is None
 
 
 def test_location_outranks_time(tmp_path):
@@ -136,12 +137,12 @@ def test_location_outranks_time(tmp_path):
     method = timed_method(
         tmp_path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "CH", "time": None, "cf": 5.0},
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": 2030, "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "CH", "time": None, "cf": 5.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
         ],
         hierarchy=LocationHierarchy({"CH": "GLO"}),
     )
-    factor = method.factor(Flow(iri=CO2_IRI, location="CH", time=2030), "kg")
+    factor = method.factor(Flow(iri=CO2_IRI, location="CH", time=2030), KG)
     assert factor.value == 5.0
     assert factor.provenance["location_used"] == "CH"
     assert factor.provenance["time_used"] is None
@@ -155,7 +156,7 @@ def test_a_factor_of_exactly_zero_is_a_factor_not_a_gap(tmp_path):
     path = tmp_path / "zero.parquet"
     write_method_parquet(
         path,
-        [{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 0.0}],
+        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 0.0}],
         [
             {"name": "flow_iri", **STRING},
             {"name": "flow_unit", **STRING},
@@ -163,7 +164,7 @@ def test_a_factor_of_exactly_zero_is_a_factor_not_a_gap(tmp_path):
             {"name": "cf", **CF},
         ],
     )
-    factor = Method.from_parquet(path).factor(Flow(iri=CO2_IRI, location="GLO"), "kg")
+    factor = Method.from_parquet(path).factor(Flow(iri=CO2_IRI, location="GLO"), KG)
     assert factor is not None
     assert factor.value == 0.0
 
@@ -175,8 +176,8 @@ def test_two_factors_for_one_key_raise(tmp_path):
     write_method_parquet(
         path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0},
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.5},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.5},
         ],
         [
             {"name": "flow_iri", **STRING},
@@ -195,11 +196,11 @@ def test_two_factors_differing_only_by_time_are_not_duplicates(tmp_path):
     method = timed_method(
         tmp_path,
         [
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": 2030, "cf": 1.0},
-            {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "time": 2040, "cf": 2.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0},
+            {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2040, "cf": 2.0},
         ],
     )
-    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2030), "kg").value == 1.0
+    assert method.factor(Flow(iri=CO2_IRI, location="GLO", time=2030), KG).value == 1.0
 
 
 def test_a_parquet_without_the_method_columns_names_the_file_and_the_layout(tmp_path):
@@ -226,7 +227,7 @@ def test_provenance_records_the_location_that_was_asked_for(method_parquet_file)
     method = Method.from_parquet(
         method_parquet_file, hierarchy=LocationHierarchy({"CH": "RER", "RER": "GLO"})
     )
-    factor = method.factor(Flow(iri=CH4_IRI, location="CH"), "kg")
+    factor = method.factor(Flow(iri=CH4_IRI, location="CH"), KG)
     assert factor.provenance["location_requested"] == "CH"
     assert factor.provenance["location_used"] == "RER"
 
@@ -236,8 +237,8 @@ def test_a_row_without_a_cf_names_the_column_and_the_source():
     construction path -- which was still raising a bare ``KeyError: 'cf'``."""
     with pytest.raises(MissingColumns) as raised:
         Method(
-            rows=[{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO"}],
-            unit="kg CO2eq",
+            rows=[{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO"}],
+            unit=KG,
             name="handmade",
             source="somewhere.parquet",
         )
@@ -248,4 +249,4 @@ def test_a_row_without_a_cf_names_the_column_and_the_source():
 
 def test_a_row_without_a_flow_iri_names_the_layout():
     with pytest.raises(MissingColumns, match="flow_iri"):
-        Method(rows=[{"flow_unit": "kg", "cf": 1.0}], unit="kg CO2eq", name="handmade")
+        Method(rows=[{"flow_unit": KG, "cf": 1.0}], unit=KG, name="handmade")

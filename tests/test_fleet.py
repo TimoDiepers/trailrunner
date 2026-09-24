@@ -12,24 +12,25 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
 FLEET_FIELDS = [
     {"name": "plant", "type": "string", "unit": None, "iri": None},
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "build_year", "type": "integer", "unit": "year", "iri": None},
+    {"name": "build_year", "type": "integer", "unit": YEAR, "iri": None},
     {"name": "capacity", "type": "number", "unit": "kg/year", "iri": None},
-    {"name": "lifetime", "type": "number", "unit": "year", "iri": None},
+    {"name": "lifetime", "type": "number", "unit": YEAR, "iri": None},
 ]
 
 DAC_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": "year", "iri": None},
-    {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": None},
-    {"name": "electricity_demand", "type": "number", "unit": "kWh", "iri": None},
-    {"name": "temperature", "type": "number", "unit": "degC", "iri": None},
-    {"name": "humidity", "type": "number", "unit": "dimensionless", "iri": None},
+    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "heat_demand", "type": "number", "unit": MJ, "iri": None},
+    {"name": "electricity_demand", "type": "number", "unit": KWH, "iri": None},
+    {"name": "temperature", "type": "number", "unit": DEG_C, "iri": None},
+    {"name": "humidity", "type": "number", "unit": UNITLESS, "iri": None},
 ]
 
 
@@ -135,7 +136,7 @@ def test_fleet_carries_the_units_of_its_columns(fleet):
 
 def demand(location="CH", time=2030, amount=1000.0):
     return Demand(
-        flow=Flow(iri=CO2_CAPTURED, location=location, time=time), amount=amount, unit="kg"
+        flow=Flow(iri=CO2_CAPTURED, location=location, time=time), amount=amount, unit=KG
     )
 
 

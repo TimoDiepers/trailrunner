@@ -19,23 +19,24 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
 GRID_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": "year", "iri": None},
-    {"name": "share_gas", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "share_wind", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "share_hydro", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "grid_loss", "type": "number", "unit": "dimensionless", "iri": None},
+    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "share_gas", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "share_wind", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "share_hydro", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "grid_loss", "type": "number", "unit": UNITLESS, "iri": None},
 ]
 
 GAS_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": "year", "iri": None},
-    {"name": "efficiency", "type": "number", "unit": "dimensionless", "iri": None},
-    {"name": "co2_factor", "type": "number", "unit": "kg", "iri": None},
+    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "efficiency", "type": "number", "unit": UNITLESS, "iri": None},
+    {"name": "co2_factor", "type": "number", "unit": KG, "iri": None},
 ]
 
 
@@ -72,7 +73,7 @@ def gas_params(tmp_path):
 
 
 def kwh(iri=ELECTRICITY, location="CH", time=2030, amount=100.0):
-    return Demand(flow=Flow(iri=iri, location=location, time=time), amount=amount, unit="kWh")
+    return Demand(flow=Flow(iri=iri, location=location, time=time), amount=amount, unit=KWH)
 
 
 def by_iri(demands):
@@ -83,7 +84,7 @@ def test_grid_echoes_the_demanded_electricity(grid_params):
     result = GridElectricity(params=grid_params).apply(kwh())
     assert result.production[0].flow.iri == ELECTRICITY
     assert result.production[0].amount == 100.0
-    assert result.production[0].unit == "kWh"
+    assert result.production[0].unit == KWH
 
 
 def test_grid_splits_the_demand_into_one_demand_per_source(grid_params):
@@ -115,7 +116,7 @@ def test_grid_sources_keep_the_place_time_and_unit_of_the_demand(grid_params):
     for demand in result.technosphere:
         assert demand.flow.location == "RER"
         assert demand.flow.time == 2020
-        assert demand.unit == "kWh"
+        assert demand.unit == KWH
 
 
 def test_grid_mix_differs_by_location(grid_params):
@@ -181,14 +182,14 @@ def test_gas_burns_fuel_at_the_row_efficiency(gas_params):
     result = GasPower(params=gas_params).apply(kwh(iri=ELECTRICITY_GAS))
     fuel = by_iri(result.technosphere)[NATURAL_GAS]
     assert fuel.amount == pytest.approx(100.0 * 3.6 / 0.62)
-    assert fuel.unit == "MJ"
+    assert fuel.unit == MJ
 
 
 def test_gas_emits_co2_in_proportion_to_the_fuel_it_burned(gas_params):
     result = GasPower(params=gas_params).apply(kwh(iri=ELECTRICITY_GAS))
     emission = [e for e in result.biosphere if e.flow.iri == CO2_FOSSIL][0]
     assert emission.amount == pytest.approx(100.0 * 3.6 / 0.62 * 0.056)
-    assert emission.unit == "kg"
+    assert emission.unit == KG
 
 
 def test_gas_gets_more_efficient_over_time(gas_params):
@@ -200,11 +201,11 @@ def test_gas_gets_more_efficient_over_time(gas_params):
 
 def test_gas_rejects_a_demand_that_is_not_in_kilowatt_hours(gas_params):
     demand = Demand(
-        flow=Flow(iri=ELECTRICITY_GAS, location="CH", time=2030), amount=100.0, unit="MJ"
+        flow=Flow(iri=ELECTRICITY_GAS, location="CH", time=2030), amount=100.0, unit=MJ
     )
     with pytest.raises(ValidationError) as raised:
         GasPower(params=gas_params).apply(demand)
-    assert "'MJ'" in str(raised.value)
+    assert repr(MJ) in str(raised.value)
 
 
 # --- The traversal ---------------------------------------------------------
@@ -216,11 +217,11 @@ def test_gas_rejects_a_demand_that_is_not_in_kilowatt_hours(gas_params):
 
 DAC_FIELDS = [
     {"name": "location", "type": "string", "unit": None, "iri": None},
-    {"name": "time", "type": "integer", "unit": "year", "iri": None},
-    {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": None},
-    {"name": "electricity_demand", "type": "number", "unit": "kWh", "iri": None},
-    {"name": "temperature", "type": "number", "unit": "degC", "iri": None},
-    {"name": "humidity", "type": "number", "unit": "dimensionless", "iri": None},
+    {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+    {"name": "heat_demand", "type": "number", "unit": MJ, "iri": None},
+    {"name": "electricity_demand", "type": "number", "unit": KWH, "iri": None},
+    {"name": "temperature", "type": "number", "unit": DEG_C, "iri": None},
+    {"name": "humidity", "type": "number", "unit": UNITLESS, "iri": None},
 ]
 
 
@@ -243,7 +244,7 @@ def chain(tmp_path, grid_params, gas_params):
         ]
     )
     demand = Demand(
-        flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg"
+        flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG
     )
     return glossary, demand
 
@@ -293,19 +294,19 @@ def test_the_grid_mix_puts_fossil_co2_against_the_captured_co2(chain):
     glossary, demand = chain
     report = Orchestrator(glossary).calculate(demand)
     inventory = {(flow.iri, unit): amount for (flow, unit), amount in report.inventory.items()}
-    assert inventory[(CO2_AIR, "kg")] == -1000.0
+    assert inventory[(CO2_AIR, KG)] == -1000.0
     # 1000 kg captured needs 400 kWh; the 2030 Swiss grid is 2 % gas, so the
     # combustion CO2 that comes back is small but not nothing.
-    assert 0 < inventory[(CO2_FOSSIL, "kg")] < 10.0
+    assert 0 < inventory[(CO2_FOSSIL, KG)] < 10.0
 
 
 def test_the_fossil_co2_follows_the_grid_mix_of_the_location(chain, grid_params):
     glossary, _ = chain
     swiss = Orchestrator(glossary).calculate(
-        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg")
+        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG)
     )
     european = Orchestrator(glossary).calculate(
-        Demand(flow=Flow(iri=CO2_CAPTURED, location="RER", time=2030), amount=1000.0, unit="kg")
+        Demand(flow=Flow(iri=CO2_CAPTURED, location="RER", time=2030), amount=1000.0, unit=KG)
     )
 
     def fossil(report):

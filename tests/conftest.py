@@ -3,6 +3,7 @@ import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from trailrunner.core.units import DEG_C, KG, MJ, UNITLESS, YEAR
 
 HEAT_DEMAND_IRI = "https://vocab.sentier.dev/parameters/heat-demand"
 TEMPERATURE_IRI = "https://vocab.sentier.dev/parameters/air-temperature"
@@ -57,15 +58,15 @@ def method_parquet_file(tmp_path):
     """GWP100-shaped: a global CO2 factor, a regional CH4 one, both per kg."""
     path = tmp_path / "gwp100.parquet"
     rows = [
-        {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0},
-        {"flow_iri": CH4_IRI, "flow_unit": "kg", "location": "GLO", "cf": 29.8},
-        {"flow_iri": CH4_IRI, "flow_unit": "kg", "location": "RER", "cf": 27.0},
+        {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0},
+        {"flow_iri": CH4_IRI, "flow_unit": KG, "location": "GLO", "cf": 29.8},
+        {"flow_iri": CH4_IRI, "flow_unit": KG, "location": "RER", "cf": 27.0},
     ]
     fields = [
         {"name": "flow_iri", "type": "string", "unit": None, "iri": None},
         {"name": "flow_unit", "type": "string", "unit": None, "iri": None},
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "cf", "type": "number", "unit": "kg CO2eq", "iri": None},
+        {"name": "cf", "type": "number", "unit": KG, "iri": None},
     ]
     write_method_parquet(path, rows, fields)
     return path
@@ -83,10 +84,10 @@ def dac_parameter_file(tmp_path):
     ]
     fields = [
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "time", "type": "integer", "unit": "year", "iri": None},
-        {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": HEAT_DEMAND_IRI},
-        {"name": "temperature", "type": "number", "unit": "degC", "iri": TEMPERATURE_IRI},
-        {"name": "humidity", "type": "number", "unit": "dimensionless", "iri": HUMIDITY_IRI},
+        {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+        {"name": "heat_demand", "type": "number", "unit": MJ, "iri": HEAT_DEMAND_IRI},
+        {"name": "temperature", "type": "number", "unit": DEG_C, "iri": TEMPERATURE_IRI},
+        {"name": "humidity", "type": "number", "unit": UNITLESS, "iri": HUMIDITY_IRI},
     ]
     write_parameter_parquet(path, rows, fields)
     return path

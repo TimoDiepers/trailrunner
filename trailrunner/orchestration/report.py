@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from trailrunner.core.flow import Flow
+from trailrunner.core.units import symbol
 from trailrunner.orchestration.log import (
     ATTRIBUTION_KEY,
     Log,
@@ -209,7 +210,9 @@ class Report:
         lines: list[str] = []
 
         def line(depth: int, amount: float, unit: str, flow: Flow, tag: str) -> None:
-            lines.append(f"{indent * depth}{amount:g} {unit} {name(flow.iri)}{_where(flow)}  {tag}")
+            lines.append(
+                f"{indent * depth}{amount:g} {symbol(unit)} {name(flow.iri)}{_where(flow)}  {tag}"
+            )
 
         def walk(node: NodeRecord, depth: int) -> None:
             line(depth, node.demand.amount, node.demand.unit, node.demand.flow, self._tag(node))

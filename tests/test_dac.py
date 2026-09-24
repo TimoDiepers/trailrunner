@@ -17,6 +17,7 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
@@ -32,33 +33,33 @@ def dac_params(tmp_path):
     ]
     fields = [
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "time", "type": "integer", "unit": "year", "iri": None},
-        {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": "https://vocab.sentier.dev/parameters/heat-demand"},
-        {"name": "electricity_demand", "type": "number", "unit": "kWh", "iri": "https://vocab.sentier.dev/parameters/electricity-demand"},
-        {"name": "temperature", "type": "number", "unit": "degC", "iri": "https://vocab.sentier.dev/parameters/air-temperature"},
-        {"name": "humidity", "type": "number", "unit": "dimensionless", "iri": "https://vocab.sentier.dev/parameters/relative-humidity"},
+        {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+        {"name": "heat_demand", "type": "number", "unit": MJ, "iri": "https://vocab.sentier.dev/parameters/heat-demand"},
+        {"name": "electricity_demand", "type": "number", "unit": KWH, "iri": "https://vocab.sentier.dev/parameters/electricity-demand"},
+        {"name": "temperature", "type": "number", "unit": DEG_C, "iri": "https://vocab.sentier.dev/parameters/air-temperature"},
+        {"name": "humidity", "type": "number", "unit": UNITLESS, "iri": "https://vocab.sentier.dev/parameters/relative-humidity"},
     ]
     write_parameter_parquet(path, rows, fields)
     return ParameterSet.from_parquet(path, hierarchy=HIERARCHY)
 
 
 def demand(location="CH", time=2030, amount=1000.0):
-    return Demand(flow=Flow(iri=CO2_CAPTURED, location=location, time=time), amount=amount, unit="kg")
+    return Demand(flow=Flow(iri=CO2_CAPTURED, location=location, time=time), amount=amount, unit=KG)
 
 
 def test_dac_produces_exactly_what_was_demanded(dac_params):
     result = DirectAirCapture(params=dac_params).apply(demand())
     assert result.production[0].flow.iri == CO2_CAPTURED
     assert result.production[0].amount == 1000.0
-    assert result.production[0].unit == "kg"
+    assert result.production[0].unit == KG
 
 
 def test_dac_demands_heat_and_electricity_at_the_same_place_and_time(dac_params):
     result = DirectAirCapture(params=dac_params).apply(demand())
     by_iri = {d.flow.iri: d for d in result.technosphere}
     assert set(by_iri) == {HEAT, ELECTRICITY}
-    assert by_iri[HEAT].unit == "MJ"
-    assert by_iri[ELECTRICITY].unit == "kWh"
+    assert by_iri[HEAT].unit == MJ
+    assert by_iri[ELECTRICITY].unit == KWH
     for child in result.technosphere:
         assert child.flow.location == "CH"
         assert child.flow.time == 2030
@@ -68,7 +69,7 @@ def test_dac_takes_co2_from_air_as_a_negative_biosphere_flow(dac_params):
     result = DirectAirCapture(params=dac_params).apply(demand())
     uptake = [e for e in result.biosphere if e.flow.iri == CO2_AIR][0]
     assert uptake.amount == -1000.0
-    assert uptake.unit == "kg"
+    assert uptake.unit == KG
 
 
 def test_ambient_penalty_at_reference_conditions_is_exactly_one():
@@ -128,7 +129,7 @@ def test_end_to_end_traversal_with_a_heat_model(dac_params):
                         flow=Flow(iri="https://vocab.sentier.dev/flows/co2-fossil",
                                   location=d.flow.location, time=d.flow.time),
                         amount=0.06 * d.amount,
-                        unit="kg",
+                        unit=KG,
                     )
                 ],
             )
@@ -137,7 +138,7 @@ def test_end_to_end_traversal_with_a_heat_model(dac_params):
     report = Orchestrator(glossary).calculate(demand())
 
     assert len(report.nodes) == 2
-    uptake = report.inventory[(Flow(iri=CO2_AIR, location="CH", time=2030), "kg")]
+    uptake = report.inventory[(Flow(iri=CO2_AIR, location="CH", time=2030), KG)]
     assert uptake == -1000.0
     # electricity has no model: it is a cutoff leaf, not a silent zero
     assert [r.demand.flow.iri for r in report.unresolved] == [ELECTRICITY]

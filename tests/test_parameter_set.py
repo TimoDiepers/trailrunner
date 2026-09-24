@@ -5,6 +5,7 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import HEAT_DEMAND_IRI, write_parameter_parquet
+from trailrunner.core.units import MJ, YEAR
 
 # FR must be in the map: chain("FR") with only {"CH": "RER"} would be
 # ["FR", "GLO"] and never reach the RER rows.
@@ -24,7 +25,7 @@ def test_exact_match_returns_the_row_untouched(dac_parameter_file):
 def test_units_and_iris_come_from_the_embedded_datapackage(dac_parameter_file):
     params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
     row = params.at(location="CH", time=2030)
-    assert row.unit_of("heat_demand") == "MJ"
+    assert row.unit_of("heat_demand") == MJ
     assert row.iri_of("heat_demand") == HEAT_DEMAND_IRI
     assert row.iri_of("location") is None
 
@@ -50,7 +51,7 @@ def test_a_missing_unit_can_still_be_queried_without_raising(dac_parameter_file)
     params = ParameterSet.from_parquet(dac_parameter_file, hierarchy=HIERARCHY)
     row = params.at(location="CH", time=2030)
     assert row.unit_of("location", default=None) is None
-    assert row.unit_of("heat_demand", default=None) == "MJ"
+    assert row.unit_of("heat_demand", default=None) == MJ
 
 
 def test_a_parameter_set_built_in_memory_says_so_when_a_unit_is_missing():
@@ -138,7 +139,7 @@ def test_a_returned_row_cannot_be_used_to_corrupt_the_parameter_set(dac_paramete
 
     later = params.at(location="CH", time=2030)
     assert later["heat_demand"] == 5.0
-    assert later.unit_of("heat_demand") == "MJ"
+    assert later.unit_of("heat_demand") == MJ
     assert later.iri_of("heat_demand") == HEAT_DEMAND_IRI
 
 
@@ -170,8 +171,8 @@ def test_boolean_column_is_not_interpolated(tmp_path):
         ],
         fields=[
             {"name": "location", "type": "string", "unit": None, "iri": None},
-            {"name": "time", "type": "integer", "unit": "year", "iri": None},
-            {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": HEAT_DEMAND_IRI},
+            {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+            {"name": "heat_demand", "type": "number", "unit": MJ, "iri": HEAT_DEMAND_IRI},
             {"name": "is_pilot_plant", "type": "boolean", "unit": None, "iri": None},
         ],
     )
@@ -192,11 +193,11 @@ def test_units_and_iris_are_read_from_either_descriptor_shape(tmp_path, nested):
         rows=[{"location": "CH", "time": 2020, "heat_demand": 6.0}],
         fields=[
             {"name": "location", "type": "string", "unit": None, "iri": None},
-            {"name": "time", "type": "integer", "unit": "year", "iri": None},
-            {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": HEAT_DEMAND_IRI},
+            {"name": "time", "type": "integer", "unit": YEAR, "iri": None},
+            {"name": "heat_demand", "type": "number", "unit": MJ, "iri": HEAT_DEMAND_IRI},
         ],
         nested=nested,
     )
     row = ParameterSet.from_parquet(path, hierarchy=HIERARCHY).at(location="CH", time=2020)
-    assert row.unit_of("heat_demand") == "MJ"
+    assert row.unit_of("heat_demand") == MJ
     assert row.iri_of("heat_demand") == HEAT_DEMAND_IRI

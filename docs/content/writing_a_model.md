@@ -13,6 +13,7 @@ receives a demand and returns what it produced, what it needs, and what it emitt
 
 ```python
 from trailrunner import Demand, Exchange, Flow, Model, Result
+from trailrunner.core.units import KG, KWH
 
 ELECTRICITY = "https://vocab.sentier.dev/products/electricity"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
@@ -30,9 +31,9 @@ class GasTurbine(Model):
             # what I made: the demand, echoed back
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
             # what I need: queued and traversed in turn
-            technosphere=[Demand(flow=Flow(iri=GAS, **here), amount=fuel, unit="kWh")],
+            technosphere=[Demand(flow=Flow(iri=GAS, **here), amount=fuel, unit=KWH)],
             # what I emitted: summed into the inventory
-            biosphere=[Exchange(flow=Flow(iri=CO2, **here), amount=0.2 * fuel, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2, **here), amount=0.2 * fuel, unit=KG)],
         )
 ```
 
@@ -176,12 +177,13 @@ the [`Property`](../api/flow.md) values an allocation rule might partition on:
 
 ```python
 from trailrunner import Exchange, Flow, Property
+from trailrunner.core.units import MJ
 
 production = [
-    Exchange(flow=heat_flow, amount=100.0, unit="MJ",
-             properties=(Property("price", 3.0, "EUR"), Property("energy", 100.0, "MJ"))),
-    Exchange(flow=power_flow, amount=50.0, unit="MJ",
-             properties=(Property("price", 9.0, "EUR"), Property("energy", 50.0, "MJ"))),
+    Exchange(flow=heat_flow, amount=100.0, unit=MJ,
+             properties=(Property("price", 3.0, "EUR"), Property("energy", 100.0, MJ))),
+    Exchange(flow=power_flow, amount=50.0, unit=MJ,
+             properties=(Property("price", 9.0, "EUR"), Property("energy", 50.0, MJ))),
 ]
 ```
 
@@ -249,8 +251,9 @@ Two registered models that both cover the same product at the same place and yea
 
 ```python
 from trailrunner import Demand, Flow, Runner
+from trailrunner.core.units import KWH
 
-demand = Demand(flow=Flow(iri=ELECTRICITY, location="CH", time=2030), amount=10.0, unit="kWh")
+demand = Demand(flow=Flow(iri=ELECTRICITY, location="CH", time=2030), amount=10.0, unit=KWH)
 Runner.validate(demand, GasTurbine().apply(demand), model=GasTurbine())
 ```
 

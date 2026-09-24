@@ -11,19 +11,20 @@ from trailrunner.orchestration.report import Report  # noqa: E402
 from trailrunner.viz import curve  # noqa: E402
 
 from .conftest import CO2_IRI  # noqa: E402
+from trailrunner.core.units import KG
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 
 
 def test_curve_draws_the_series_and_its_cumulative_integral():
     log = Log()
-    demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1.0, unit=KG)
     log.write(
         demand,
         Result(
-            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
             biosphere=[
-                Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=2030), amount=10.0, unit="kg")
+                Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=2030), amount=10.0, unit=KG)
             ],
         ),
         model="DirectAirCapture",
@@ -40,13 +41,13 @@ def test_the_bars_are_one_per_year_not_one_per_emission():
     """Two emissions in the same year make one bar, not two overlapping ones."""
     log = Log()
     for year in (2030, 2030):
-        demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=year), amount=1.0, unit="kg")
+        demand = Demand(flow=Flow(iri=CAPTURED, location="CH", time=year), amount=1.0, unit=KG)
         log.write(
             demand,
             Result(
-                production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+                production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
                 biosphere=[
-                    Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=year), amount=5.0, unit="kg")
+                    Exchange(flow=Flow(iri=CO2_IRI, location="CH", time=year), amount=5.0, unit=KG)
                 ],
             ),
             model="DirectAirCapture",

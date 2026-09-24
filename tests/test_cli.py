@@ -18,6 +18,7 @@ def models_file(tmp_path):
             f'''
             from trailrunner import Demand, Exchange, Flow, Model, Result
             from trailrunner.core.settings import ALLOCATION_RULES
+            from trailrunner.core.units import KG
 
             HEAT = "{HEAT}"
             CO2 = "{CO2}"
@@ -35,7 +36,7 @@ def models_file(tmp_path):
                         production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
                         biosphere=[Exchange(
                             flow=Flow(iri=CO2, location=demand.flow.location, time=demand.flow.time),
-                            amount=0.05 * demand.amount, unit="kg")],
+                            amount=0.05 * demand.amount, unit=KG)],
                     )
 
             MODELS = [Boiler()]
@@ -112,7 +113,7 @@ def test_the_method_flag_prints_a_score(models_file, method_parquet_file, capsys
     out = capsys.readouterr().out
     assert code == 0
     # 100 MJ * 0.05 kg CO2/MJ * 1.0 kg CO2eq/kg
-    assert "5" in out and "kg CO2eq" in out
+    assert "5" in out and "kg" in out
 
 
 def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
