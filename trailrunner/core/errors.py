@@ -98,3 +98,12 @@ class DuplicateBackgroundEntry(TrailrunnerError):
     the inventory -- and, worse here, label it with the wrong dataset name in
     the very resolution a reader checks a borrowed number against.
     """
+
+
+class UnknownUnit(TrailrunnerError, ValueError):
+    """A unit the vocabulary does not have, or that nothing could confirm.
+
+    A ``ValueError`` too, because it is raised where a value is read -- a CLI
+    argument, a unit written in a notebook -- and callers catching the broad
+    class for bad input should catch this one.
+    """
