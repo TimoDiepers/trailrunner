@@ -30,6 +30,7 @@ nav = [
     { Figures = "content/figures.md" },
   ]},
   { Examples = [
+    { "The 5-minute tour" = "showcase.md" },
     { "Co-production and allocation" = "content/examples/coproduction.md" },
     { "Direct air capture, end to end" = "content/examples/dac.md" },
   ]},
