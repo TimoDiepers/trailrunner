@@ -18,37 +18,31 @@ flowchart TB
     D([initial demand]) --> Q
     Q[[Queue]]
 
-    Q -->|pop demand| C
+    Q -->|pop demand| C{{ResolutionChain}}
+    C -->|who offers?| G[(Glossary: available models)]
+    G -->|Offer: model + demand| C
 
-    subgraph RES["Resolution chain — who can answer this?"]
-        C{{ResolutionChain}}
-        G[(Glossary: available models)]
-        C -->|ask a tier: who offers?| G
-        G -->|Offer: model + demand| C
-    end
+    C -->|nobody offers| L[(Log)]
+    C -->|selected offer| R[Runner]
 
-    C -->|nobody offers| X[cutoff, with a reason]
-    C -->|selected offer| R
-
-    subgraph EXEC["Runner — apply the model"]
-        R[Runner]
-        M[Model: your code]
-        R -->|apply demand| M
-        M -->|Result| R
-    end
+    R -->|apply demand| M[Model: your code]
+    M -->|Result| R
 
     R -->|Result: technosphere demands| Q
     R -->|Result: biosphere flows| I[(inventory)]
 
-    subgraph REC["Log and Report — what happened"]
-        L[(Log)]
-        P([Report])
-        L --> P
-    end
-
-    X --> L
     R --> L
+    L --> P([Report])
+
+    classDef resolution fill:#2dd4bf22,stroke:#2dd4bf
+    classDef execution fill:#f59e0b22,stroke:#f59e0b
+    classDef record fill:#8b5cf622,stroke:#8b5cf6
+    class C,G resolution
+    class R,M execution
+    class L,P record
 ```
+
+*Colors are a track, not a step order: resolution (teal), execution (amber), record (violet).*
 
 | Part | Its one job |
 | --- | --- |
