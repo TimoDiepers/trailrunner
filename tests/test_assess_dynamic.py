@@ -12,7 +12,7 @@ from .conftest import CO2_IRI
 pytest.importorskip("dynamic_characterization")
 
 from trailrunner.assessment import assess_dynamic, inventory_dataframe  # noqa: E402
-from trailrunner.core.units import KG
+from trailrunner.core.units import GRAM, KG, TONNE, W_PER_M2
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 
@@ -35,7 +35,7 @@ def _greenhouse_gases_in(uncharacterized) -> set[str]:
 def report_with(emissions) -> Report:
     """One node per (year, amount[, unit]) tuple, each emitting fossil CO2 that year.
 
-    ``unit`` defaults to ``"kg"``, which is what the IPCC AR6 characterization
+    ``unit`` defaults to ``KG``, which is what the IPCC AR6 characterization
     functions are defined for; pass another to exercise the mismatch path.
     """
     log = Log()
@@ -90,7 +90,7 @@ def test_exchanges_without_a_time_are_left_out_and_reported():
         model="Undated",
     )
     assessment = assess_dynamic(Report.from_log(log))
-    assert assessment.undated == [(Flow(iri=CO2_IRI, location="CH"), "kg", 5.0)]
+    assert assessment.undated == [(Flow(iri=CO2_IRI, location="CH"), KG, 5.0)]
     assert len(assessment.series) == 0
 
 
@@ -144,7 +144,7 @@ def test_an_unknown_flow_is_reported_rather_than_silently_dropped():
     )
     assessment = assess_dynamic(Report.from_log(log))
     assert assessment.uncharacterized == [
-        (Flow(iri=unknown, location="CH", time=2030), "kg", 1.0)
+        (Flow(iri=unknown, location="CH", time=2030), KG, 1.0)
     ]
     assert assessment.wrong_unit == []
     assert assessment.total == 0.0
@@ -164,9 +164,9 @@ def test_an_unknown_metric_is_rejected():
 
 
 def test_an_exchange_in_grams_is_reported_and_contributes_nothing():
-    assessment = assess_dynamic(report_with([(2030, 10.0, "g")]), horizon=20)
+    assessment = assess_dynamic(report_with([(2030, 10.0, GRAM)]), horizon=20)
     assert assessment.wrong_unit == [
-        (Flow(iri=CO2_IRI, location="CH", time=2030), "g", 10.0)
+        (Flow(iri=CO2_IRI, location="CH", time=2030), GRAM, 10.0)
     ]
     assert assessment.uncharacterized == []
     assert assessment.total == 0.0
@@ -174,15 +174,15 @@ def test_an_exchange_in_grams_is_reported_and_contributes_nothing():
 
 
 def test_an_exchange_in_tonnes_is_reported_and_contributes_nothing():
-    assessment = assess_dynamic(report_with([(2030, 10.0, "tonne")]), horizon=20)
+    assessment = assess_dynamic(report_with([(2030, 10.0, TONNE)]), horizon=20)
     assert assessment.wrong_unit == [
-        (Flow(iri=CO2_IRI, location="CH", time=2030), "tonne", 10.0)
+        (Flow(iri=CO2_IRI, location="CH", time=2030), TONNE, 10.0)
     ]
     assert assessment.total == 0.0
 
 
 def test_an_exchange_in_kilograms_is_characterized():
-    assessment = assess_dynamic(report_with([(2030, 10.0, "kg")]), horizon=20)
+    assessment = assess_dynamic(report_with([(2030, 10.0, KG)]), horizon=20)
     assert assessment.wrong_unit == []
     assert assessment.uncharacterized == []
     assert assessment.total > 0.0
@@ -192,11 +192,11 @@ def test_a_mixed_report_characterizes_only_the_kilograms_and_reports_the_rest():
     """The grams must not be swept in as kilograms, and must not vanish: the
     total is the kg-only total exactly, and the grams are named with their
     amount."""
-    kilograms_only = assess_dynamic(report_with([(2030, 10.0, "kg")]), horizon=20)
-    mixed = assess_dynamic(report_with([(2030, 10.0, "kg"), (2030, 5.0, "g")]), horizon=20)
+    kilograms_only = assess_dynamic(report_with([(2030, 10.0, KG)]), horizon=20)
+    mixed = assess_dynamic(report_with([(2030, 10.0, KG), (2030, 5.0, GRAM)]), horizon=20)
     assert mixed.total == pytest.approx(kilograms_only.total)
     assert mixed.wrong_unit == [
-        (Flow(iri=CO2_IRI, location="CH", time=2030), "g", 5.0)
+        (Flow(iri=CO2_IRI, location="CH", time=2030), GRAM, 5.0)
     ]
     assert mixed.uncharacterized == []
 
@@ -204,7 +204,7 @@ def test_a_mixed_report_characterizes_only_the_kilograms_and_reports_the_rest():
 def test_a_wrong_unit_is_not_filed_as_uncharacterized():
     """Two different problems: 'nobody characterized this gas' versus 'this gas
     is characterized, per kilogram, and the model emitted grams'."""
-    assessment = assess_dynamic(report_with([(2030, 10.0, "g")]), horizon=20)
+    assessment = assess_dynamic(report_with([(2030, 10.0, GRAM)]), horizon=20)
     assert assessment.uncharacterized == []
     assert len(assessment.wrong_unit) == 1
 
@@ -214,8 +214,8 @@ def test_a_caller_can_supply_functions_for_another_unit():
     from trailrunner.assessment.dynamic import default_functions
 
     functions = dict(default_functions())
-    functions[(CO2_IRI, "g")] = functions[(CO2_IRI, "kg")]
-    grams = assess_dynamic(report_with([(2030, 10.0, "g")]), horizon=20, functions=functions)
+    functions[(CO2_IRI, GRAM)] = functions[(CO2_IRI, KG)]
+    grams = assess_dynamic(report_with([(2030, 10.0, GRAM)]), horizon=20, functions=functions)
     assert grams.wrong_unit == []
     assert grams.total > 0.0
 
@@ -235,7 +235,7 @@ def test_the_undated_and_the_uncharacterized_are_both_recorded_for_one_exchange(
         model="Mystery",
     )
     assessment = assess_dynamic(Report.from_log(log))
-    entry = (Flow(iri=unknown, location="CH"), "kg", 3.0)
+    entry = (Flow(iri=unknown, location="CH"), KG, 3.0)
     assert assessment.undated == [entry]
     assert assessment.uncharacterized == [entry]
 
@@ -312,19 +312,19 @@ def test_the_anchor_is_recorded_even_for_the_conventional_convention():
 
 def test_the_cumulative_unit_is_the_integral_of_the_marginal_one():
     assessment = assess_dynamic(report_with([(2030, 10.0)]), horizon=20)
-    assert assessment.unit == "W/m2"
+    assert assessment.unit == W_PER_M2
     assert assessment.cumulative_unit == "W·yr/m2"
 
 
 def test_the_gwp_metrics_accumulate_into_their_own_unit():
     assessment = assess_dynamic(report_with([(2030, 10.0)]), metric="GWP", horizon=20)
-    assert assessment.unit == "kg CO2eq"
-    assert assessment.cumulative_unit == "kg CO2eq"
+    assert assessment.unit == KG
+    assert assessment.cumulative_unit == KG
 
 
 def test_the_summary_names_the_total_the_anchor_and_every_gap():
     assessment = assess_dynamic(
-        report_with([(2030, 10.0, "kg"), (2031, 5.0, "g")]),
+        report_with([(2030, 10.0, KG), (2031, 5.0, GRAM)]),
         horizon=20,
         fixed_time_horizon=True,
     )
@@ -337,6 +337,16 @@ def test_the_summary_names_the_total_the_anchor_and_every_gap():
     assert "0 undated exchanges" in summary
 
 
+def test_the_summary_prints_the_unit_symbol_not_the_iri():
+    """``symbol(KG)`` is ``"kg"``: a reader should never see a vocabulary IRI
+    in text meant to be read, the same rule ``Report.tree()`` and
+    ``Assessment.summary()`` already follow."""
+    assessment = assess_dynamic(report_with([(2030, 10.0)]), metric="GWP", horizon=20)
+    summary = assessment.summary()
+    assert "kg" in summary
+    assert "units/unit" not in summary
+
+
 def test_two_units_of_one_flow_with_different_functions_is_refused():
     """The characterization library keys its own function table on the flow
     column alone, so this cannot be expressed in one call. Refused loudly
@@ -344,10 +354,10 @@ def test_two_units_of_one_flow_with_different_functions_is_refused():
     from trailrunner.assessment.dynamic import default_functions
 
     functions = dict(default_functions())
-    functions[(CO2_IRI, "g")] = lambda *args, **kwargs: None
+    functions[(CO2_IRI, GRAM)] = lambda *args, **kwargs: None
     with pytest.raises(ValueError, match="assess them separately"):
         assess_dynamic(
-            report_with([(2030, 10.0, "kg"), (2030, 5.0, "g")]),
+            report_with([(2030, 10.0, KG), (2030, 5.0, GRAM)]),
             horizon=20,
             functions=functions,
         )
@@ -362,10 +372,10 @@ def test_a_wrong_unit_exchange_does_not_drag_the_anchor_back():
     0.0 with nothing anywhere saying a characterized exchange was discarded.
     """
     alone = assess_dynamic(
-        report_with([(2030, 10.0, "kg")]), horizon=20, fixed_time_horizon=True
+        report_with([(2030, 10.0, KG)]), horizon=20, fixed_time_horizon=True
     )
     with_noise = assess_dynamic(
-        report_with([(2010, 1.0, "g"), (2030, 10.0, "kg")]),
+        report_with([(2010, 1.0, GRAM), (2030, 10.0, KG)]),
         horizon=20,
         fixed_time_horizon=True,
     )
@@ -400,7 +410,7 @@ def test_an_uncharacterized_exchange_does_not_drag_the_anchor_back():
     )
     assessment = assess_dynamic(Report.from_log(log), horizon=20, fixed_time_horizon=True)
     alone = assess_dynamic(
-        report_with([(2030, 10.0, "kg")]), horizon=20, fixed_time_horizon=True
+        report_with([(2030, 10.0, KG)]), horizon=20, fixed_time_horizon=True
     )
     assert assessment.time_horizon_start == datetime(2030, 1, 1)
     assert assessment.total == pytest.approx(alone.total)
@@ -414,7 +424,7 @@ def test_an_emission_past_the_horizon_is_reported_not_silently_dropped():
         report_with([(2030, 10.0), (2300, 10.0)]), horizon=20, fixed_time_horizon=True
     )
     assert assessment.beyond_horizon == [
-        (Flow(iri=CO2_IRI, location="CH", time=2300), "kg", 10.0)
+        (Flow(iri=CO2_IRI, location="CH", time=2300), KG, 10.0)
     ]
     assert assessment.uncharacterized == []
     assert assessment.wrong_unit == []
@@ -510,7 +520,7 @@ def test_the_showcase_chain_characterizes_its_capture_as_cooling():
     report = Orchestrator(Glossary(models)).calculate(
         Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit=KG)
     )
-    assert report.inventory[(Flow(iri=CO2_AIR, location="CH", time=2030), "kg")] == -1000.0
+    assert report.inventory[(Flow(iri=CO2_AIR, location="CH", time=2030), KG)] == -1000.0
 
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
     assert dynamic.uncharacterized == []
@@ -542,7 +552,7 @@ def test_the_showcase_chain_characterizes_its_cement_as_warming():
     report = Orchestrator(Glossary(models)).calculate(
         Demand(flow=Flow(iri=CEMENT, location="DK", time=2030), amount=1000.0, unit=KG)
     )
-    direct = report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2030), "kg")]
+    direct = report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2030), KG)]
     # The plant's own two exchanges are 397.5 kg of calcination and 138.6 kg
     # of combustion. The inventory key aggregates every co2-fossil exchange at
     # this place and year, so the grid's gas share lands here too and the
@@ -581,7 +591,7 @@ def test_the_metered_year_reaches_the_meter_and_still_characterizes():
     )
     # Same aggregation as above: 562.0 kg off the meter, plus whatever the
     # grid burns to supply the plant's metered electricity.
-    assert report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2023), "kg")] > 562.0
+    assert report.inventory[(Flow(iri=CO2_FOSSIL, location="DK", time=2023), KG)] > 562.0
 
     dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
     assert not _greenhouse_gases_in(dynamic.uncharacterized)

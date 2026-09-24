@@ -21,6 +21,7 @@ from typing import Protocol
 from trailrunner.core.flow import Demand, Property
 from trailrunner.core.model import Model
 from trailrunner.core.settings import ProxySettings, context_condition
+from trailrunner.core.units import symbol
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution.chain import Offer, describe
 from trailrunner.resolution.models import ModelProvider
@@ -271,7 +272,10 @@ class GeneralisingProvider:
                 for entry in demand.flow.context
             )
             flow = replace(demand.flow, context=context)
-            note = f"context: {name} {asked.value:g} {asked.unit} -> {value:g} {asked.unit}"
+            note = (
+                f"context: {name} {asked.value:g} {symbol(asked.unit)} -> "
+                f"{value:g} {symbol(asked.unit)}"
+            )
             yield replace(demand, flow=flow), note, step
 
     def _product_candidates(

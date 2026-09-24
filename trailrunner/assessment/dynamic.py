@@ -65,7 +65,7 @@ from datetime import datetime
 from typing import Any
 
 from trailrunner.core.flow import Flow
-from trailrunner.core.units import KG, W_PER_M2
+from trailrunner.core.units import KG, W_PER_M2, symbol
 from trailrunner.orchestration.report import Report
 
 CO2_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
@@ -269,7 +269,7 @@ class DynamicAssessment:
             else "none (no dated emission)"
         )
         lines = [
-            f"{self.total:g} {self.cumulative_unit}".strip(),
+            f"{self.total:g} {symbol(self.cumulative_unit)}".strip(),
             f"metric: {self.metric}, horizon: {self.horizon} years",
             f"horizon anchored at: {anchor}",
         ]
