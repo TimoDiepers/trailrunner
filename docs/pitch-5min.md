@@ -57,8 +57,15 @@ fuel = row["fuel_demand"] * clinker * penalty
 coverage — year on the demand picks meter vs. model:
 
 ```text
-2023  MeteredCementPlant   measured    562.0 kg CO2, 1 exchange
-2030  CementPlant          modelled    536.1 kg CO2, 2 exchanges (limestone vs. flame)
+2023  answered by MeteredCementPlant
+      source: measured
+      direct CO2:  562.0 kg in 1 exchange(s)
+           562.0 kg
+2030  answered by CementPlant
+      source: modelled
+      direct CO2:  536.1 kg in 2 exchange(s)
+           397.5 kg
+           138.6 kg
 ```
 
 Meter sees one plume. Model knows which kg came from where.
