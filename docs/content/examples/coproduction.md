@@ -48,6 +48,8 @@ Nothing here touches the network.
         Model, Orchestrator, ParameterSet, Property, ProxySettings, Result, Settings,
     )
     from trailrunner.assessment import Method, assess
+    from trailrunner.core.time import in_year, when
+    from trailrunner.core.units import KG, MJ, PA, symbol
     from trailrunner.models import cement
     from trailrunner.models.cement import CEMENT, CO2_FOSSIL, ELECTRICITY, NATURAL_GAS
     from trailrunner.models.electricity import GridElectricity
@@ -59,9 +61,9 @@ Nothing here touches the network.
     VOCAB = PystLabels(EXAMPLES / "pyst_labels.json", client=None)
 
     DEMAND = Demand(
-        flow=Flow(iri=CEMENT, location="DK", time=2030), amount=1000.0, unit="kg"
+        flow=Flow(iri=CEMENT, location="DK", **in_year(2030)), amount=1000.0, unit=KG
     )
-    print(DEMAND.amount, DEMAND.unit, VOCAB.label(CEMENT))
+    print(DEMAND.amount, symbol(DEMAND.unit), VOCAB.label(CEMENT))
     ```
 
         1000.0 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers
@@ -104,19 +106,19 @@ class GasCHP(Model):
     heat_price = 0.02         # EUR/MJ
 
     def apply(self, demand):
-        here = {"location": demand.flow.location, "time": demand.flow.time}
+        here = {"location": demand.flow.location, **when(demand.flow)}
         fuel = demand.amount * 3.6 / self.electrical_efficiency  # kWh -> MJ of gas
         heat = fuel * self.heat_efficiency
         return Result(
             production=[
                 Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit,
                          properties=(Property("price", demand.amount * self.electricity_price, "EUR"),)),
-                Exchange(flow=Flow(iri=DISTRICT_HEAT, **here), amount=heat, unit="MJ",
+                Exchange(flow=Flow(iri=DISTRICT_HEAT, **here), amount=heat, unit=MJ,
                          properties=(Property("price", heat * self.heat_price, "EUR"),)),
             ],
-            technosphere=[Demand(flow=Flow(iri=NATURAL_GAS, **here), amount=fuel, unit="MJ")],
+            technosphere=[Demand(flow=Flow(iri=NATURAL_GAS, **here), amount=fuel, unit=MJ)],
             biosphere=[Exchange(flow=Flow(iri=CO2_FOSSIL, **here),
-                                amount=fuel * self.co2_per_mj_fuel, unit="kg")],
+                                amount=fuel * self.co2_per_mj_fuel, unit=KG)],
             provenance={"fuel_mj": fuel},
         )
 ```
@@ -136,9 +138,9 @@ MODELS_PLUS = [
 ]
 tier1 = ModelProvider(Glossary(MODELS_PLUS))
 taxonomy = PystTaxonomy(EXAMPLES / "pyst_cache.json", client=None)  # client=None: no network
-# The kiln asks for gas at 4 bar and the supplier delivers 5: the same
+# The kiln asks for gas at 4e5 Pa and the supplier delivers 5e5 Pa: the same
 # pressure concession the tour makes, so the gas is answered here too.
-PROXY = ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+PROXY = ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})
 CHAIN = ResolutionChain([
     tier1,
     GeneralisingProvider(tier1, settings=PROXY, hierarchy=HIERARCHY, taxonomy=taxonomy),
@@ -181,14 +183,14 @@ CHP, and brings its own cutoffs, counted separately.
 ```python
 GWP100 = Method(
     rows=[
-        {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": "kg",
+        {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": KG,
          "location": "GLO", "cf": 1.0},
-        {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": "kg",
+        {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": KG,
          "location": "GLO", "cf": 29.8},
-        {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": "kg",
+        {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": KG,
          "location": "GLO", "cf": 273.0},
     ],
-    unit="kg CO2-eq",
+    unit=KG,  # of CO2-equivalent: the indicator is in the name
     name="IPCC AR6 GWP100",
     hierarchy=HIERARCHY,
 )

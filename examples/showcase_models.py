@@ -70,7 +70,7 @@ MODELS = [
     # The gas chain: the kiln and the gas plant both burn fi_12020, so
     # NaturalGasSupply answers that, converts it to wellhead volume and route
     # length, and hands the two on to the field and to the pipeline model --
-    # which was registered here long before anything demanded tkm from it.
+    # which was registered here long before anything asked it to move gas.
     NaturalGasSupply(params=_gas_supply_params),
     NaturalGasOffshorePipelineTransport(params=_pipeline_params),
     NaturalGasExtraction(params=_gas_extraction_params),

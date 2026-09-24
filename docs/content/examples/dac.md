@@ -34,8 +34,11 @@ orchestrator walk outward from it.
 Model code holds the *behaviour*; the *numbers* come from a parquet file with a
 Frictionless `datapackage.json` embedded in its schema metadata. That descriptor
 is what makes the columns self-describing: a unit at
-`resources[].schema.fields[].unit.name` and a [PyST](https://vocab.sentier.dev)
-concept IRI at `resources[].schema.fields[].rdfType`.
+`resources[].schema.fields[].unit.name`, itself a concept IRI from the
+[sentier units vocabulary](https://vocab.sentier.dev/units/), a
+[PyST](https://vocab.sentier.dev) concept IRI at
+`resources[].schema.fields[].rdfType`, and on the time column a
+`timeStandard` saying how its values are to be read.
 
 [trailpack](https://github.com/TimoDiepers/trailpack) is what writes those
 files, so this notebook uses it rather than assembling the descriptor by hand —
@@ -60,6 +63,10 @@ from trailpack.packing import (
     read_parquet,
 )
 from trailpack.validation import StandardValidator
+from trailrunner.core.time import GYEAR
+from trailrunner.core.units import (
+    DEG_C, KG, KWH, MJ, TONNE_PER_YEAR, UNITLESS, YEAR, symbol,
+)
 
 workdir = Path(tempfile.mkdtemp())
 REPOSITORY = "https://github.com/TimoDiepers/trailrunner"
@@ -70,10 +77,11 @@ VALIDATOR = StandardValidator()
 LOCATION_FIELD = Field(
     name="location", type="string", description="Region the row applies to"
 )
+# A time is a string in a declared standard. These rows are calendar years,
+# so the column says xsd:gYear.
 TIME_FIELD = Field(
     name="time",
-    type="integer",
-    unit=Unit(name="year"),
+    type="string",
     description="Year the row applies to",
 )
 
@@ -102,6 +110,11 @@ def write_parameters(name, title, description, rows, fields):
         )
         .build()
     )
+    # trailpack's Field has no slot for a time standard, so it is added to the
+    # descriptor here: the key trailrunner reads is "timeStandard".
+    for field in metadata["resources"][0]["schema"]["fields"]:
+        if field["name"] == "time":
+            field["timeStandard"] = GYEAR
 
     report = VALIDATOR.validate_all(metadata, frame)
     if not report.is_valid:
@@ -114,13 +127,13 @@ def write_parameters(name, title, description, rows, fields):
 
 ```python
 DAC_ROWS = [
-    {"location": "CH", "time": 2020, "heat_demand": 6.0, "electricity_demand": 0.50,
+    {"location": "CH", "time": "2020", "heat_demand": 6.0, "electricity_demand": 0.50,
      "temperature": 9.0, "humidity": 0.75},
-    {"location": "CH", "time": 2030, "heat_demand": 5.0, "electricity_demand": 0.40,
+    {"location": "CH", "time": "2030", "heat_demand": 5.0, "electricity_demand": 0.40,
      "temperature": 10.0, "humidity": 0.70},
-    {"location": "RER", "time": 2020, "heat_demand": 6.6, "electricity_demand": 0.55,
+    {"location": "RER", "time": "2020", "heat_demand": 6.6, "electricity_demand": 0.55,
      "temperature": 11.0, "humidity": 0.68},
-    {"location": "RER", "time": 2030, "heat_demand": 5.5, "electricity_demand": 0.45,
+    {"location": "RER", "time": "2030", "heat_demand": 5.5, "electricity_demand": 0.45,
      "temperature": 12.0, "humidity": 0.65},
 ]
 
@@ -130,28 +143,28 @@ DAC_FIELDS = [
     Field(
         name="heat_demand",
         type="number",
-        unit=Unit(name="MJ", long_name="megajoule"),
+        unit=Unit(name=MJ, long_name="megajoule"),
         description="Sorbent regeneration heat per kilogram captured, at reference air",
         rdf_type="https://vocab.sentier.dev/parameters/heat-demand",
     ),
     Field(
         name="electricity_demand",
         type="number",
-        unit=Unit(name="kWh", long_name="kilowatt hour"),
+        unit=Unit(name=KWH, long_name="kilowatt hour"),
         description="Fan and compressor work per kilogram captured, at reference air",
         rdf_type="https://vocab.sentier.dev/parameters/electricity-demand",
     ),
     Field(
         name="temperature",
         type="number",
-        unit=Unit(name="degC", long_name="degree Celsius"),
+        unit=Unit(name=DEG_C, long_name="degree Celsius"),
         description="Mean ambient air temperature",
         rdf_type="https://vocab.sentier.dev/parameters/air-temperature",
     ),
     Field(
         name="humidity",
         type="number",
-        unit=Unit(name="dimensionless"),
+        unit=Unit(name=UNITLESS),
         description="Mean ambient relative humidity, 0 to 1",
         rdf_type="https://vocab.sentier.dev/parameters/relative-humidity",
     ),
@@ -168,51 +181,55 @@ print(parameter_file)
 ```
 
     dac-parameters.parquet: ✅ STRICT COMPLIANCE
-    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpikrr6uqw/dac-parameters.parquet
+    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpm7dsz6ec/dac-parameters.parquet
 
 The file that comes out carries its own description, and `read_parquet` hands
 back both halves of it. This is exactly what `ParameterSet` will see in the next
 section: one descriptor per column, with a unit and a concept IRI attached to
-the ones that have them.
+the ones that have them. The unit column below prints each unit IRI by its
+symbol, and the time column its standard.
 
 ```python
 frame, descriptor = read_parquet(str(parameter_file))
 print(descriptor["name"], descriptor["version"], descriptor["licenses"][0]["name"])
 for field in descriptor["resources"][0]["schema"]["fields"]:
-    unit = (field.get("unit") or {}).get("name", "-")
+    unit = (field.get("unit") or {}).get("name")
+    unit = symbol(unit) if unit else field.get("timeStandard", "-").rsplit("#", 1)[-1]
     print(f"  {field['name']:20} {field['type']:8} {unit:14} {field.get('rdfType', '')}")
 ```
 
     dac-parameters 1.0.0 MIT
       location             string   -              
-      time                 integer  year           
+      time                 string   gYear          
       heat_demand          number   MJ             https://vocab.sentier.dev/parameters/heat-demand
       electricity_demand   number   kWh            https://vocab.sentier.dev/parameters/electricity-demand
-      temperature          number   degC           https://vocab.sentier.dev/parameters/air-temperature
-      humidity             number   dimensionless  https://vocab.sentier.dev/parameters/relative-humidity
+      temperature          number   °C             https://vocab.sentier.dev/parameters/air-temperature
+      humidity             number   UNITLESS       https://vocab.sentier.dev/parameters/relative-humidity
 
 ## 2. Reading parameters, with fallback that says so
 
 `ParameterSet.from_parquet` reads the rows and that descriptor together, so a
 column's unit and IRI travel with its value. A lookup goes through
-`params.at(location=..., time=...)` and widens until something matches: the exact
-row first, then up the `LocationHierarchy`, then linear interpolation between
-two bracketing years. Nothing is extrapolated past the data, and every widening
+`params.at(location=..., time=..., time_standard=...)` (`**in_year(2030)` spells
+the common case) and widens until something matches: the exact row first, then
+up the `LocationHierarchy`, then linear interpolation between the midpoints of
+two bracketing rows. Nothing is extrapolated past the data, and every widening
 step is written into the row's `provenance`.
 
 ```python
 from trailrunner import LocationHierarchy, ParameterSet
+from trailrunner.core.time import in_year
 
 hierarchy = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 params = ParameterSet.from_parquet(parameter_file, hierarchy=hierarchy)
 
-row = params.at(location="CH", time=2030)
+row = params.at(location="CH", **in_year(2030))
 print(row["heat_demand"], row.unit_of("heat_demand"), row.iri_of("heat_demand"))
 print(row.provenance)
 ```
 
-    5.0 MJ https://vocab.sentier.dev/parameters/heat-demand
-    {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
+    5.0 https://vocab.sentier.dev/units/unit/MegaJ https://vocab.sentier.dev/parameters/heat-demand
+    {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': '2030', 'time_used': '2030', 'time_interpolated': False}
 
 France has no row of its own, and 2025 is not a year anybody wrote down. The
 lookup still answers — France falls back to `RER`, and the two European rows are
@@ -221,17 +238,17 @@ interpolated — but the provenance names both substitutions: `location_used`,
 between. This is the whole contract: widen, but never silently.
 
 ```python
-fallback = params.at(location="FR", time=2025)
+fallback = params.at(location="FR", **in_year(2025))
 for column in ("heat_demand", "electricity_demand", "temperature", "humidity"):
-    print(f"{column:>20}: {fallback[column]:7.3f} {fallback.unit_of(column)}")
+    print(f"{column:>20}: {fallback[column]:7.3f} {symbol(fallback.unit_of(column))}")
 print(fallback.provenance)
 ```
 
              heat_demand:   6.050 MJ
       electricity_demand:   0.500 kWh
-             temperature:  11.500 degC
-                humidity:   0.665 dimensionless
-    {'location_requested': 'FR', 'location_used': 'RER', 'location_fallback': True, 'time_requested': 2025, 'time_used': 2025, 'time_interpolated': True, 'time_bracket': (2020, 2030)}
+             temperature:  11.500 °C
+                humidity:   0.665 UNITLESS
+    {'location_requested': 'FR', 'location_used': 'RER', 'location_fallback': True, 'time_requested': '2025', 'time_used': '2025', 'time_interpolated': True, 'time_bracket': ('2020', '2030')}
 
 ## 3. The part that has to be code
 
@@ -296,19 +313,19 @@ from trailrunner.models.dac import CO2_CAPTURED, DirectAirCapture
 
 model = DirectAirCapture(params=params)
 demand = Demand(
-    flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg"
+    flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG
 )
 result = model.apply(demand)
 
 print("production:")
 for exchange in result.production:
-    print(f"  {exchange.amount:10.2f} {exchange.unit:4} {exchange.flow.iri}")
+    print(f"  {exchange.amount:10.2f} {symbol(exchange.unit):4} {exchange.flow.iri}")
 print("technosphere:")
 for child in result.technosphere:
-    print(f"  {child.amount:10.2f} {child.unit:4} {child.flow.iri}")
+    print(f"  {child.amount:10.2f} {symbol(child.unit):4} {child.flow.iri}")
 print("biosphere:")
 for exchange in result.biosphere:
-    print(f"  {exchange.amount:10.2f} {exchange.unit:4} {exchange.flow.iri}")
+    print(f"  {exchange.amount:10.2f} {symbol(exchange.unit):4} {exchange.flow.iri}")
 print("provenance:", result.provenance)
 ```
 
@@ -319,7 +336,7 @@ print("provenance:", result.provenance)
           400.00 kWh  https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100
     biosphere:
         -1000.00 kg   https://vocab.sentier.dev/flows/co2-from-air
-    provenance: {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
+    provenance: {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': '2030', 'time_used': '2030', 'time_interpolated': False}
 
 ## 5. The same demand, elsewhere and later
 
@@ -335,10 +352,10 @@ header = f"{'location':>8} {'year':>6} {'degC':>6} {'RH':>5} {'penalty':>8} {'he
 print(header)
 for location in ("CH", "FR", "RER"):
     for year in (2020, 2025, 2030):
-        flow = Flow(iri=CO2_CAPTURED, location=location, time=year)
-        out = model.apply(Demand(flow=flow, amount=1000.0, unit="kg"))
+        flow = Flow(iri=CO2_CAPTURED, location=location, **in_year(year))
+        out = model.apply(Demand(flow=flow, amount=1000.0, unit=KG))
         heat = [d for d in out.technosphere if d.flow.iri == dac.HEAT][0]
-        air = params.at(location=location, time=year)
+        air = params.at(location=location, **in_year(year))
         penalty = dac.ambient_penalty(air["temperature"], air["humidity"])
         print(
             f"{location:>8} {year:>6} {air['temperature']:>6.1f} {air['humidity']:>5.2f} "
@@ -377,11 +394,11 @@ report = Orchestrator(Glossary([model])).calculate(demand)
 
 print("inventory:")
 for (flow, unit), amount in report.inventory.items():
-    print(f"  {amount:10.2f} {unit:4} {flow.iri}  ({flow.location}, {flow.time})")
+    print(f"  {amount:10.2f} {symbol(unit):4} {flow.iri}  ({flow.location}, {flow.time})")
 print("unresolved:")
 for record in report.unresolved:
     print(
-        f"  {record.demand.amount:10.2f} {record.demand.unit:4} "
+        f"  {record.demand.amount:10.2f} {symbol(record.demand.unit):4} "
         f"{record.demand.flow.iri}  [{record.reason}]"
     )
 print("nodes:", len(report.nodes), "truncated:", report.truncated)
@@ -402,7 +419,7 @@ for node_id, provenance in report.provenance.items():
     print(node_id, provenance)
 ```
 
-    0 {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
+    0 {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False, 'time_requested': '2030', 'time_used': '2030', 'time_interpolated': False}
 
 ## 7. Working the to-do list: electricity
 
@@ -425,41 +442,41 @@ so is the natural gas itself: they stay on the to-do list.
 
 ```python
 GRID_ROWS = [
-    {"location": "CH", "time": 2020, "share_gas": 0.06, "share_wind": 0.04,
+    {"location": "CH", "time": "2020", "share_gas": 0.06, "share_wind": 0.04,
      "share_hydro": 0.90, "grid_loss": 0.070},
-    {"location": "CH", "time": 2030, "share_gas": 0.02, "share_wind": 0.18,
+    {"location": "CH", "time": "2030", "share_gas": 0.02, "share_wind": 0.18,
      "share_hydro": 0.80, "grid_loss": 0.060},
-    {"location": "RER", "time": 2020, "share_gas": 0.50, "share_wind": 0.30,
+    {"location": "RER", "time": "2020", "share_gas": 0.50, "share_wind": 0.30,
      "share_hydro": 0.20, "grid_loss": 0.080},
-    {"location": "RER", "time": 2030, "share_gas": 0.25, "share_wind": 0.55,
+    {"location": "RER", "time": "2030", "share_gas": 0.25, "share_wind": 0.55,
      "share_hydro": 0.20, "grid_loss": 0.070},
 ]
 
 GRID_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    Field(name="share_gas", type="number", unit=Unit(name="dimensionless"),
+    Field(name="share_gas", type="number", unit=Unit(name=UNITLESS),
           description="Share of consumed electricity generated from natural gas"),
-    Field(name="share_wind", type="number", unit=Unit(name="dimensionless"),
+    Field(name="share_wind", type="number", unit=Unit(name=UNITLESS),
           description="Share of consumed electricity generated from wind"),
-    Field(name="share_hydro", type="number", unit=Unit(name="dimensionless"),
+    Field(name="share_hydro", type="number", unit=Unit(name=UNITLESS),
           description="Share of consumed electricity generated from hydro power"),
-    Field(name="grid_loss", type="number", unit=Unit(name="dimensionless"),
+    Field(name="grid_loss", type="number", unit=Unit(name=UNITLESS),
           description="Fraction of generated electricity lost before consumption"),
 ]
 
 # No Swiss row: the plant parameters are European, and the lookup will say so.
 GAS_ROWS = [
-    {"location": "RER", "time": 2020, "efficiency": 0.55, "co2_factor": 0.056},
-    {"location": "RER", "time": 2030, "efficiency": 0.62, "co2_factor": 0.056},
+    {"location": "RER", "time": "2020", "efficiency": 0.55, "co2_factor": 0.056},
+    {"location": "RER", "time": "2030", "efficiency": 0.62, "co2_factor": 0.056},
 ]
 
 GAS_FIELDS = [
     LOCATION_FIELD,
     TIME_FIELD,
-    Field(name="efficiency", type="number", unit=Unit(name="dimensionless"),
+    Field(name="efficiency", type="number", unit=Unit(name=UNITLESS),
           description="Fuel energy converted to electricity"),
-    Field(name="co2_factor", type="number", unit=Unit(name="kg"),
+    Field(name="co2_factor", type="number", unit=Unit(name=KG),
           description="Fossil CO2 emitted per megajoule of fuel burned"),
 ]
 
@@ -510,16 +527,16 @@ def short(iri):
 
 print("nodes:")
 for node in full.nodes:
-    print(f"  {'  ' * node.depth}{node.demand.amount:9.2f} {node.demand.unit:4} {short(node.demand.flow.iri)}")
+    print(f"  {'  ' * node.depth}{node.demand.amount:9.2f} {symbol(node.demand.unit):4} {short(node.demand.flow.iri)}")
 print("unresolved:")
 for record in full.unresolved:
     print(
-        f"  {'  ' * record.depth}{record.demand.amount:9.2f} {record.demand.unit:4} "
+        f"  {'  ' * record.depth}{record.demand.amount:9.2f} {symbol(record.demand.unit):4} "
         f"{short(record.demand.flow.iri)}  [{record.reason}]"
     )
 print("inventory:")
 for (flow, unit), amount in full.inventory.items():
-    print(f"  {amount:9.2f} {unit:4} {short(flow.iri)}  ({flow.location}, {flow.time})")
+    print(f"  {amount:9.2f} {symbol(unit):4} {short(flow.iri)}  ({flow.location}, {flow.time})")
 ```
 
     nodes:
@@ -558,9 +575,9 @@ for location in ("CH", "RER"):
     for year in (2020, 2030):
         report_here = Orchestrator(glossary).calculate(
             Demand(
-                flow=Flow(iri=CO2_CAPTURED, location=location, time=year),
+                flow=Flow(iri=CO2_CAPTURED, location=location, **in_year(year)),
                 amount=1000.0,
-                unit="kg",
+                unit=KG,
             )
         )
         fossil = sum(
@@ -630,11 +647,11 @@ FLEET_ROWS = [
 FLEET_FIELDS = [
     Field(name="plant", type="string", description="Identifier of the plant"),
     LOCATION_FIELD,
-    Field(name="build_year", type="integer", unit=Unit(name="year"),
+    Field(name="build_year", type="integer", unit=Unit(name=YEAR),
           description="Year the plant was commissioned"),
-    Field(name="capacity", type="number", unit=Unit(name="kg/year"),
+    Field(name="capacity", type="number", unit=Unit(name=TONNE_PER_YEAR),
           description="Nameplate capture capacity"),
-    Field(name="lifetime", type="number", unit=Unit(name="year"),
+    Field(name="lifetime", type="number", unit=Unit(name=YEAR),
           description="Operating lifetime before the plant retires"),
 ]
 
@@ -651,13 +668,13 @@ fleet = Fleet.from_parquet(
 
 running = fleet.operating(location="CH", time=2030)
 print("plants running in CH in 2030:", running.provenance["plants"])
-print("total capacity:", running.total_capacity, running.unit_of("capacity"))
+print("total capacity:", running.total_capacity, symbol(running.unit_of("capacity")))
 print("mean build year:", round(running.mean_build_year, 1))
 ```
 
     dac-fleet.parquet: ✅ STRICT COMPLIANCE
     plants running in CH in 2030: ['ch-1', 'ch-2']
-    total capacity: 52000.0 kg/year
+    total capacity: 52000.0 t/yr
     mean build year: 2028.3
 
 ```python
@@ -667,7 +684,7 @@ built = Orchestrator(Glossary([dac_with_fleet, grid, plant])).calculate(demand)
 print("unresolved:")
 for record in built.unresolved:
     print(
-        f"  {record.demand.amount:9.2f} {record.demand.unit:8} "
+        f"  {record.demand.amount:9.2f} {symbol(record.demand.unit):8} "
         f"{short(record.demand.flow.iri):26} "
         f"{record.demand.flow.location} {record.demand.flow.time}  [{record.reason}]"
     )
@@ -679,8 +696,8 @@ for key in ("plants", "total_capacity", "mean_build_year", "share_of_fleet"):
 
     unresolved:
         5000.00 MJ       fi_1730_9                  CH 2030  [no_model_found]
-          11.54 kg/year  direct-air-capture-plant   CH 2026  [no_model_found]
-          38.46 kg/year  direct-air-capture-plant   CH 2029  [no_model_found]
+          11.54 t/yr     direct-air-capture-plant   CH 2026  [no_model_found]
+          38.46 t/yr     direct-air-capture-plant   CH 2029  [no_model_found]
           76.60 kWh      electricity-wind           CH 2030  [no_model_found]
          340.43 kWh      electricity-hydro          CH 2030  [no_model_found]
           49.42 MJ       fi_12020                   CH 2030  [no_model_found]
@@ -692,9 +709,9 @@ for key in ("plants", "total_capacity", "mean_build_year", "share_of_fleet"):
 
 The two construction demands sit in **2026 and 2029** while the capture sits in
 2030, and they are not equal: the bigger plant carries the bigger share, because
-the share is its capacity's share and nothing else. Together they come to 50 kg/yr
-of built capacity — a twentieth of the 1000 kg demanded, one plant-lifetime's
-worth.
+the share is its capacity's share and nothing else. Together they come to 50,
+stated in the fleet's capacity unit — a twentieth of the 1000 demanded, one
+plant-lifetime's worth.
 
 Nothing resolves `direct-air-capture-plant` yet, so both land on the unresolved
 list. That is the useful part: when a construction model does answer them, it
@@ -710,7 +727,7 @@ and pulls the mean build year with it.
 print(f"{'capture':>8} {'plants running':>24} {'mean build':>11}  construction demanded")
 for year in (2025, 2027, 2030):
     result = dac_with_fleet.apply(
-        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=year), amount=1000.0, unit="kg")
+        Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(year)), amount=1000.0, unit=KG)
     )
     capital = [d for d in result.technosphere if short(d.flow.iri) == "direct-air-capture-plant"]
     spread = ", ".join(f"{d.flow.time}: {d.amount:.1f}" for d in sorted(capital, key=lambda d: d.flow.time))
@@ -727,7 +744,7 @@ for year in (2025, 2027, 2030):
 
 ## 9. Coverage: outside the data, the model declines
 
-`DirectAirCapture` declares `Coverage(time_range=(2020, 2050))`. Ask it for 2015
+`DirectAirCapture` declares `Coverage(time_range=year_range(2020, 2050))`. Ask it for 2015
 and it is not resolved at all — but the report distinguishes *nobody models this*
 (`no_model_found`) from *a registered model declined this flow*
 (`coverage_excluded`), and names the model in the detail. Those are different
@@ -737,7 +754,7 @@ bugs with different fixes: write a model, or widen a coverage.
 print(DirectAirCapture.coverage)
 
 early = Demand(
-    flow=Flow(iri=CO2_CAPTURED, location="CH", time=2015), amount=1000.0, unit="kg"
+    flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(2015)), amount=1000.0, unit=KG
 )
 early_report = Orchestrator(Glossary([model])).calculate(early)
 
@@ -747,9 +764,9 @@ for record in early_report.unresolved:
 print("inventory:", early_report.inventory)
 ```
 
-    Coverage(locations=None, time_range=(2020, 2050))
+    Coverage(locations=None, time_range=TimeRange(start='2020', end='2050', standard='http://www.w3.org/2001/XMLSchema#gYear'), context=(), units=None)
     coverage_excluded
-    DirectAirCapture declares this product but its coverage does not cover location='CH' time=2015
+    DirectAirCapture declares this product but its coverage does not cover location='CH' time='2015'
     inventory: {}
 
 ## 10. A second case study: pipeline transport, reverse-engineered from BAFU
@@ -795,7 +812,7 @@ GLOBAL_CONSTANTS = {
 
 PIPELINE_ROWS = [
     {
-        "location": location, "time": 2025, "tier": tier,
+        "location": location, "time": "2025", "tier": tier,
         "gas_density_kg_per_nm3": 0.735,
         **TIER_RATES[tier], **GENERIC_COMPOSITION, **GLOBAL_CONSTANTS,
     }
@@ -809,7 +826,7 @@ PIPELINE_FIELDS = [
     Field(name="tier", type="string", description="Regional leakage/energy tier"),
     Field(name="gas_density_kg_per_nm3", type="number", unit=Unit(name="kg/Nm3"),
           description="Generic gas density (Tab. 3.1)"),
-    Field(name="leakage_rate_per_1000km", type="number", unit=Unit(name="dimensionless"),
+    Field(name="leakage_rate_per_1000km", type="number", unit=Unit(name=UNITLESS),
           description="Pipeline leakage rate per 1000 km (Tab. 4.4/4.6)"),
     Field(name="gas_turbine_mj_per_tkm", type="number", unit=Unit(name="MJ/tkm"),
           description="Compressor gas-turbine fuel burned per tkm (Tab. 4.7)"),
@@ -843,7 +860,7 @@ print(pipeline_parameter_file)
 ```
 
     natural-gas-pipeline-parameters.parquet: ✅ STRICT COMPLIANCE
-    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpikrr6uqw/natural-gas-pipeline-parameters.parquet
+    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpm7dsz6ec/natural-gas-pipeline-parameters.parquet
 
 The tier split is the whole model, and it is a pure function of two numbers: the tier's leakage rate
 and the generic gas density. `leaked_volume_nm3_per_tkm` — mirroring `dac.ambient_penalty` as the
@@ -862,7 +879,11 @@ for tier_name in ("high", "low"):
      high tier: 0.0027755 Nm3/tkm leaked
       low tier: 0.0002585 Nm3/tkm leaked
 
-## 11. Answering a demand: 1000 tkm out of Algeria
+## 11. Answering a demand: 1 t of gas over 1000 km out of Algeria
+
+The pipeline moves **tonnes** of gas, and how far is a condition of the demand: a
+`distance` in the flow's `context`, in any length unit. 1 t over 1000 km is the
+1000 tkm an ecoinvent dataset would name.
 
 Same contract as section 4 — `apply` gets the full demanded amount and returns production,
 technosphere and biosphere — on a model whose `technosphere` list is five items long: pipeline
@@ -881,28 +902,36 @@ from trailrunner.models.natural_gas_pipeline_transport import (
 pipeline_params = ParameterSet.from_parquet(pipeline_parameter_file, hierarchy=hierarchy)
 pipeline = NaturalGasOffshorePipelineTransport(params=pipeline_params)
 
-pipeline_demand = Demand(flow=Flow(iri=TRANSPORT, location="DZ", time=2025), amount=1000.0, unit="tkm")
+from trailrunner import Property
+from trailrunner.core.units import KILOMETRE, TONNE
+
+OVER_1000_KM = (Property("distance", 1000.0, KILOMETRE),)
+pipeline_demand = Demand(
+    flow=Flow(iri=TRANSPORT, location="DZ", **in_year(2025), context=OVER_1000_KM),
+    amount=1.0,
+    unit=TONNE,
+)
 pipeline_result = pipeline.apply(pipeline_demand)
 
 print("production:")
 for exchange in pipeline_result.production:
-    print(f"  {exchange.amount:10.4f} {exchange.unit:4} {exchange.flow.iri}")
+    print(f"  {exchange.amount:10.4f} {symbol(exchange.unit):4} {exchange.flow.iri}")
 print("technosphere:")
 for child in pipeline_result.technosphere:
-    print(f"  {child.amount:12.8f} {child.unit:4} {child.flow.iri}")
+    print(f"  {child.amount:12.8f} {symbol(child.unit):4} {child.flow.iri}")
 print("biosphere:")
 for exchange in pipeline_result.biosphere:
-    print(f"  {exchange.amount:12.8f} {exchange.unit:4} {exchange.flow.iri}")
+    print(f"  {exchange.amount:12.8f} {symbol(exchange.unit):4} {exchange.flow.iri}")
 print("provenance:", pipeline_result.provenance)
 ```
 
     production:
-       1000.0000 tkm  https://vocab.sentier.dev/products/natural-gas-transport-offshore-pipeline-long-distance
+          1.0000 t    https://vocab.sentier.dev/products/natural-gas-transport-offshore-pipeline-long-distance
     technosphere:
         0.00000178 unit https://vocab.sentier.dev/products/pipeline-natural-gas-long-distance-high-capacity-offshore
-        2.77551020 Nm3  https://vocab.sentier.dev/products/natural-gas-at-production
+        2.77551020 m3   https://vocab.sentier.dev/products/natural-gas-at-production
       795.00000000 MJ   https://vocab.sentier.dev/products/natural-gas-burned-in-gas-turbine
-        0.00011600 tkm  https://vocab.sentier.dev/products/transport-freight-lorry-16t-32t
+        0.00000012 t    https://vocab.sentier.dev/products/transport-freight-lorry-16t-32t
         0.00116000 kg   https://vocab.sentier.dev/products/disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration
     biosphere:
         1.83988571 kg   https://vocab.sentier.dev/flows/ch4-fossil
@@ -914,11 +943,11 @@ print("provenance:", pipeline_result.provenance)
         0.00138776 kg   https://vocab.sentier.dev/flows/nmvoc-unspecified-origin
         0.00000224 kg   https://vocab.sentier.dev/flows/methane-bromochlorodifluoro-halon-1211
         0.00008950 kg   https://vocab.sentier.dev/flows/methane-trifluoro-hfc-23
-    provenance: {'location_requested': 'DZ', 'location_used': 'DZ', 'location_fallback': False, 'time_requested': 2025, 'time_used': 2025, 'time_interpolated': False, 'tier': 'high', 'leaked_volume_nm3': 2.7755102040816326}
+    provenance: {'location_requested': 'DZ', 'location_used': 'DZ', 'location_fallback': False, 'time_requested': '2025', 'time_used': '2025', 'time_interpolated': False, 'tier': 'high', 'leaked_volume_nm3': 2.7755102040816326, 'tkm': 1000.0}
 
 ## 12. The same demand, across both tiers
 
-Algeria and Russia (high tier) against Norway and the UK (low tier), same 1000 tkm each. Everything
+Algeria and Russia (high tier) against Norway and the UK (low tier), same 1 t over 1000 km each. Everything
 scales off the tier: leaked volume, methane released, and gas-turbine fuel all roughly move together
 between the two clusters, and nothing here depends on which specific high-tier or low-tier country is
 asked for — the model has no finer-grained knowledge than the tier itself.
@@ -927,8 +956,8 @@ asked for — the model has no finer-grained knowledge than the tier itself.
 header = f"{'location':>8} {'tier':>5} {'leaked Nm3':>12} {'CH4 [kg]':>10} {'gas turbine [MJ]':>17}"
 print(header)
 for location in ("DZ", "RU", "NO", "GB"):
-    flow = Flow(iri=TRANSPORT, location=location, time=2025)
-    out = pipeline.apply(Demand(flow=flow, amount=1000.0, unit="tkm"))
+    flow = Flow(iri=TRANSPORT, location=location, **in_year(2025), context=OVER_1000_KM)
+    out = pipeline.apply(Demand(flow=flow, amount=1.0, unit=TONNE))
     ch4 = [e for e in out.biosphere if e.flow.iri == METHANE_FOSSIL][0]
     turbine = [d for d in out.technosphere if "gas-turbine" in d.flow.iri][0]
     print(
@@ -955,11 +984,11 @@ pipeline_report = Orchestrator(Glossary([pipeline])).calculate(pipeline_demand)
 
 print("inventory:")
 for (flow, unit), amount in pipeline_report.inventory.items():
-    print(f"  {amount:12.8f} {unit:4} {short(flow.iri)}  ({flow.location}, {flow.time})")
+    print(f"  {amount:12.8f} {symbol(unit):4} {short(flow.iri)}  ({flow.location}, {flow.time})")
 print("unresolved:")
 for record in pipeline_report.unresolved:
     print(
-        f"  {record.demand.amount:12.8f} {record.demand.unit:6} "
+        f"  {record.demand.amount:12.8f} {symbol(record.demand.unit):6} "
         f"{short(record.demand.flow.iri):26}  [{record.reason}]"
     )
 ```
@@ -976,9 +1005,9 @@ for record in pipeline_report.unresolved:
         0.00008950 kg   methane-trifluoro-hfc-23  (DZ, 2025)
     unresolved:
         0.00000178 unit   pipeline-natural-gas-long-distance-high-capacity-offshore  [no_model_found]
-        2.77551020 Nm3    natural-gas-at-production   [no_model_found]
+        2.77551020 m3     natural-gas-at-production   [no_model_found]
       795.00000000 MJ     natural-gas-burned-in-gas-turbine  [no_model_found]
-        0.00011600 tkm    transport-freight-lorry-16t-32t  [no_model_found]
+        0.00000012 t      transport-freight-lorry-16t-32t  [no_model_found]
         0.00116000 kg     disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration  [no_model_found]
 
 And, echoing section 9, `coverage` here is not a time range but the 14 locations the trailpack actually
@@ -988,7 +1017,11 @@ interpolate or fall back to, only a location to decline.
 ```python
 print(NaturalGasOffshorePipelineTransport.coverage)
 
-undocumented = Demand(flow=Flow(iri=TRANSPORT, location="CH", time=2025), amount=1000.0, unit="tkm")
+undocumented = Demand(
+    flow=Flow(iri=TRANSPORT, location="CH", **in_year(2025), context=OVER_1000_KM),
+    amount=1.0,
+    unit=TONNE,
+)
 undocumented_report = Orchestrator(Glossary([pipeline])).calculate(undocumented)
 
 for record in undocumented_report.unresolved:
@@ -997,9 +1030,9 @@ for record in undocumented_report.unresolved:
 print("inventory:", undocumented_report.inventory)
 ```
 
-    Coverage(locations=frozenset({'RU', 'GB', 'IT', 'ID', 'LY', 'NL', 'QA', 'NO', 'IR', 'AZ', 'DZ', 'UA', 'MY', 'US'}), time_range=None)
+    Coverage(locations=frozenset({'IT', 'DZ', 'ID', 'QA', 'US', 'LY', 'MY', 'UA', 'AZ', 'NO', 'RU', 'IR', 'NL', 'GB'}), time_range=None, context=(), units=frozenset({'https://vocab.sentier.dev/units/unit/TONNE'}))
     coverage_excluded
-    NaturalGasOffshorePipelineTransport declares this product but its coverage does not cover location='CH' time=2025
+    NaturalGasOffshorePipelineTransport declares this product but its coverage does not cover location='CH' time='2025' context='distance=1000 km'
     inventory: {}
 
 ## Where this stops
