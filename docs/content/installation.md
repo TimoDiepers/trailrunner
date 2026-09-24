@@ -99,3 +99,15 @@ root:
     ```
 
 `zensical build` writes the static site to `site/`.
+
+The [5-minute tour](../showcase.md) and the pages under Examples are generated
+from the notebooks in `examples/` by `docs/convert_notebooks.py`, and the
+generated Markdown is committed — so a docs build needs no notebook toolchain,
+and the pages read the same on GitHub. After editing a notebook, regenerate
+them:
+
+```bash
+uv run --with-requirements docs/requirements.txt python docs/convert_notebooks.py
+```
+
+CI regenerates them too, and fails if a page differs from its notebook.
