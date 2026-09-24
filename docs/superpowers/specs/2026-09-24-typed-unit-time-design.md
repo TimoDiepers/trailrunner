@@ -254,7 +254,7 @@ standard: `time: 2031-03-02 -> 2030`.
   pattern as the taxonomy tests).
 - Conversion: t → kg demand answered and logged; m³ → kg is a miss; `DEG_C`
   never converted.
-- Context: 4e5 Pa asked vs 4 bar-equivalent range; tolerance with a unit.
+- Context: 4e5 Pa asked vs a 5e5 Pa range; tolerance (0, 1e5, PA) snaps it.
 - Time: each shipped standard's interval; containment (day in year);
   relaxation snaps by interval gap; interpolation gives today's numbers for
   year data; `dateTime` without timezone refused.
