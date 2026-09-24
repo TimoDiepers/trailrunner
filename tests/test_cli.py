@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -131,3 +132,38 @@ def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
     assert code == 0
     assert "radiative_forcing over 20 years:" in out
     assert "W·yr/m2" in out
+
+
+SHOWCASE = Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
+CEMENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"
+CEMENT_RUN = [
+    "run", CEMENT, "--amount", "1000", "--unit", "kg",
+    "--location", "DK", "--year", "2030", "--models", str(SHOWCASE),
+]
+
+
+def test_without_a_context_tolerance_the_kilns_4_bar_gas_is_a_coverage_miss(capsys):
+    assert main(CEMENT_RUN) == 0
+    out = capsys.readouterr().out
+    assert "fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]" in out
+
+
+def test_a_context_tolerance_lets_5_bar_gas_answer_it_as_a_proxy(capsys):
+    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1"]) == 0
+    out = capsys.readouterr().out
+    assert "[proxy: context: pressure 4 bar -> 5 bar]" in out
+    assert "1 proxy" in out
+
+
+def test_a_context_tolerance_that_forbids_the_side_leaves_the_cutoff(capsys):
+    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=1:0"]) == 0
+    out = capsys.readouterr().out
+    # Tier 1's reason wins: widening the coverage is what would fix it.
+    assert "(pressure=4 bar)  [cutoff: coverage_excluded]" in out
+    assert "0 proxies" in out
+
+
+@pytest.mark.parametrize("bad", ["pressure", "pressure=1", "=0:1", "pressure=a:b", "pressure=-1:0"])
+def test_a_malformed_context_tolerance_is_rejected_before_anything_runs(bad, capsys):
+    assert main([*CEMENT_RUN, "--context-tolerance", bad]) == 2
+    assert "context tolerance" in capsys.readouterr().err

@@ -56,10 +56,14 @@ impact characterization of it.
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
-    --models examples/showcase_models.py
+    --models examples/showcase_models.py \
+    --context-tolerance pressure=0:1
 ```
 
-prints the report's summary and the supply chain it walked. Add `--method` for a score,
+prints the report's summary and the supply chain it walked. The kiln asks for gas at
+4 bar and the supplier delivers 5. `--context-tolerance pressure=0:1` lets pressure be met
+up to 1 bar higher, never lower, so the gas is answered as a recorded proxy
+(`[proxy: context: pressure 4 bar -> 5 bar]`) rather than cut off. Add `--method` for a score,
 `--dynamic radiative_forcing` for a time-explicit result and `--out run.parquet` for the
 full log; the [CLI tutorial](docs/content/getting_started/cli.md) goes through each.
 
