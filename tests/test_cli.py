@@ -136,6 +136,8 @@ def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
 
 SHOWCASE = Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
 CEMENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"
+PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
+BAR = "http://qudt.org/vocab/unit/BAR"
 CEMENT_RUN = [
     "run", CEMENT, "--amount", "1000", "--unit", "kg",
     "--location", "DK", "--year", "2030", "--models", str(SHOWCASE),
@@ -145,21 +147,21 @@ CEMENT_RUN = [
 def test_without_a_context_tolerance_the_kilns_4_bar_gas_is_a_coverage_miss(capsys):
     assert main(CEMENT_RUN) == 0
     out = capsys.readouterr().out
-    assert "fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]" in out
+    assert f"fi_12020 @DK/2030 ({PRESSURE}=4 {BAR})  [cutoff: coverage_excluded]" in out
 
 
 def test_a_context_tolerance_lets_5_bar_gas_answer_it_as_a_proxy(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1"]) == 0
     out = capsys.readouterr().out
-    assert "[proxy: context: pressure 4 bar -> 5 bar]" in out
+    assert f"[proxy: context: {PRESSURE} 4 {BAR} -> 5 {BAR}]" in out
     assert "1 proxy" in out
 
 
 def test_a_context_tolerance_that_forbids_the_side_leaves_the_cutoff(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=1:0"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=1:0"]) == 0
     out = capsys.readouterr().out
     # Tier 1's reason wins: widening the coverage is what would fix it.
-    assert "(pressure=4 bar)  [cutoff: coverage_excluded]" in out
+    assert f"({PRESSURE}=4 {BAR})  [cutoff: coverage_excluded]" in out
     assert "0 proxies" in out
 
 
@@ -187,7 +189,7 @@ def test_proxy_order_parses_entries_and_combinations():
     ],
 )
 def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, capsys):
-    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1", "--proxy-order", order])
+    code = main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1", "--proxy-order", order])
     assert code == 2
     assert message in capsys.readouterr().err
 
@@ -195,8 +197,8 @@ def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, caps
 def test_a_context_tolerance_given_twice_is_rejected(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", "pressure=0:1",
-        "--context-tolerance", "pressure=0:2",
+        "--context-tolerance", f"{PRESSURE}=0:1",
+        "--context-tolerance", f"{PRESSURE}=0:2",
     ])
     assert code == 2
     assert "more than once" in capsys.readouterr().err
@@ -205,8 +207,34 @@ def test_a_context_tolerance_given_twice_is_rejected(capsys):
 def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", "pressure=0:1",
-        "--proxy-order", "context.pressure",
+        "--context-tolerance", f"{PRESSURE}=0:1",
+        "--proxy-order", f"context.{PRESSURE}",
     ])
     assert code == 0
-    assert "[proxy: context: pressure 4 bar -> 5 bar]" in capsys.readouterr().out
+    assert f"[proxy: context: {PRESSURE} 4 {BAR} -> 5 {BAR}]" in capsys.readouterr().out
+
+
+def test_a_tolerance_no_model_declares_warns_and_suggests_the_iri(tmp_path, capsys):
+    path = tmp_path / "iri_models.py"
+    path.write_text(textwrap.dedent('''
+        from trailrunner import ContextRange, Coverage, Exchange, Model, Result
+
+        class Grid(Model):
+            produces = ["gas"]
+            coverage = Coverage(context=(ContextRange(
+                "http://qudt.org/vocab/quantitykind/Pressure",
+                "http://qudt.org/vocab/unit/BAR", 5.0, 5.0),))
+
+            def apply(self, demand):
+                return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+        MODELS = [Grid()]
+    '''))
+    code = main([
+        "run", "gas", "--amount", "1", "--unit", "MJ", "--models", str(path),
+        "--context-tolerance", "pressure=0:1",
+    ])
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "no model declares a context condition named 'pressure'" in err
+    assert "did you mean http://qudt.org/vocab/quantitykind/Pressure?" in err

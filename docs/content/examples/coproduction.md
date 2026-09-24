@@ -48,7 +48,7 @@ Nothing here touches the network.
         Model, Orchestrator, ParameterSet, Property, ProxySettings, Result, Settings,
     )
     from trailrunner.assessment import Method, assess
-    from trailrunner.models import cement
+    from trailrunner.models import cement, natural_gas
     from trailrunner.models.cement import CEMENT, CO2_FOSSIL, ELECTRICITY, NATURAL_GAS
     from trailrunner.models.electricity import GridElectricity
     from trailrunner.resolution import (
@@ -138,7 +138,7 @@ tier1 = ModelProvider(Glossary(MODELS_PLUS))
 taxonomy = PystTaxonomy(EXAMPLES / "pyst_cache.json", client=None)  # client=None: no network
 # The kiln asks for gas at 4 bar and the supplier delivers 5: the same
 # pressure concession the tour makes, so the gas is answered here too.
-PROXY = ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+PROXY = ProxySettings(context_tolerance={natural_gas.PRESSURE: (0.0, 1.0)})
 CHAIN = ResolutionChain([
     tier1,
     GeneralisingProvider(tier1, settings=PROXY, hierarchy=HIERARCHY, taxonomy=taxonomy),

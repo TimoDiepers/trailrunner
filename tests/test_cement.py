@@ -2,6 +2,8 @@ import pytest
 
 from trailrunner.core.flow import Demand, Flow, Property
 from trailrunner.models.cement import (
+    BAR,
+    PRESSURE,
     CEMENT,
     CO2_FOSSIL,
     ELECTRICITY,
@@ -98,7 +100,7 @@ def test_cement_plant_demands_limestone_gas_steam_and_electricity(cement_params)
 def test_burner_pressure_goes_on_the_gas_demand_and_nothing_else(cement_params):
     result = CementPlant(params=cement_params, burner_pressure=4.0).apply(cement_demand())
     by_iri = {d.flow.iri: d for d in result.technosphere}
-    assert by_iri[NATURAL_GAS].flow.context == (Property("pressure", 4.0, "bar"),)
+    assert by_iri[NATURAL_GAS].flow.context == (Property(PRESSURE, 4.0, BAR),)
     assert all(d.flow.context == () for iri, d in by_iri.items() if iri != NATURAL_GAS)
 
 

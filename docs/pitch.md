@@ -99,15 +99,16 @@ Tier 1 = models. Every later tier = **concession**, written at the node.
 An average containing the very product this plant makes — best available,
 poor in substance, **written at the node**.
 
-Not just time and place: a demand can carry a **context**. The kiln burners
-ask for gas at 4 bar; the supplier delivers 5. Pressure may be met up to 1 bar
+Not just time and place: a demand can carry a **context**, named by IRI
+(QUDT pressure, in bar). The kiln burners ask for gas at 4 bar; the supplier
+delivers 5. Pressure may be met up to 1 bar
 *higher*, never lower:
 
 ```text
        model: NaturalGasSupply
- relaxations: ['context: pressure 4 bar -> 5 bar']
-       asked: …/fi_12020 @DK/2030 [pressure=4 bar]
-    answered: …/fi_12020 @DK/2030 [pressure=5 bar]
+ relaxations: ['context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR']
+       asked: …/fi_12020 @DK/2030 [http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR]
+    answered: …/fi_12020 @DK/2030 [http://qudt.org/vocab/quantitykind/Pressure=5 http://qudt.org/vocab/unit/BAR]
 ```
 
 **Tier 3 borrows a dataset** from a background pack, tagged `incomplete`.
@@ -120,7 +121,7 @@ One `while queue:` later — every tier in one run:
 
 ```text
 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
     68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
       0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]

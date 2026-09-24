@@ -59,6 +59,8 @@ def _where(flow: Flow) -> str:
     if flow.location is not None or flow.time is not None:
         where = f" @{flow.location or '-'}/{flow.time if flow.time is not None else '-'}"
     if flow.context:
+        # Never shortened: a condition named by IRI has to read as one, or a
+        # reader cannot tell "Pressure" the concept from "pressure" the string.
         where += f" ({flow.describe_context()})"
     return where
 
