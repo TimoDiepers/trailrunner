@@ -32,7 +32,7 @@ from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
-from trailrunner.core.units import M3, MJ
+from trailrunner.core.units import M3, MJ, PA
 from trailrunner.models.natural_gas_pipeline_transport import (
     NATURAL_GAS_AT_PRODUCTION,
     TRANSPORT,
@@ -59,12 +59,13 @@ than dropped.
 
 KG_PER_TONNE = 1000.0
 
-DELIVERY_PRESSURE_BAR = 5.0
+DELIVERY_PRESSURE_PA = 5e5
 """Pressure the gas leaves this model at: a medium-pressure distribution grid.
 
-Declared in ``coverage`` rather than read from a parameter row, because it
-decides *whether* the model answers, and that has to be known before any row
-is looked up. A demand naming a different pressure is not answered here
+5 bar, in Pa because that is the vocabulary's pressure unit. Declared in
+``coverage`` rather than read from a parameter row, because it decides
+*whether* the model answers, and that has to be known before any row is
+looked up. A demand naming a different pressure is not answered here
 exactly; one naming none is.
 """
 
@@ -86,9 +87,7 @@ class NaturalGasSupply(Model):
     coverage = Coverage(
         time_range=(2000, 2050),
         context=(
-            ContextRange(
-                "pressure", "bar", DELIVERY_PRESSURE_BAR, DELIVERY_PRESSURE_BAR
-            ),
+            ContextRange("pressure", PA, DELIVERY_PRESSURE_PA, DELIVERY_PRESSURE_PA),
         ),
         units=frozenset({MJ}),
     )

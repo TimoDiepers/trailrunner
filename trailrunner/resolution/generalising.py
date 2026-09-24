@@ -246,12 +246,16 @@ class GeneralisingProvider:
 
         The same move as ``_time_candidates``, one condition at a time: ask
         the registry which ranges exist, snap into each, keep what lies within
-        ``context_tolerance``. The tolerance is ``(below, above)`` so that a
-        condition with a safe side -- gas at a higher pressure can be
+        ``context_tolerance``. The tolerance is ``(below, above, unit)`` so
+        that a condition with a safe side -- gas at a higher pressure can be
         throttled, gas at a lower one cannot be boosted -- is only ever moved
-        to that side. A condition with no tolerance, or declared by a model in
-        another unit, is not moved at all.
+        to that side. A condition with no tolerance, or declared in a unit of
+        another quantity kind, is not moved at all. The comparison and the
+        snap both happen in the tolerance's own unit, because that is what
+        "0.0 below, 1e5 above" is written in; the result is converted back
+        into the unit the demander asked in before it is written to the flow.
         """
+        catalog = self.inner.units
         found: dict[tuple[str, float], tuple[float, Property]] = {}
         for asked in demand.flow.context:
             if only is not None and asked.name != only:
@@ -259,18 +263,27 @@ class GeneralisingProvider:
             tolerance = self.settings.context_tolerance.get(asked.name)
             if tolerance is None:
                 continue
-            below, above = tolerance
+            below, above, unit = tolerance
+            asked_value = catalog.try_convert(asked.value, asked.unit, unit)
+            if asked_value is None:
+                continue
             for model in self.inner.glossary.declared_models(demand.flow):
                 if model.coverage is None:
                     continue
                 declared = model.coverage.context_range(asked.name)
-                if declared is None or declared.unit != asked.unit:
+                if declared is None:
                     continue
-                value = min(max(asked.value, declared.minimum), declared.maximum)
-                shift = value - asked.value
+                low = catalog.try_convert(declared.minimum, declared.unit, unit)
+                high = catalog.try_convert(declared.maximum, declared.unit, unit)
+                if low is None or high is None:
+                    continue
+                value = min(max(asked_value, low), high)
+                shift = value - asked_value
                 if shift == 0 or not -below <= shift <= above:
                     continue
-                found.setdefault((asked.name, value), (abs(shift), asked))
+                # Written back in the unit the demander asked in.
+                snapped = catalog.convert(value, unit, asked.unit)
+                found.setdefault((asked.name, snapped), (abs(shift), asked))
         ranked = sorted(found.items(), key=lambda item: (item[1][0], item[0]))
         for step, ((name, value), (_distance, asked)) in enumerate(islice(ranked, budget), 1):
             context = tuple(
@@ -278,10 +291,8 @@ class GeneralisingProvider:
                 for entry in demand.flow.context
             )
             flow = replace(demand.flow, context=context)
-            note = (
-                f"context: {name} {asked.value:g} {symbol(asked.unit)} -> "
-                f"{value:g} {symbol(asked.unit)}"
-            )
+            shown = symbol(asked.unit)
+            note = f"context: {name} {asked.value:g} {shown} -> {value:g} {shown}"
             yield replace(demand, flow=flow), note, step
 
     def _product_candidates(

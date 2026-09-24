@@ -9,6 +9,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
+from trailrunner.core.errors import UnknownUnit
 from trailrunner.core.flow import Demand, Flow
 from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
 from trailrunner.core.units import default_catalog, symbol
@@ -30,27 +31,36 @@ def load_models(path: Path) -> list:
     return list(models)
 
 
-def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, float]]:
-    """``["pressure=0:1"]`` -> ``{"pressure": (0.0, 1.0)}``: below, then above.
+def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, float, str]]:
+    """``["pressure=0:1e5 Pa"]`` -> ``{"pressure": (0.0, 1e5, PA)}``: below, above, unit.
 
-    A condition given twice is refused rather than the last one winning: two
+    The unit is resolved through ``default_catalog()``, so it may be written
+    as a symbol (``Pa``), a vocabulary id (``PA``) or the full IRI. A
+    condition given twice is refused rather than the last one winning: two
     tolerances for one condition is a typo, not a preference.
     """
-    tolerance: dict[str, tuple[float, float]] = {}
+    tolerance: dict[str, tuple[float, float, str]] = {}
     for value in values or []:
-        name, sep, bounds = value.partition("=")
+        name, sep, rest = value.partition("=")
+        bounds, _, unit_text = rest.partition(" ")
         below, colon, above = bounds.partition(":")
         if name in tolerance:
             raise ValueError(f"context tolerance for {name!r} is given more than once")
+        malformed = ValueError(
+            f"{value!r} is not a context tolerance; write NAME=BELOW:ABOVE UNIT, "
+            "e.g. pressure=0:1e5 Pa"
+        )
+        if not (name and sep and colon and unit_text):
+            raise malformed
         try:
-            if not (name and sep and colon):
-                raise ValueError
-            tolerance[name] = (float(below), float(above))
+            below_bound, above_bound = float(below), float(above)
         except ValueError:
-            raise ValueError(
-                f"{value!r} is not a context tolerance; write NAME=BELOW:ABOVE, "
-                "e.g. pressure=0:1"
-            ) from None
+            raise malformed from None
+        try:
+            unit = default_catalog().resolve(unit_text)
+        except UnknownUnit as exc:
+            raise ValueError(f"{value!r} is not a context tolerance: {exc}") from None
+        tolerance[name] = (below_bound, above_bound, unit)
     return tolerance
 
 
@@ -96,9 +106,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--context-tolerance",
         action="append",
-        metavar="NAME=BELOW:ABOVE",
+        metavar="NAME=BELOW:ABOVE UNIT",
         help="let a context condition be met this far below/above what was asked, "
-        "e.g. pressure=0:1; repeatable",
+        'in the unit named (symbol, vocabulary id or IRI), e.g. "pressure=0:1e5 Pa"; '
+        "repeatable",
     )
     run.add_argument(
         "--proxy-order",

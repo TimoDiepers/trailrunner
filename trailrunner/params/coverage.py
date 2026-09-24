@@ -3,16 +3,20 @@
 from dataclasses import dataclass
 
 from trailrunner.core.flow import Flow
+from trailrunner.core.units import UnitCatalog, default_catalog
 
 
 @dataclass(frozen=True)
 class ContextRange:
     """The values of one context condition a model can answer, inclusive.
 
-    ``minimum == maximum`` declares a single value: gas delivered at 5 bar.
-    The unit is compared as written, never converted; a flow asking in
-    another unit is not covered, because guessing a conversion is exactly
-    the kind of silent concession this library refuses to make.
+    ``minimum == maximum`` declares a single value: gas delivered at 5 bar
+    (5e5 Pa in the vocabulary's own unit). The unit is a vocabulary IRI. A
+    flow asking in another unit of the same quantity kind is converted
+    exactly before it is compared (4e5 Pa and a range in Pa; 1500 m against
+    a range in km); one asking in another kind is not covered. Converting
+    used to be refused here because a unit was a string and converting it
+    meant guessing; with the catalog it does not.
     """
 
     name: str
@@ -55,7 +59,8 @@ class Coverage:
     a unit is on the demand, not on the flow.
     """
 
-    def covers(self, flow: Flow) -> bool:
+    def covers(self, flow: Flow, units: UnitCatalog | None = None) -> bool:
+        catalog = units if units is not None else default_catalog()
         if self.locations is not None:
             if flow.location is None or flow.location not in self.locations:
                 return False
@@ -69,9 +74,10 @@ class Coverage:
             asked = flow.get_context(declared.name)
             if asked is None:
                 continue
-            if asked.unit != declared.unit:
+            value = catalog.try_convert(asked.value, asked.unit, declared.unit)
+            if value is None:
                 return False
-            if not declared.minimum <= asked.value <= declared.maximum:
+            if not declared.minimum <= value <= declared.maximum:
                 return False
         return True
 

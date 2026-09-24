@@ -22,7 +22,7 @@ from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
-from trailrunner.core.units import KG
+from trailrunner.core.units import KG, PA
 
 # Real BONSAI vocabulary concepts, verified live against
 # https://vocab.sentier.dev on 2026-09-24 and cached by
@@ -89,7 +89,7 @@ class CementPlant(Model):
     Pass a ``Fleet`` to also account for the kilns doing the calcining.
     Without one the model answers operation only, no capital.
 
-    Pass ``burner_pressure`` (bar) to ask for the kiln's gas at that
+    Pass ``burner_pressure`` (Pa) to ask for the kiln's gas at that
     pressure. Without one the gas demand names no pressure, and any supplier
     answers it.
     """
@@ -176,7 +176,7 @@ class CementPlant(Model):
         """The kiln's gas, at the burner's pressure if the plant names one."""
         if self.burner_pressure is None:
             return flow
-        return replace(flow, context=(Property("pressure", self.burner_pressure, "bar"),))
+        return replace(flow, context=(Property("pressure", self.burner_pressure, PA),))
 
     def _construction(self, demand: Demand) -> tuple[list[Demand], dict]:
         """One construction demand per operating kiln, in that kiln's build year.

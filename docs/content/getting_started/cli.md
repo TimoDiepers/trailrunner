@@ -26,7 +26,7 @@ usage: trailrunner run [-h] --amount AMOUNT --unit UNIT [--location LOCATION]
                        [--year YEAR] --models MODELS [--method METHOD]
                        [--dynamic DYNAMIC] [--horizon HORIZON]
                        [--allocation ALLOCATION] [--capital CAPITAL]
-                       [--context-tolerance NAME=BELOW:ABOVE]
+                       [--context-tolerance NAME=BELOW:ABOVE UNIT]
                        [--proxy-order ORDER] [--max-depth MAX_DEPTH]
                        [--max-nodes MAX_NODES] [--out OUT]
                        iri
@@ -53,7 +53,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1
+    --context-tolerance "pressure=0:1e5 Pa"
 ```
 
 ```text
@@ -63,10 +63,10 @@ uv run trailrunner run \
 attribution: allocation=none, capital=per_output
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
-    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+    68.75 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
-      0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+      0.0130625 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
       8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
       16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
       5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
@@ -88,9 +88,10 @@ How to read it:
 - **Every tree line** is one node: the amount demanded, the product (the last segment of
   its IRI), `@location/year`, any context in parentheses, and in brackets how it was
   answered.
-- **The kiln's gas is a proxy.** The kiln's burners ask for gas at 4 bar, the only
-  supplier delivers at 5, and `--context-tolerance pressure=0:1` accepts that.
-  [Section 4](#4-when-a-supplier-almost-matches-context-tolerance) explains the flag.
+- **The kiln's gas is a proxy.** The kiln's burners ask for gas at 4e5 Pa (4 bar), the only
+  supplier delivers at 5e5 Pa (5 bar), and `--context-tolerance "pressure=0:1e5 Pa"`
+  accepts that. [Section 4](#4-when-a-supplier-almost-matches-context-tolerance) explains
+  the flag.
 - **The gas moved.** `NaturalGasSupply` places extraction and pipeline transport in `NO`,
   the gas's origin, not at the Danish consumer, and every model below it works with that.
 - **Cutoffs hang where they happened.** Limestone (`fi_15200`) and lime (`fi_37420`) are
@@ -108,7 +109,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2020 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1
+    --context-tolerance "pressure=0:1e5 Pa"
 ```
 
 ```text
@@ -137,52 +138,55 @@ declares in its `Coverage` which values it can deliver. Both sides are in Python
 the match is.
 
 By default it is exact. In the shipped chain the kiln's burners ask for gas at
-**4 bar** and `NaturalGasSupply` delivers at **5 bar**, so without any flag the kiln's gas
-is not answered:
+**4e5 Pa** (4 bar) and `NaturalGasSupply` delivers at **5e5 Pa** (5 bar), so without any
+flag the kiln's gas is not answered:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]
+  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [cutoff: coverage_excluded]
 ```
 
 `coverage_excluded` rather than `no_model_found`: a supplier exists, and its coverage is
 what refused.
 
-### Accept a nearby value: `--context-tolerance NAME=BELOW:ABOVE`
+### Accept a nearby value: `--context-tolerance "NAME=BELOW:ABOVE UNIT"`
 
 ```bash
---context-tolerance pressure=0:1
+--context-tolerance "pressure=0:1e5 Pa"
 ```
 
-reads as: pressure may be met **up to 0 bar lower and up to 1 bar higher** than asked.
-Both numbers are in the unit the demand uses; nothing is converted, and a supplier
-declaring another unit is never matched. Two numbers instead of one because most
-conditions have a safe side: gas at a higher pressure can be throttled down at the burner,
-gas at a lower one can't be pushed up there.
+reads as: pressure may be met **up to 0 Pa lower and up to 1e5 Pa higher** than asked. The
+unit is resolved through the same catalog as everything else -- a symbol (`Pa`), a
+vocabulary id (`PA`) or the full IRI all work -- and a condition may be asked in *any* unit
+of the same quantity kind: a demand in bar against a tolerance in Pa is converted exactly.
+Two numbers instead of one because most conditions have a safe side: gas at a higher
+pressure can be throttled down at the burner, gas at a lower one can't be pushed up there.
 
-With the flag, the demand is moved to 5 bar, answered by `NaturalGasSupply`, and the tree
+With the flag, the demand is moved to 5e5 Pa, answered by `NaturalGasSupply`, and the tree
 says so:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
+  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
 ```
 
 The parentheses show what was asked; the brackets show what was conceded. The summary
-counts it as `1 proxy`. A 6-bar demand would not be answered with `pressure=0:1`, because
-5 is below 6.
+counts it as `1 proxy`. A 6e5 Pa (6 bar) demand would not be answered with
+`pressure=0:1e5 Pa`, because 5e5 is below 6e5.
 
 Repeat the flag for each condition, e.g.
-`--context-tolerance pressure=0:1 --context-tolerance temperature=0:10`. A condition given
-twice, or a malformed value, stops the run with exit code `2` before anything runs.
+`--context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K"`. A
+condition given twice, a malformed value, or a unit the catalog does not know stops the
+run with exit code `2` before anything runs.
 
 ### Several conditions: `--proxy-order`
 
 By default, tolerances are tried **one condition at a time**. That's deliberate: moving
 two conditions together is a bigger concession, and trailrunner makes you ask for it. To
-see the difference, put this in `burner_models.py`: a burner that asks for gas at 4 bar
-*and* 280 K, and a grid that delivers 5 bar at 288 K.
+see the difference, put this in `burner_models.py`: a burner that asks for gas at 4e5 Pa
+(4 bar) *and* 280 K, and a grid that delivers 5e5 Pa (5 bar) at 288 K.
 
 ```python title="burner_models.py"
 from trailrunner import ContextRange, Coverage, Demand, Exchange, Flow, Model, Property, Result
+from trailrunner.core.units import KELVIN, PA
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
@@ -190,14 +194,14 @@ CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
 
 class Burner(Model):
-    """Asks for its gas at 4 bar and 280 K."""
+    """Asks for its gas at 4e5 Pa and 280 K."""
 
     produces = [HEAT]
 
     def apply(self, demand: Demand) -> Result:
         gas = demand.amount / 0.9
         where = dict(location=demand.flow.location, time=demand.flow.time)
-        wanted = (Property("pressure", 4.0, "bar"), Property("temperature", 280.0, "K"))
+        wanted = (Property("pressure", 4e5, PA), Property("temperature", 280.0, KELVIN))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
             technosphere=[Demand(flow=Flow(iri=GAS, context=wanted, **where), amount=gas, unit="MJ")],
@@ -206,12 +210,12 @@ class Burner(Model):
 
 
 class GasGrid(Model):
-    """Delivers at 5 bar and 288 K, and nothing else."""
+    """Delivers at 5e5 Pa and 288 K, and nothing else."""
 
     produces = [GAS]
     coverage = Coverage(context=(
-        ContextRange("pressure", "bar", 5.0, 5.0),
-        ContextRange("temperature", "K", 288.0, 288.0),
+        ContextRange("pressure", PA, 5e5, 5e5),
+        ContextRange("temperature", KELVIN, 288.0, 288.0),
     ))
 
     def apply(self, demand: Demand) -> Result:
@@ -228,12 +232,12 @@ answer it:
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
     --amount 100 --unit MJ --location CH --year 2030 \
     --models burner_models.py \
-    --context-tolerance pressure=0:1 --context-tolerance temperature=0:10
+    --context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K"
 ```
 
 ```text
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (pressure=4 bar, temperature=280 K)  [cutoff: coverage_excluded]
+  111.111 MJ natural-gas @CH/2030 (pressure=400000 Pa, temperature=280 K)  [cutoff: coverage_excluded]
 ```
 
 Moving pressure alone leaves the temperature wrong, and the other way round.
@@ -245,7 +249,7 @@ condition is written `context.<name>`:
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
     --amount 100 --unit MJ --location CH --year 2030 \
     --models burner_models.py \
-    --context-tolerance pressure=0:1 --context-tolerance temperature=0:10 \
+    --context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K" \
     --proxy-order context.pressure,context.temperature,context.pressure+context.temperature
 ```
 
@@ -256,12 +260,12 @@ uv run trailrunner run https://vocab.sentier.dev/products/heat \
 attribution: allocation=none, capital=per_output
 
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (pressure=4 bar, temperature=280 K)  [proxy: context: pressure 4 bar -> 5 bar; context: temperature 280 K -> 288 K]
+  111.111 MJ natural-gas @CH/2030 (pressure=400000 Pa, temperature=280 K)  [proxy: context: pressure 400000 Pa -> 500000 Pa; context: temperature 280 K -> 288 K]
 ```
 
 That order reads: try pressure alone, then temperature alone, and only if neither works,
 both together. Leave out the last entry and the run won't combine them. Each condition
-still has to stay within its own tolerance: with `temperature=0:5`, 280 K can't reach
+still has to stay within its own tolerance: with `temperature=0:5 K`, 280 K can't reach
 288 K and the demand stays a cutoff, whatever the order says.
 
 | `--proxy-order` | tries |
@@ -322,7 +326,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1 \
+    --context-tolerance "pressure=0:1e5 Pa" \
     --method gwp100.parquet
 ```
 
@@ -362,7 +366,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1 \
+    --context-tolerance "pressure=0:1e5 Pa" \
     --dynamic radiative_forcing --horizon 100
 ```
 
@@ -425,7 +429,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance pressure=0:1 --max-depth 2
+    --context-tolerance "pressure=0:1e5 Pa" --max-depth 2
 ```
 
 ```text
@@ -436,8 +440,8 @@ attribution: allocation=none, capital=per_output
 traversal was truncated: max_depth or max_nodes was reached
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
-    68.75 Nm3 natural-gas-at-production @NO/2030  [cutoff: max_depth]
+  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+    68.75 m3 natural-gas-at-production @NO/2030  [cutoff: max_depth]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [cutoff: max_depth]
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]
     8.46561 kWh electricity-natural-gas @DK/2030  [cutoff: max_depth]

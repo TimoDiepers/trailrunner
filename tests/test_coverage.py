@@ -1,6 +1,7 @@
 import pytest
 
 from trailrunner.core.flow import Flow, Property
+from trailrunner.core.units import KG, KILOMETRE, METRE, PA
 from trailrunner.params.coverage import ContextRange, Coverage
 
 
@@ -43,23 +44,33 @@ def test_coverage_is_hashable():
     assert hash(coverage) == hash(Coverage(locations=frozenset({"CH"}), time_range=(2020, 2050)))
 
 
-def test_context_range_restricts_only_flows_that_name_the_condition():
-    coverage = Coverage(context=(ContextRange("pressure", "bar", 5.0, 5.0),))
+def test_a_flow_naming_no_condition_is_covered():
+    coverage = Coverage(context=(ContextRange("pressure", PA, 5e5, 5e5),))
     assert coverage.covers(Flow(iri="gas"))
-    assert coverage.covers(Flow(iri="gas", context=(Property("pressure", 5.0, "bar"),)))
-    assert not coverage.covers(Flow(iri="gas", context=(Property("pressure", 4.0, "bar"),)))
 
 
-def test_context_in_another_unit_is_not_covered():
-    coverage = Coverage(context=(ContextRange("pressure", "bar", 0.0, 10.0),))
-    assert not coverage.covers(Flow(iri="gas", context=(Property("pressure", 4.0, "psi"),)))
+def test_context_is_matched_in_the_declared_unit():
+    coverage = Coverage(context=(ContextRange("pressure", PA, 5e5, 5e5),))
+    assert coverage.covers(Flow(iri="gas", context=(Property("pressure", 5e5, PA),)))
+    assert not coverage.covers(Flow(iri="gas", context=(Property("pressure", 4e5, PA),)))
+
+
+def test_context_in_another_unit_of_the_same_kind_is_converted():
+    coverage = Coverage(context=(ContextRange("distance", KILOMETRE, 0.0, 2000.0),))
+    assert coverage.covers(Flow(iri="t", context=(Property("distance", 1.5e6, METRE),)))
+    assert not coverage.covers(Flow(iri="t", context=(Property("distance", 2.5e6, METRE),)))
+
+
+def test_context_of_another_kind_is_not_covered():
+    coverage = Coverage(context=(ContextRange("pressure", PA, 0.0, 1e6),))
+    assert not coverage.covers(Flow(iri="gas", context=(Property("pressure", 4.0, KG),)))
 
 
 def test_a_context_condition_the_coverage_does_not_declare_is_no_restriction():
-    coverage = Coverage(context=(ContextRange("pressure", "bar", 5.0, 5.0),))
+    coverage = Coverage(context=(ContextRange("pressure", PA, 5e5, 5e5),))
     assert coverage.covers(Flow(iri="gas", context=(Property("purity", 0.9, "-"),)))
 
 
 def test_context_range_rejects_minimum_above_maximum():
     with pytest.raises(ValueError, match="minimum"):
-        ContextRange("pressure", "bar", 6.0, 5.0)
+        ContextRange("pressure", PA, 6e5, 5e5)

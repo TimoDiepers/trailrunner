@@ -57,12 +57,13 @@ MODELS = [
     # for a past year reaches the meter, one for a future year reaches the
     # calculation, and Glossary.resolve does the choosing.
     #
-    # The kiln's burners take gas at 4 bar and NaturalGasSupply delivers at 5,
-    # so tier 1 alone leaves the kiln's gas a coverage_excluded cutoff. Allow
-    # pressure to be met higher (`--context-tolerance pressure=0:1` on the
-    # CLI, ProxySettings(context_tolerance=...) in Python) and tier 2 answers
-    # it, on the record. The gas plant's gas names no pressure and needs none.
-    CementPlant(params=_cement_params, burner_pressure=4.0),
+    # The kiln's burners take gas at 4e5 Pa (4 bar) and NaturalGasSupply
+    # delivers at 5e5 Pa, so tier 1 alone leaves the kiln's gas a
+    # coverage_excluded cutoff. Allow pressure to be met higher
+    # (`--context-tolerance "pressure=0:1e5 Pa"` on the CLI,
+    # ProxySettings(context_tolerance=...) in Python) and tier 2 answers it,
+    # on the record. The gas plant's gas names no pressure and needs none.
+    CementPlant(params=_cement_params, burner_pressure=4e5),
     MeteredCementPlant(params=_cement_metered_params),
     GridElectricity(params=_grid_params),
     GasPower(params=_gas_params),

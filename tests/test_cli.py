@@ -146,28 +146,44 @@ CEMENT_RUN = [
 def test_without_a_context_tolerance_the_kilns_4_bar_gas_is_a_coverage_miss(capsys):
     assert main(CEMENT_RUN) == 0
     out = capsys.readouterr().out
-    assert "fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]" in out
+    assert "fi_12020 @DK/2030 (pressure=400000 Pa)  [cutoff: coverage_excluded]" in out
 
 
 def test_a_context_tolerance_lets_5_bar_gas_answer_it_as_a_proxy(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1e5 Pa"]) == 0
     out = capsys.readouterr().out
-    assert "[proxy: context: pressure 4 bar -> 5 bar]" in out
+    assert "[proxy: context: pressure 400000 Pa -> 500000 Pa]" in out
     assert "1 proxy" in out
 
 
 def test_a_context_tolerance_that_forbids_the_side_leaves_the_cutoff(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=1:0"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=1e5:0 Pa"]) == 0
     out = capsys.readouterr().out
     # Tier 1's reason wins: widening the coverage is what would fix it.
-    assert "(pressure=4 bar)  [cutoff: coverage_excluded]" in out
+    assert "(pressure=400000 Pa)  [cutoff: coverage_excluded]" in out
     assert "0 proxies" in out
 
 
-@pytest.mark.parametrize("bad", ["pressure", "pressure=1", "=0:1", "pressure=a:b", "pressure=-1:0"])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "pressure",
+        "pressure=1 Pa",
+        "=0:1 Pa",
+        "pressure=a:b Pa",
+        "pressure=-1:0 Pa",
+        "pressure=0:1e5",
+    ],
+)
 def test_a_malformed_context_tolerance_is_rejected_before_anything_runs(bad, capsys):
     assert main([*CEMENT_RUN, "--context-tolerance", bad]) == 2
     assert "context tolerance" in capsys.readouterr().err
+
+
+def test_an_unknown_context_tolerance_unit_is_rejected_before_anything_runs(capsys):
+    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1e5 bogus"])
+    assert code == 2
+    assert "'bogus'" in capsys.readouterr().err
 
 
 def test_proxy_order_parses_entries_and_combinations():
@@ -188,7 +204,7 @@ def test_proxy_order_parses_entries_and_combinations():
     ],
 )
 def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, capsys):
-    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1", "--proxy-order", order])
+    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1e5 Pa", "--proxy-order", order])
     assert code == 2
     assert message in capsys.readouterr().err
 
@@ -196,8 +212,8 @@ def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, caps
 def test_a_context_tolerance_given_twice_is_rejected(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", "pressure=0:1",
-        "--context-tolerance", "pressure=0:2",
+        "--context-tolerance", "pressure=0:1e5 Pa",
+        "--context-tolerance", "pressure=0:2e5 Pa",
     ])
     assert code == 2
     assert "more than once" in capsys.readouterr().err
@@ -206,8 +222,8 @@ def test_a_context_tolerance_given_twice_is_rejected(capsys):
 def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", "pressure=0:1",
+        "--context-tolerance", "pressure=0:1e5 Pa",
         "--proxy-order", "context.pressure",
     ])
     assert code == 0
-    assert "[proxy: context: pressure 4 bar -> 5 bar]" in capsys.readouterr().out
+    assert "[proxy: context: pressure 400000 Pa -> 500000 Pa]" in capsys.readouterr().out

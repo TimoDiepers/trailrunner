@@ -17,7 +17,7 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS, YEAR
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, PA, UNITLESS, YEAR
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
 
@@ -97,9 +97,9 @@ def test_cement_plant_demands_limestone_gas_steam_and_electricity(cement_params)
 
 
 def test_burner_pressure_goes_on_the_gas_demand_and_nothing_else(cement_params):
-    result = CementPlant(params=cement_params, burner_pressure=4.0).apply(cement_demand())
+    result = CementPlant(params=cement_params, burner_pressure=4e5).apply(cement_demand())
     by_iri = {d.flow.iri: d for d in result.technosphere}
-    assert by_iri[NATURAL_GAS].flow.context == (Property("pressure", 4.0, "bar"),)
+    assert by_iri[NATURAL_GAS].flow.context == (Property("pressure", 4e5, PA),)
     assert all(d.flow.context == () for iri, d in by_iri.items() if iri != NATURAL_GAS)
 
 

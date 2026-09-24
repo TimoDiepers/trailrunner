@@ -12,7 +12,7 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import ContextRange, Coverage
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, PystTaxonomy, StaticTaxonomy
-from trailrunner.core.units import KG, MJ, NUM
+from trailrunner.core.units import KG, KILOMETRE, METRE, MJ, NUM, PA, TONNE
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GREEN_TRUCK = "https://vocab.sentier.dev/products/truck-green"
@@ -509,59 +509,82 @@ GAS = "https://vocab.sentier.dev/products/gas"
 
 class FiveBarGas(Model):
     produces = [GAS]
-    coverage = Coverage(context=(ContextRange("pressure", "bar", 5.0, 5.0),))
+    coverage = Coverage(context=(ContextRange("pressure", PA, 5e5, 5e5),))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
 
-def gas_at(bar, unit="bar"):
+def gas_at(pascal, unit=PA):
     return Demand(
-        flow=Flow(iri=GAS, location="CH", time=2030, context=(Property("pressure", bar, unit),)),
+        flow=Flow(iri=GAS, location="CH", time=2030, context=(Property("pressure", pascal, unit),)),
         amount=10.0,
         unit=MJ,
     )
 
 
-PRESSURE_UP_TO_ONE_BAR_HIGHER = ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+PRESSURE_UP_TO_ONE_BAR_HIGHER = ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})
 
 
 def test_context_is_moved_to_the_value_a_model_covers():
-    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4.0))
+    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4e5))
     assert isinstance(offer.model, FiveBarGas)
-    assert offer.demand.flow.get_context("pressure") == Property("pressure", 5.0, "bar")
-    assert offer.resolution["relaxations"] == ["context: pressure 4 bar -> 5 bar"]
+    assert offer.demand.flow.get_context("pressure") == Property("pressure", 5e5, PA)
+    assert offer.resolution["relaxations"] == ["context: pressure 400000 Pa -> 500000 Pa"]
 
 
 def test_asked_and_answered_differ_by_the_relaxed_context():
-    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4.0))
-    assert offer.resolution["asked"].endswith("@CH/2030 [pressure=4 bar]")
-    assert offer.resolution["answered"].endswith("@CH/2030 [pressure=5 bar]")
+    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4e5))
+    assert offer.resolution["asked"].endswith("@CH/2030 [pressure=400000 Pa]")
+    assert offer.resolution["answered"].endswith("@CH/2030 [pressure=500000 Pa]")
 
 
 def test_context_is_never_moved_to_the_side_the_tolerance_forbids():
     """A 6-bar burner cannot run on 5-bar gas, however close it is."""
-    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(6.0)) is None
+    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(6e5)) is None
 
 
 def test_context_is_not_moved_beyond_the_tolerance():
-    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(3.0)) is None
+    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(3e5)) is None
 
 
 def test_context_is_not_relaxed_without_a_tolerance():
-    assert provider([FiveBarGas()]).offer(gas_at(4.0)) is None
+    assert provider([FiveBarGas()]).offer(gas_at(4e5)) is None
 
 
-def test_context_in_another_unit_is_not_relaxed():
-    settings = ProxySettings(context_tolerance={"pressure": (0.0, 100.0)})
-    assert provider([FiveBarGas()], settings=settings).offer(gas_at(60.0, unit="psi")) is None
+def test_context_in_another_quantity_kind_is_not_relaxed():
+    settings = ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})
+    assert provider([FiveBarGas()], settings=settings).offer(gas_at(4.0, unit=KG)) is None
+
+
+HAUL = "https://vocab.sentier.dev/products/haul"
+
+
+class TenKilometreHaul(Model):
+    produces = [HAUL]
+    coverage = Coverage(context=(ContextRange("distance", KILOMETRE, 10.0, 10.0),))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+def test_context_tolerance_in_another_unit_than_the_ask():
+    settings = ProxySettings(context_tolerance={"distance": (0.0, 1.0, KILOMETRE)})
+    asked = Demand(
+        flow=Flow(iri=HAUL, context=(Property("distance", 9500.0, METRE),)),
+        amount=1.0,
+        unit=TONNE,
+    )
+    offer = provider([TenKilometreHaul()], settings=settings).offer(asked)
+    assert offer.demand.flow.get_context("distance") == Property("distance", 10000.0, METRE)
+    assert offer.resolution["relaxations"] == ["context: distance 9500 m -> 10000 m"]
 
 
 def test_context_budget_is_respected():
     settings = ProxySettings(
-        max_steps={"context": 0}, context_tolerance={"pressure": (0.0, 1.0)}
+        max_steps={"context": 0}, context_tolerance={"pressure": (0.0, 1e5, PA)}
     )
-    assert provider([FiveBarGas()], settings=settings).offer(gas_at(4.0)) is None
+    assert provider([FiveBarGas()], settings=settings).offer(gas_at(4e5)) is None
 
 
 def test_a_demand_naming_no_pressure_is_answered_exactly():
@@ -587,7 +610,7 @@ def gas_at_both(bar, kelvin):
     return Demand(flow=Flow(iri=GAS, context=context), amount=10.0, unit=MJ)
 
 
-BOTH_TOLERATED = {"pressure": (0.0, 1.0), "temperature": (0.0, 10.0)}
+BOTH_TOLERATED = {"pressure": (0.0, 1.0, "bar"), "temperature": (0.0, 10.0, "K")}
 
 
 def test_plain_context_never_moves_two_conditions_together():
@@ -636,23 +659,23 @@ def test_a_context_condition_combines_with_location():
     class RegionalFiveBarGas(FiveBarGas):
         coverage = Coverage(
             locations=frozenset({"RER"}),
-            context=(ContextRange("pressure", "bar", 5.0, 5.0),),
+            context=(ContextRange("pressure", PA, 5e5, 5e5),),
         )
 
     settings = ProxySettings(
         order=(("location", "context.pressure"),),
-        context_tolerance={"pressure": (0.0, 1.0)},
+        context_tolerance={"pressure": (0.0, 1e5, PA)},
     )
-    offer = provider([RegionalFiveBarGas()], settings=settings).offer(gas_at(4.0))
+    offer = provider([RegionalFiveBarGas()], settings=settings).offer(gas_at(4e5))
     assert offer.resolution["relaxations"] == [
         "location: CH -> RER",
-        "context: pressure 4 bar -> 5 bar",
+        "context: pressure 400000 Pa -> 500000 Pa",
     ]
 
 
 def test_a_combined_context_entry_stays_within_each_tolerance():
     settings = ProxySettings(
         order=(("context.pressure", "context.temperature"),),
-        context_tolerance={"pressure": (0.0, 1.0), "temperature": (0.0, 2.0)},
+        context_tolerance={"pressure": (0.0, 1.0, "bar"), "temperature": (0.0, 2.0, "K")},
     )
     assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0)) is None
