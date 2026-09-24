@@ -104,7 +104,8 @@ works in the tolerance's unit and writes the snapped value back in the
 
 Because the vocab has no `BAR`, the showcase pressure becomes Pa:
 `Property("pressure", 4e5, PA)`, tolerance `(0.0, 1e5, PA)`. Display goes
-through the UCUM symbol (`pressure=4e+05 Pa`). See open points.
+through the UCUM symbol (`pressure=4e+05 Pa`). Pressure is specified in Pa
+throughout — decided, not a stopgap.
 
 ### Remodelling forced by the strict rule
 
@@ -244,7 +245,7 @@ standard: `time: 2031-03-02 -> 2030`.
   that concedes nothing.
 - The demand's time is a date (`2030-06-15`), answered by year-declared
   models through containment; the existing time relaxation line stays.
-- Pressure is shown in Pa (see open points).
+- Pressure is shown in Pa.
 - The regenerated SVGs in `docs/assets/showcase/` are rebuilt.
 
 ## 5. Testing
@@ -272,9 +273,6 @@ standard: `time: 2031-03-02 -> 2030`.
 
 ## Open points
 
-1. **Pressure in Pa.** The vocab has no `BAR`. Strict means the showcase says
-   `4e+05 Pa`. Options: accept it; or open an upstream request at sentier for
-   `BAR` (and `TONNE-KiloM`) and switch when it lands. The spec assumes Pa.
-2. **Breaking change.** Every model, parameter parquet and method file
+1. **Breaking change.** Every model, parameter parquet and method file
    changes. No compatibility shim is planned; `docs/content/writing_a_model.md`
    and the API pages document the new contract.
