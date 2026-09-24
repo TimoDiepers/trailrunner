@@ -64,6 +64,49 @@ The same 1000 kg, asked for in four different places and years:
    RER   2040     0.055   10.0     1.030     2447.3
 ```
 
+Not every process needs computing, though: where a process has real history —
+years of stack-monitor readings, say — trailrunner reads that instead of
+calculating it, and reaches for a computational model only where there is
+none, such as a future year or a process that does not exist yet.
+
+The plant has a stack monitor and years of historic readings.
+`MeteredCementPlant` declares the same product IRI as `CementPlant` and a
+`Coverage` that ends where the other one begins. Nothing else changes:
+[`Glossary`](api/glossary.md)`.resolve` already filters candidates by
+coverage, so the year on the demand decides which one answers.
+
+```python
+coverage = Coverage(time_range=(2018, 2025))  # MeteredCementPlant
+coverage = Coverage(time_range=(2026, 2050))  # CementPlant
+```
+
+```text
+2023  answered by MeteredCementPlant
+      source: measured
+      direct CO2:  562.0 kg in 1 exchange(s)
+           562.0 kg
+2030  answered by CementPlant
+      source: modelled
+      direct CO2:  536.1 kg in 2 exchange(s)
+           397.5 kg
+           138.6 kg
+```
+
+Two exchanges in 2030, one in 2023, and that difference is the point. The
+model knows which kilogram came from the limestone and which from the flame,
+because it computed them separately. The meter does not: a stack monitor sees
+one plume and cannot tell you what made it.
+
+Note what the metered model still sends upstream. Its gas, its lime and its
+electricity are *inputs* — their emissions happen somewhere else — so they go
+back on the queue and are answered by whoever supplies them, exactly as the
+computed model's are. A meter at the fence line says nothing about what
+happens beyond it.
+
+The normative choices a study still has to make, and a model that co-produces,
+are in [`examples/coproduction.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/coproduction.ipynb)
+and [Attribution](content/attribution.md).
+
 ---
 
 ## 2. Models find each other through a vocabulary
@@ -210,54 +253,7 @@ Every concession is deliberate, ordered by the practitioner, and written down.
 
 ---
 
-## 4. Some data is measured
-
-A model does not necessarily have to compute anything. What makes something a model here is
-that it answers a demand, not that it calculates one — so a process that has
-actual measured data is a model too, reading its numbers from the same kind of parquet
-any other parameter comes from.
-
-The plant has a stack monitor and years of historic readings. `MeteredCementPlant`
-declares the same product IRI as `CementPlant` and a `Coverage` that ends where
-the other one begins. Nothing else changes:
-[`Glossary`](api/glossary.md)`.resolve` already filters candidates by coverage,
-so the year on the demand decides which model answers.
-
-```python
-coverage = Coverage(time_range=(2018, 2025))  # MeteredCementPlant
-coverage = Coverage(time_range=(2026, 2050))  # CementPlant
-```
-
-```text
-2023  answered by MeteredCementPlant
-      source: measured
-      direct CO2:  562.0 kg in 1 exchange(s)
-           562.0 kg
-2030  answered by CementPlant
-      source: modelled
-      direct CO2:  536.1 kg in 2 exchange(s)
-           397.5 kg
-           138.6 kg
-```
-
-Two exchanges in 2030, one in 2023, and that difference is the beat. The model
-knows which kilogram came from the limestone and which from the flame, because
-it computed them separately. The meter does not: a stack monitor sees one plume
-and cannot tell you what made it.
-
-Note what the metered model still sends upstream. Its gas, its lime and its
-electricity are *inputs* — their emissions happen somewhere else — so they go
-back on the queue and are answered by whoever supplies them, exactly as the
-computed model's are. A meter at the fence line says nothing about what happens
-beyond it.
-
-The normative choices a study still has to make, and a model that co-produces,
-are in [`examples/coproduction.ipynb`](https://github.com/TimoDiepers/trailrunner/blob/main/examples/coproduction.ipynb)
-and [Attribution](content/attribution.md).
-
----
-
-## 5. Time rides along
+## 4. Time rides along
 
 Nothing in the loop was ever told about time. A [`Flow`](api/flow.md) carries its
 year the way it carries its location, so every demand pushed, every emission
@@ -306,7 +302,7 @@ separate reading of an inventory whose dates were never lost.
 
 ---
 
-## 6. The run leaves a record
+## 5. The run leaves a record
 
 ```python
 print(report.summary())
