@@ -89,8 +89,8 @@ lower can't be boosted. The move is written into the tree and counted as a proxy
 | `IRI`, `--amount`, `--unit` | what to demand, and how much (required) |
 | `--location`, `--year` | where and when; every model downstream receives them |
 | `--models FILE` | a `.py` file defining a `MODELS` list (required) |
-| `--context-tolerance NAME=BELOW:ABOVE` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in its own unit; repeat per condition |
-| `--proxy-order ORDER` | which conditions to relax, in order: `,` between tries, `+` to move conditions together, e.g. `context.pressure,context.pressure+context.temperature`; default is one condition at a time |
+| `--context-tolerance NAME=BELOW:ABOVE` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in its own unit; `NAME` is written exactly as the models name it (`pressure` in the shipped chain, a full IRI where models use one); repeat per condition |
+| `--proxy-order ORDER` | which conditions to relax, in order: `,` between tries, `+` to move conditions together, each written `context.<name>`, e.g. `context.$P,context.$P+context.$T` with `$P`, `$T` holding condition IRIs such as `http://qudt.org/vocab/quantitykind/Pressure`; default is one condition at a time |
 | `--method FILE` | characterize with a method parquet and print a score |
 | `--dynamic METRIC`, `--horizon YEARS` | a time-explicit result, e.g. `radiative_forcing` |
 | `--allocation`, `--capital` | the run's normative choices for co-products and capital goods |

@@ -655,3 +655,35 @@ def test_a_combined_context_entry_stays_within_each_tolerance():
         context_tolerance={"pressure": (0.0, 1.0), "temperature": (0.0, 2.0)},
     )
     assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0)) is None
+
+
+PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
+BAR = "http://qudt.org/vocab/unit/BAR"
+
+
+class FiveBarGasByIri(Model):
+    produces = [GAS]
+    coverage = Coverage(context=(ContextRange(PRESSURE, BAR, 5.0, 5.0),))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+def test_iri_conditions_match_by_iri_and_are_written_in_full():
+    demand = Demand(
+        flow=Flow(iri=GAS, context=(Property(PRESSURE, 4.0, BAR),)), amount=10.0, unit="MJ"
+    )
+    settings = ProxySettings(
+        order=(f"context.{PRESSURE}",), context_tolerance={PRESSURE: (0.0, 1.0)}
+    )
+    offer = provider([FiveBarGasByIri()], settings=settings).offer(demand)
+    assert offer.resolution["relaxations"] == [f"context: {PRESSURE} 4 {BAR} -> 5 {BAR}"]
+    assert offer.resolution["answered"].endswith(f"[{PRESSURE}=5 {BAR}]")
+
+
+def test_a_short_name_does_not_match_an_iri_condition():
+    demand = Demand(
+        flow=Flow(iri=GAS, context=(Property("Pressure", 4.0, "BAR"),)), amount=10.0, unit="MJ"
+    )
+    settings = ProxySettings(context_tolerance={"Pressure": (0.0, 1.0)})
+    assert provider([FiveBarGasByIri()], settings=settings).offer(demand) is None

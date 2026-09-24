@@ -210,3 +210,29 @@ def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
     ])
     assert code == 0
     assert "[proxy: context: pressure 4 bar -> 5 bar]" in capsys.readouterr().out
+
+
+def test_a_tolerance_no_model_declares_warns_and_suggests_the_iri(tmp_path, capsys):
+    path = tmp_path / "iri_models.py"
+    path.write_text(textwrap.dedent('''
+        from trailrunner import ContextRange, Coverage, Exchange, Model, Result
+
+        class Grid(Model):
+            produces = ["gas"]
+            coverage = Coverage(context=(ContextRange(
+                "http://qudt.org/vocab/quantitykind/Pressure",
+                "http://qudt.org/vocab/unit/BAR", 5.0, 5.0),))
+
+            def apply(self, demand):
+                return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+        MODELS = [Grid()]
+    '''))
+    code = main([
+        "run", "gas", "--amount", "1", "--unit", "MJ", "--models", str(path),
+        "--context-tolerance", "pressure=0:1",
+    ])
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "no model declares a context condition named 'pressure'" in err
+    assert "did you mean http://qudt.org/vocab/quantitykind/Pressure?" in err

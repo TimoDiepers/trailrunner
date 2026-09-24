@@ -181,12 +181,24 @@ two conditions together is a bigger concession, and trailrunner makes you ask fo
 see the difference, put this in `burner_models.py`: a burner that asks for gas at 4 bar
 *and* 280 K, and a grid that delivers 5 bar at 288 K.
 
+This time the conditions and their units are not free text but
+[QUDT](https://qudt.org) IRIs: the quantity kinds `Pressure` and
+`ThermodynamicTemperature`, in the units `BAR` and `K`. A condition matches only when the
+demand and the coverage name the **same IRI in the same unit IRI**, so "pressure" in one
+model and "Pressure" in another can't be confused, and a reader can look up exactly what
+was meant.
+
 ```python title="burner_models.py"
 from trailrunner import ContextRange, Coverage, Demand, Exchange, Flow, Model, Property, Result
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
+
+PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
+TEMPERATURE = "http://qudt.org/vocab/quantitykind/ThermodynamicTemperature"
+BAR = "http://qudt.org/vocab/unit/BAR"
+KELVIN = "http://qudt.org/vocab/unit/K"
 
 
 class Burner(Model):
@@ -197,7 +209,7 @@ class Burner(Model):
     def apply(self, demand: Demand) -> Result:
         gas = demand.amount / 0.9
         where = dict(location=demand.flow.location, time=demand.flow.time)
-        wanted = (Property("pressure", 4.0, "bar"), Property("temperature", 280.0, "K"))
+        wanted = (Property(PRESSURE, 4.0, BAR), Property(TEMPERATURE, 280.0, KELVIN))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
             technosphere=[Demand(flow=Flow(iri=GAS, context=wanted, **where), amount=gas, unit="MJ")],
@@ -210,8 +222,8 @@ class GasGrid(Model):
 
     produces = [GAS]
     coverage = Coverage(context=(
-        ContextRange("pressure", "bar", 5.0, 5.0),
-        ContextRange("temperature", "K", 288.0, 288.0),
+        ContextRange(PRESSURE, BAR, 5.0, 5.0),
+        ContextRange(TEMPERATURE, KELVIN, 288.0, 288.0),
     ))
 
     def apply(self, demand: Demand) -> Result:
@@ -221,6 +233,14 @@ class GasGrid(Model):
 MODELS = [Burner(), GasGrid()]
 ```
 
+On the command line a condition is named by the same IRI. Shell variables keep the
+commands readable:
+
+```bash
+P=http://qudt.org/vocab/quantitykind/Pressure
+T=http://qudt.org/vocab/quantitykind/ThermodynamicTemperature
+```
+
 Both conditions are off, and both are within tolerance, yet two tolerances alone don't
 answer it:
 
@@ -228,25 +248,26 @@ answer it:
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
     --amount 100 --unit MJ --location CH --year 2030 \
     --models burner_models.py \
-    --context-tolerance pressure=0:1 --context-tolerance temperature=0:10
+    --context-tolerance $P=0:1 --context-tolerance $T=0:10
 ```
 
 ```text
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (pressure=4 bar, temperature=280 K)  [cutoff: coverage_excluded]
+  111.111 MJ natural-gas @CH/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR, http://qudt.org/vocab/quantitykind/ThermodynamicTemperature=280 http://qudt.org/vocab/unit/K)  [cutoff: coverage_excluded]
 ```
 
-Moving pressure alone leaves the temperature wrong, and the other way round.
-`--proxy-order` says which relaxations to try and in what order: entries are separated by
-commas and tried left to right, and `+` joins conditions that move **together**. Each
-condition is written `context.<name>`:
+The tree prints every condition and unit as its full IRI, so it is always clear which
+concept was asked for. Moving pressure alone leaves the temperature wrong, and the other
+way round. `--proxy-order` says which relaxations to try and in what order: entries are
+separated by commas and tried left to right, and `+` joins conditions that move
+**together**. Each condition is written `context.<IRI>`:
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
     --amount 100 --unit MJ --location CH --year 2030 \
     --models burner_models.py \
-    --context-tolerance pressure=0:1 --context-tolerance temperature=0:10 \
-    --proxy-order context.pressure,context.temperature,context.pressure+context.temperature
+    --context-tolerance $P=0:1 --context-tolerance $T=0:10 \
+    --proxy-order context.$P,context.$T,context.$P+context.$T
 ```
 
 ```text
@@ -256,27 +277,37 @@ uv run trailrunner run https://vocab.sentier.dev/products/heat \
 attribution: allocation=none, capital=per_output
 
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (pressure=4 bar, temperature=280 K)  [proxy: context: pressure 4 bar -> 5 bar; context: temperature 280 K -> 288 K]
+  111.111 MJ natural-gas @CH/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR, http://qudt.org/vocab/quantitykind/ThermodynamicTemperature=280 http://qudt.org/vocab/unit/K)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR; context: http://qudt.org/vocab/quantitykind/ThermodynamicTemperature 280 http://qudt.org/vocab/unit/K -> 288 http://qudt.org/vocab/unit/K]
 ```
 
 That order reads: try pressure alone, then temperature alone, and only if neither works,
 both together. Leave out the last entry and the run won't combine them. Each condition
-still has to stay within its own tolerance: with `temperature=0:5`, 280 K can't reach
-288 K and the demand stays a cutoff, whatever the order says.
+still has to stay within its own tolerance: with `$T=0:5`, 280 K can't reach 288 K and the
+demand stays a cutoff, whatever the order says.
 
 | `--proxy-order` | tries |
 | --- | --- |
 | *(not given)* | each tolerated condition on its own, never two together |
-| `context.pressure` | pressure only; other conditions must match exactly |
-| `context.pressure,context.temperature` | pressure alone, then temperature alone; never both |
-| `context.pressure+context.temperature` | only both together |
-| `context.pressure,context.pressure+context.temperature` | pressure alone, then both |
+| `context.$P` | pressure only; other conditions must match exactly |
+| `context.$P,context.$T` | pressure alone, then temperature alone; never both |
+| `context.$P+context.$T` | only both together |
+| `context.$P,context.$P+context.$T` | pressure alone, then both |
+
+Names are matched exactly, never guessed. Write `pressure=0:1` against these models and
+nothing relaxes; the CLI says so, and points at the IRI you probably meant:
+
+```text
+warning: no model declares a context condition named 'pressure', so its tolerance relaxes nothing; did you mean http://qudt.org/vocab/quantitykind/Pressure?
+```
+
+The shipped cement chain above uses the plain name `pressure`, which is why
+`pressure=0:1` works there: the flag must name a condition exactly as the models do.
 
 Every `context.<name>` in the order needs a `--context-tolerance` for that name, or the
-run stops with exit code `2` (`'context.temperature' can never be tried: no
-context_tolerance for 'temperature'`). The CLI relaxes context only. Widening the location,
-moving the year, climbing the product taxonomy, or mixing those with context (e.g.
-`("location", "context.pressure")`), needs a [`ResolutionChain`](../resolution.md) in
+run stops with exit code `2` (`'context.<name>' can never be tried: no context_tolerance
+for '<name>'`). The CLI relaxes context only. Widening the location, moving the year,
+climbing the product taxonomy, or mixing those with context (e.g.
+`("location", "context.<name>")`), needs a [`ResolutionChain`](../resolution.md) in
 Python, which takes the same order.
 
 ## 5. Get a score: `--method`

@@ -189,22 +189,29 @@ matches, the `generalisation_exhausted` detail counts candidates per entry, e.g.
 Plain `"context"` moves one tolerated condition at a time. A demand that is off on two
 conditions, say gas asked for at 4 bar and 280 K from a grid delivering 5 bar at 288 K,
 is not answered by it, whatever the tolerances. To allow that, name each condition as a
-dimension of its own, `context.<name>`, and combine them like any other:
+dimension of its own, `context.<name>`, and combine them like any other. Here the
+conditions and units are [QUDT](https://qudt.org) IRIs, which is what the name and unit
+of a `Property` should be when the models share them:
 
 ```python
+PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
+TEMPERATURE = "http://qudt.org/vocab/quantitykind/ThermodynamicTemperature"
+
 ProxySettings(
     order=(
-        "context.pressure",                              # pressure alone
-        "context.temperature",                           # temperature alone
-        ("context.pressure", "context.temperature"),     # both, only because it's listed
+        f"context.{PRESSURE}",                                  # pressure alone
+        f"context.{TEMPERATURE}",                               # temperature alone
+        (f"context.{PRESSURE}", f"context.{TEMPERATURE}"),      # both, only because it's listed
     ),
-    context_tolerance={"pressure": (0.0, 1.0), "temperature": (0.0, 10.0)},
+    context_tolerance={PRESSURE: (0.0, 1.0), TEMPERATURE: (0.0, 10.0)},
 )
 ```
 
 ```text
-111.111 MJ natural-gas @CH/2030 (pressure=4 bar, temperature=280 K)  [proxy: context: pressure 4 bar -> 5 bar; context: temperature 280 K -> 288 K]
+111.111 MJ natural-gas @CH/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR, http://qudt.org/vocab/quantitykind/ThermodynamicTemperature=280 http://qudt.org/vocab/unit/K)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR; context: http://qudt.org/vocab/quantitykind/ThermodynamicTemperature 280 http://qudt.org/vocab/unit/K -> 288 http://qudt.org/vocab/unit/K]
 ```
+
+Names and units are compared exactly, and printed in full, so an IRI always reads as one.
 
 The same rules apply as for any combined entry. Each condition stays within its own
 tolerance and budget; a `context.<name>` missing from `max_steps` takes the `context`
@@ -213,7 +220,8 @@ budget. Conditions also combine with the other dimensions, e.g.
 `context_tolerance` for that name, since it could never be tried, and a combined entry that
 holds both `context` and one of its conditions, which would move the same condition twice.
 On the command line the same order is written
-`--proxy-order context.pressure,context.temperature,context.pressure+context.temperature`
+`--proxy-order context.$P,context.$T,context.$P+context.$T`, with `$P` and `$T` holding the
+two IRIs
 ([CLI tutorial](getting_started/cli.md#4-when-a-supplier-almost-matches-context-tolerance)).
 
 A demand with nothing to relax (no location, no year, no taxonomy behind it) gets no
