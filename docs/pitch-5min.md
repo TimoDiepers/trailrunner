@@ -34,6 +34,7 @@ answer = cement_model.apply(DEMAND)
 - Physics-aware: process can react to *where* and *when* it's asked
 
 ```python
+row = params.at(location="DK", time=2030)
 penalty = moisture_penalty(row["moisture"], row["temperature"])
 fuel = row["fuel_demand"] * clinker * penalty
 ```
@@ -43,6 +44,13 @@ fuel = row["fuel_demand"] * clinker * penalty
     DK   2030     0.040   10.0     1.000     2475.0
    RER   2030     0.060    9.0     1.044     2923.2
 ```
+
+`row` comes out of a [`trailpack`](https://github.com/TimoDiepers/trailpack)
+parquet file — units and vocabulary IRIs travel *with the column*, embedded
+in the file's own metadata, not hardcoded in the model. `.at()` looks for an
+exact `(location, time)` match; missing that, it widens the location
+hierarchy or interpolates between bracketing years — and stamps exactly
+which it did into `row.provenance`, never silently.
 
 **Measured beats modelled, when it exists.** `MeteredCementPlant` and
 `CementPlant` declare the same product, disjoint `Coverage` — the demand's
