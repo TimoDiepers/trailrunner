@@ -91,92 +91,17 @@ flowchart TB
     class I record
 ```
 
-`Orchestrator.calculate` = `while queue:`, little else. Same IRI in
-`produces` → found; everything else logged as a cutoff with a reason:
-
-One `while queue:` later:
-
-```text
-1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
-    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
-      0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-      8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
-      16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
-      5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
-      5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
-  100 kWh electricity @DK/2030  [model: GridElectricity]
-    8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
-      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
-        1.36542 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-        1.00358 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
-          0.00025943 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-          1.78638e-09 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
-          0.328503 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
-          1.16416e-07 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
-          1.16416e-06 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
-    84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
-    12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
-  1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  [cutoff: no_model_found]
-  10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [cutoff: no_model_found]
-```
-
-The same walk, drawn — processes, the flows between them, and where each one
-ended:
-
-```mermaid
-%%{init: {'layout': 'elk'}}%%
-flowchart TB
-    D(["1000 kg cement @DK/2030"]) --> CP["CementPlant<br/>DK · 2030"]
-
-    CP -->|"2475 MJ natural gas"| NGS["NaturalGasSupply<br/>DK · 2030"]
-    CP -->|"100 kWh electricity"| GE["GridElectricity<br/>DK · 2030"]
-    CP -.->|"1125 kg limestone"| X1["cutoff<br/>DK · 2030"]
-    CP -.->|"10 kg lime"| X2["cutoff<br/>DK · 2030"]
-
-    NGS -->|"68.75 Nm3 gas at production"| NGE["NaturalGasExtraction<br/>NO · 2030"]
-    NGS -->|"50.53 tkm pipeline transport"| PT["OffshorePipelineTransport<br/>NO · 2030"]
-    PT -->|"0.013 Nm3 leaked gas"| NGE
-    PT -.->|"pipe · turbine fuel · lorry · oil disposal"| X3["4 cutoffs<br/>NO · 2030"]
-
-    GE -->|"8.47 kWh gas power"| GP["GasPower<br/>DK · 2030"]
-    GE -.->|"84.66 kWh wind · 12.7 kWh hydro"| X4["2 cutoffs<br/>DK · 2030"]
-    GP -->|"49.16 MJ natural gas"| NGS
-
-    CP -->|"397.5 + 138.6 kg CO2"| INV[("inventory")]
-    GP -->|"CO2"| INV
-    NGE -->|"CO2 · gas in ground"| INV
-    PT -->|"CH4 · ethane · Hg · NMVOC"| INV
-
-    classDef model fill:#f59e0b22,stroke:#f59e0b
-    classDef gap fill:#ef444422,stroke:#ef4444,stroke-dasharray:4 3
-    classDef record fill:#8b5cf622,stroke:#8b5cf6
-    class CP,NGS,NGE,PT,GE,GP model
-    class X1,X2,X3,X4 gap
-    class INV record
-
-    linkStyle 3,4,8,10 stroke:#ef4444
-    %% the four edges into the inventory: elementary flows, not demands
-    linkStyle 12,13,14,15 stroke:#8b5cf6
-```
-
-*Black arrows are demands answered by a model, dashed red ones are cutoffs,
-violet ones are elementary flows.*
-
-Nobody wired that gas chain. The kiln asked for MJ; supply converted them to
-wellhead Nm3 and route tkm and placed both **at the origin**, so the pipeline
-model priced the leg on the Norwegian shelf, at its low-leakage tier.
-
-!!! info "Where the pipeline model comes from"
-    Reverse-engineered from BAFU-2026 ecoinvent EcoSpold data and the Bussa et al. 2025 LCI report — not invented.
+`Orchestrator.calculate` = `while queue:`, little else. Pop a demand, ask who
+can answer it, push what comes back, write everything down. A model is found
+by the IRI it declares in `produces` — no wiring, no registry.
 
 ---
 
 ## Finding fallback models
 
 Tier 1 = models. Every later tier = **concession**, written at the node.
-That last cutoff — 10 kg of lime — retried:
+
+**Tier 2 generalises the demand** one `skos:broader` step at a time:
 
 ```text
        model: BinderSupply
@@ -189,14 +114,105 @@ That last cutoff — 10 kg of lime — retried:
 "Plaster, lime **and cement**" — contains the very product this plant
 makes. Best available, poor in substance. Not hidden.
 
-**Tier 3 borrows a dataset** (kiln construction), tags it honestly:
+**Tier 3 borrows a dataset** from a curated background pack and tags it
+`incomplete`, because its own upstream is missing rather than deferred.
+
+---
+
+## The cement chain, end to end
+
+One `while queue:` later — 1000 kg of Danish cement, every tier in one run:
 
 ```text
-  8.33 kg/year cement-kiln @DK/2026   [model: CementKilnConstruction]
-    0.1 kg steel-low-alloyed @DK/2026 [background: unit_process, incomplete]
+1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+      0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+      8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: generalisation_exhausted]
+      16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: generalisation_exhausted]
+      5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: generalisation_exhausted]
+      5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: generalisation_exhausted]
+  10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [proxy: product: fi_37420 -> fi_374]
+  100 kWh electricity @DK/2030  [model: GridElectricity]
+    8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
+      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+        1.36542 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+        1.00358 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
+          0.00025943 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+          1.78638e-09 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: generalisation_exhausted]
+          0.328503 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: generalisation_exhausted]
+          1.16416e-07 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: generalisation_exhausted]
+          1.16416e-06 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: generalisation_exhausted]
+    84.6561 kWh electricity-wind @DK/2030  [cutoff: generalisation_exhausted]
+    12.6984 kWh electricity-hydro @DK/2030  [cutoff: generalisation_exhausted]
+  8.33333 kg/year cement-kiln @DK/2026  [model: CementKilnConstruction]
+    0.1 kg steel-low-alloyed @DK/2026  [background: unit_process, incomplete]
+    0.00666667 kg aluminium-primary @DK/2026  [background: unit_process, incomplete]
+  16.6667 kg/year cement-kiln @DK/2029  [model: CementKilnConstruction]
+    0.2 kg steel-low-alloyed @DK/2029  [background: unit_process, incomplete]
+    0.0133333 kg aluminium-primary @DK/2029  [background: unit_process, incomplete]
+  1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  [cutoff: generalisation_exhausted]
 ```
 
-Run tallies its own gaps:
+```mermaid
+%%{init: {'layout': 'elk'}}%%
+flowchart TB
+    D(["1000 kg cement @DK/2030"]) --> CP["CementPlant<br/>DK · 2030"]
+
+    CP -->|"2475 MJ natural gas"| NGS["NaturalGasSupply<br/>DK · 2030"]
+    CP -->|"100 kWh electricity"| GE["GridElectricity<br/>DK · 2030"]
+    CP -->|"10 kg lime"| BS["BinderSupply<br/>DK · 2030<br/>asked fi_37420, answered fi_374"]
+    CP -->|"8.33 kg/yr kiln line"| K26["CementKilnConstruction<br/>DK · 2026"]
+    CP -->|"16.7 kg/yr kiln line"| K29["CementKilnConstruction<br/>DK · 2029"]
+    CP -.->|"1125 kg limestone"| XG["cutoff<br/>DK · 2030"]
+
+    NGS -->|"68.75 Nm3 gas at production"| NGE["NaturalGasExtraction<br/>NO · 2030"]
+    NGS -->|"50.53 tkm pipeline transport"| PT["OffshorePipelineTransport<br/>NO · 2030"]
+    PT -->|"0.013 Nm3 leaked gas"| NGE
+    PT -.->|"pipe · turbine fuel · lorry · oil"| XP["4 cutoffs<br/>NO · 2030"]
+
+    GE -->|"8.47 kWh gas power"| GP["GasPower<br/>DK · 2030"]
+    GE -.->|"84.66 kWh wind · 12.7 kWh hydro"| XE["2 cutoffs<br/>DK · 2030"]
+    GP -->|"49.16 MJ natural gas"| NGS
+
+    K26 -->|"0.1 kg steel · 6.7 g aluminium"| B26["background dataset<br/>DK · 2026 · incomplete"]
+    K29 -->|"0.2 kg steel · 13 g aluminium"| B29["background dataset<br/>DK · 2029 · incomplete"]
+
+    CP -->|"536.1 kg CO2"| INV[("inventory")]
+    BS -->|"9 kg CO2"| INV
+    GP -->|"2.75 kg CO2"| INV
+    NGE -->|"4.79 kg CO2 · 71.5 Nm3 gas in ground"| INV
+    PT -->|"8.8 g CH4 · ethane · Hg · NMVOC"| INV
+    B26 -->|"18 mg CO2"| INV
+    B29 -->|"36 mg CO2"| INV
+
+    classDef t1 fill:#f59e0b22,stroke:#f59e0b
+    classDef t2 fill:#3b82f622,stroke:#3b82f6
+    classDef t3 fill:#14b8a622,stroke:#14b8a6
+    classDef gap fill:#ef444422,stroke:#ef4444,stroke-dasharray:4 3
+    classDef record fill:#8b5cf622,stroke:#8b5cf6
+    class CP,NGS,NGE,PT,GE,GP,K26,K29 t1
+    class BS t2
+    class B26,B29 t3
+    class XG,XP,XE gap
+    class INV record
+
+    linkStyle 3 stroke:#3b82f6
+    linkStyle 14,15 stroke:#14b8a6
+    linkStyle 6,10,12 stroke:#ef4444
+    linkStyle 16,17,18,19,20,21,22 stroke:#8b5cf6
+```
+
+*Amber answered as itself · blue was generalised up the vocabulary · teal is a
+borrowed background dataset · red dashed is a cutoff · violet are the
+elementary flows landing in the inventory.*
+
+Read the years. The kilns were built in **2026** and **2029**, so their
+construction and the background steel behind it are dated there; the cement
+and the gas that fires it are **2030**; and the gas itself is extracted and
+piped in **NO**, not DK. Nothing in the loop was told about time or place —
+the flows carried both.
 
 ```text
 18 nodes, 13 inventory entries
@@ -207,11 +223,14 @@ attribution: allocation=none, capital=per_output
 
 `capital=per_output` — normative choice, stated next to the numbers.
 
+!!! info "Where the pipeline model comes from"
+    Reverse-engineered from BAFU-2026 ecoinvent EcoSpold data and the Bussa et al. 2025 LCI report — not invented.
+
 ---
 
 ## Tracing time and place for free
 
-`Flow` carries its year like it carries its location. Inventory = time series:
+Those dates survived the traversal, so the inventory is already a time series:
 
 ```python
 dynamic = assess_dynamic(report, metric="radiative_forcing", horizon=100)
