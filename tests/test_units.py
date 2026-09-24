@@ -159,3 +159,21 @@ def test_a_damaged_cache_is_ignored(tmp_path):
 
 def test_metre_and_kilometre_convert():
     assert default_catalog().convert(1500.0, METRE, KILOMETRE) == pytest.approx(1.5)
+
+
+def test_one_tonne_a_year_over_a_year_is_a_thousand_kilograms():
+    from trailrunner.core.units import KG, TONNE_PER_YEAR, default_catalog
+
+    assert default_catalog().over_a_year(1.0, TONNE_PER_YEAR, KG) == pytest.approx(1000.0)
+
+
+def test_a_mass_rate_is_not_read_as_a_volume():
+    from trailrunner.core.units import M3, TONNE_PER_YEAR, default_catalog
+
+    assert default_catalog().over_a_year(1.0, TONNE_PER_YEAR, M3) is None
+
+
+def test_an_amount_is_not_a_rate():
+    from trailrunner.core.units import KG, default_catalog
+
+    assert default_catalog().over_a_year(1.0, KG, KG) is None

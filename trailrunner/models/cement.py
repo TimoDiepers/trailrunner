@@ -15,7 +15,7 @@ library had to learn about measurement for that to work.
 
 from dataclasses import replace
 
-from trailrunner.attribution import amortize
+from trailrunner.attribution import amortize, output_over_a_year
 from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
@@ -183,7 +183,8 @@ class CementPlant(Model):
         """One construction demand per operating kiln, in that kiln's build year.
 
         The demanded cement is what decides how much of the fleet is claimed:
-        ``share_of_fleet = amount / total_capacity``. Each kiln carries that
+        ``share_of_fleet = amount / total_output``, where ``total_output`` is the
+        fleet's capacity over one year, converted into the demand's unit. Each kiln carries that
         share of its own capacity -- ``capacity_i * share_of_fleet`` -- as the
         ``demanded_output`` handed to :func:`amortize`, which spreads the
         kiln's capital (its own capacity, standing in for what it took to
@@ -191,10 +192,11 @@ class CementPlant(Model):
         ``self.settings.attribution.capital``. Under the default rule,
         ``per_output``, this reduces to::
 
-            construction_i = amount * capacity_i / (total_capacity * lifetime_i)
+            construction_i = capacity_i * amount / (total_output * lifetime_i)
 
-        which, with one lifetime across the fleet, sums to ``amount /
-        lifetime`` -- one lifetime's worth of cement buys one fleet.
+        which, with one lifetime across the fleet, sums to the capacity that
+        makes ``amount / lifetime`` a year -- one lifetime's worth of cement
+        buys one fleet.
 
         Under ``first_life`` the answer is zero for every kiln whose build
         year is not the demanded year, so a study year with no construction in
@@ -214,17 +216,27 @@ class CementPlant(Model):
         unit = selection.unit_of(capacity_column)
         rule = self.settings.attribution.capital
 
+        # Capacity is a rate in its own unit (t/yr); the demand is an amount
+        # (kg). Each kiln's year of output, in the demand's unit, is what the
+        # demand is a share of. The fleet's own total_capacity stays in the
+        # capacity unit; the conversion happens here, in the model.
+        annual = [
+            output_over_a_year(float(kiln[capacity_column]), unit, demand.unit)
+            for kiln in selection.plants
+        ]
+        total_output = sum(annual)
+
         construction = []
-        for kiln in selection.plants:
+        for kiln, annual_output in zip(selection.plants, annual):
             capacity = float(kiln[capacity_column])
             lifetime = float(kiln[lifetime_column])
             build_year = int(kiln["build_year"])
             amount = amortize(
-                capacity,
+                capacity,  # the capital, in the capacity unit the demand is made in
                 rule=rule,
-                demanded_output=capacity * demand.amount / selection.total_capacity,
-                annual_output=capacity,
-                lifetime_output=capacity * lifetime,
+                demanded_output=annual_output * demand.amount / total_output,
+                annual_output=annual_output,
+                lifetime_output=annual_output * lifetime,
                 lifetime_years=lifetime,
                 demand_year=year_of(demand.flow),
                 build_year=build_year,
@@ -246,7 +258,7 @@ class CementPlant(Model):
 
         provenance = {
             **selection.provenance,
-            "share_of_fleet": demand.amount / selection.total_capacity,
+            "share_of_fleet": demand.amount / total_output,
             "capital_rule": rule,
         }
         return construction, provenance

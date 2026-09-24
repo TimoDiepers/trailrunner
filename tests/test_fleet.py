@@ -168,14 +168,16 @@ def test_construction_stays_at_the_location_of_the_plant_that_was_built(dac_para
 def test_construction_is_amortized_over_capacity_and_lifetime(dac_params, fleet):
     result = DirectAirCapture(params=dac_params, fleet=fleet).apply(demand())
     by_year = {d.flow.time: d.amount for d in construction(result)}
-    assert by_year["2026"] == pytest.approx(1000.0 * 12000.0 / (52000.0 * 20.0))
-    assert by_year["2029"] == pytest.approx(1000.0 * 40000.0 / (52000.0 * 20.0))
+    # 1000 kg is 1 t: the demand is converted into the capacity's t/yr before it
+    # is a share of the fleet.
+    assert by_year["2026"] == pytest.approx(1.0 * 12000.0 / (52000.0 * 20.0))
+    assert by_year["2029"] == pytest.approx(1.0 * 40000.0 / (52000.0 * 20.0))
 
 
 def test_the_construction_demanded_is_the_fleet_share_of_a_lifetime(dac_params, fleet):
     """With one lifetime across the fleet, the total is demand / lifetime."""
     result = DirectAirCapture(params=dac_params, fleet=fleet).apply(demand())
-    assert sum(d.amount for d in construction(result)) == pytest.approx(1000.0 / 20.0)
+    assert sum(d.amount for d in construction(result)) == pytest.approx(1.0 / 20.0)  # 1000 kg = 1 t
 
 
 def test_construction_is_demanded_in_the_capacity_unit(dac_params, fleet):
@@ -194,7 +196,7 @@ def test_a_bigger_demand_claims_a_bigger_share_of_the_same_fleet(dac_params, fle
 
 def test_dac_records_the_fleet_it_amortized_over(dac_params, fleet):
     result = DirectAirCapture(params=dac_params, fleet=fleet).apply(demand())
-    assert result.provenance["share_of_fleet"] == pytest.approx(1000.0 / 52000.0)
+    assert result.provenance["share_of_fleet"] == pytest.approx(1.0 / 52000.0)  # 1 t of 52000 t/yr
     assert result.provenance["plants"] == ["ch-1", "ch-2"]
     assert result.provenance["mean_build_year"] == pytest.approx(
         (2026 * 12000 + 2029 * 40000) / 52000
@@ -231,9 +233,9 @@ def dac_under(rule, dac_params, fleet):
 def test_per_output_spreads_construction_over_the_whole_life(dac_params, fleet):
     result = dac_under("per_output", dac_params, fleet).apply(demand())
     by_year = {d.flow.time: d.amount for d in construction(result)}
-    assert by_year["2026"] == pytest.approx(11.538462, abs=1e-6)
-    assert by_year["2029"] == pytest.approx(38.461538, abs=1e-6)
-    assert sum(by_year.values()) == pytest.approx(50.0)
+    assert by_year["2026"] == pytest.approx(0.011538462, abs=1e-9)
+    assert by_year["2029"] == pytest.approx(0.038461538, abs=1e-9)
+    assert sum(by_year.values()) == pytest.approx(0.05)
 
 
 def test_per_year_agrees_with_per_output_on_a_flat_fleet(dac_params, fleet):
@@ -249,8 +251,8 @@ def test_per_year_agrees_with_per_output_on_a_flat_fleet(dac_params, fleet):
     per_year = {d.flow.time: d.amount for d in construction(
         dac_under("per_year", dac_params, fleet).apply(demand()))}
     assert per_year == pytest.approx(per_output)
-    assert per_year["2026"] == pytest.approx(11.538462, abs=1e-6)
-    assert per_year["2029"] == pytest.approx(38.461538, abs=1e-6)
+    assert per_year["2026"] == pytest.approx(0.011538462, abs=1e-9)
+    assert per_year["2029"] == pytest.approx(0.038461538, abs=1e-9)
 
 
 def test_first_life_attributes_no_construction_to_a_year_nothing_was_built_in(
@@ -275,7 +277,7 @@ def test_dac_takes_the_rule_from_the_run_not_from_itself(dac_params, fleet):
     """The point of the setting: two runs of the same model, two answers."""
     per_output = dac_under("per_output", dac_params, fleet).apply(demand())
     first_life = dac_under("first_life", dac_params, fleet).apply(demand())
-    assert sum(d.amount for d in construction(per_output)) == pytest.approx(50.0)
+    assert sum(d.amount for d in construction(per_output)) == pytest.approx(0.05)
     assert sum(d.amount for d in construction(first_life)) == 0.0
 
 
@@ -296,3 +298,13 @@ def test_a_shipped_model_traverses_under_an_allocation_rule_it_does_not_need(
     assert report.attribution[0] == {"allocation": "economic", "share": 1.0, "property": None}
     # Untouched: with one product there is nothing to partition.
     assert sum(report.inventory.values()) == pytest.approx(-1000.0)
+
+
+def test_a_capacity_that_is_not_a_rate_of_the_demand_is_refused(dac_params):
+    """A capacity in kg (not per year) cannot say what share of it 1000 kg is."""
+    from trailrunner.core.errors import ValidationError
+
+    rows = [{"plant": "ch-1", "location": "CH", "build_year": 2026, "capacity": 12000.0, "lifetime": 20.0}]
+    fleet = Fleet(rows, units={"capacity": KG, "lifetime": YEAR}, hierarchy=HIERARCHY)
+    with pytest.raises(ValidationError, match="kg"):
+        DirectAirCapture(params=dac_params, fleet=fleet).apply(demand())

@@ -181,7 +181,7 @@ print(parameter_file)
 ```
 
     dac-parameters.parquet: ✅ STRICT COMPLIANCE
-    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpm7dsz6ec/dac-parameters.parquet
+    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpa_ffspwr/dac-parameters.parquet
 
 The file that comes out carries its own description, and `read_parquet` hands
 back both halves of it. This is exactly what `ParameterSet` will see in the next
@@ -619,13 +619,19 @@ out of the capacities, and the demanded capture decides how much of the fleet is
 claimed at all:
 
 ```
-share_of_fleet = amount / total_capacity
-construction_i = amount * capacity_i / (total_capacity * lifetime_i)
+total_output   = total_capacity over one year, in the demand's unit
+share_of_fleet = amount / total_output
+construction_i = capacity_i * amount / (total_output * lifetime_i)
 ```
 
+The capacity is a rate (t/yr) and the demand an amount (kg), so a year of the
+fleet's capacity is converted into kilograms before the demand is a share of
+it — exactly, by the vocabulary's multipliers.
+
 Lifetime is what stops a plant being built once per year it runs: with one
-lifetime across the fleet, the construction demanded sums to
-`amount / lifetime` — one lifetime's worth of capture buys one fleet. And each
+lifetime across the fleet, the construction demanded sums to the capacity that
+captures `amount / lifetime` a year — one lifetime's worth of capture buys one
+fleet. And each
 plant's share is demanded **in that plant's own build year**, not in the year of
 the capture.
 
@@ -684,7 +690,7 @@ built = Orchestrator(Glossary([dac_with_fleet, grid, plant])).calculate(demand)
 print("unresolved:")
 for record in built.unresolved:
     print(
-        f"  {record.demand.amount:9.2f} {symbol(record.demand.unit):8} "
+        f"  {record.demand.amount:9.4g} {symbol(record.demand.unit):8} "
         f"{short(record.demand.flow.iri):26} "
         f"{record.demand.flow.location} {record.demand.flow.time}  [{record.reason}]"
     )
@@ -695,23 +701,23 @@ for key in ("plants", "total_capacity", "mean_build_year", "share_of_fleet"):
 ```
 
     unresolved:
-        5000.00 MJ       fi_1730_9                  CH 2030  [no_model_found]
-          11.54 t/yr     direct-air-capture-plant   CH 2026  [no_model_found]
-          38.46 t/yr     direct-air-capture-plant   CH 2029  [no_model_found]
-          76.60 kWh      electricity-wind           CH 2030  [no_model_found]
-         340.43 kWh      electricity-hydro          CH 2030  [no_model_found]
+           5000 MJ       fi_1730_9                  CH 2030  [no_model_found]
+        0.01154 t/yr     direct-air-capture-plant   CH 2026  [no_model_found]
+        0.03846 t/yr     direct-air-capture-plant   CH 2029  [no_model_found]
+           76.6 kWh      electricity-wind           CH 2030  [no_model_found]
+          340.4 kWh      electricity-hydro          CH 2030  [no_model_found]
           49.42 MJ       fi_12020                   CH 2030  [no_model_found]
     what the DAC node recorded about the fleet:
       plants           ['ch-1', 'ch-2']
       total_capacity   52000.0
       mean_build_year  2028.3076923076924
-      share_of_fleet   0.019230769230769232
+      share_of_fleet   1.923076923076923e-05
 
 The two construction demands sit in **2026 and 2029** while the capture sits in
 2030, and they are not equal: the bigger plant carries the bigger share, because
-the share is its capacity's share and nothing else. Together they come to 50,
-stated in the fleet's capacity unit — a twentieth of the 1000 demanded, one
-plant-lifetime's worth.
+the share is its capacity's share and nothing else. Together they come to
+0.05 t/yr of built capacity: the capacity that captures 50 kg a year, a
+twentieth of the 1000 kg demanded, one plant-lifetime's worth.
 
 Nothing resolves `direct-air-capture-plant` yet, so both land on the unresolved
 list. That is the useful part: when a construction model does answer them, it
@@ -730,7 +736,7 @@ for year in (2025, 2027, 2030):
         Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(year)), amount=1000.0, unit=KG)
     )
     capital = [d for d in result.technosphere if short(d.flow.iri) == "direct-air-capture-plant"]
-    spread = ", ".join(f"{d.flow.time}: {d.amount:.1f}" for d in sorted(capital, key=lambda d: d.flow.time))
+    spread = ", ".join(f"{d.flow.time}: {d.amount:.4g}" for d in sorted(capital, key=lambda d: d.flow.time))
     print(
         f"{year:>8} {', '.join(result.provenance['plants']):>24} "
         f"{result.provenance['mean_build_year']:>11.1f}  {spread}"
@@ -738,9 +744,9 @@ for year in (2025, 2027, 2030):
 ```
 
      capture           plants running  mean build  construction demanded
-        2025                 ch-pilot      2007.0  2007: 50.0
-        2027                     ch-1      2026.0  2026: 50.0
-        2030               ch-1, ch-2      2028.3  2026: 11.5, 2029: 38.5
+        2025                 ch-pilot      2007.0  2007: 0.05
+        2027                     ch-1      2026.0  2026: 0.05
+        2030               ch-1, ch-2      2028.3  2026: 0.01154, 2029: 0.03846
 
 ## 9. Coverage: outside the data, the model declines
 
@@ -860,7 +866,7 @@ print(pipeline_parameter_file)
 ```
 
     natural-gas-pipeline-parameters.parquet: ✅ STRICT COMPLIANCE
-    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpm7dsz6ec/natural-gas-pipeline-parameters.parquet
+    /var/folders/l1/k90rhb0j0ns58y35ymznsd700000gn/T/tmpa_ffspwr/natural-gas-pipeline-parameters.parquet
 
 The tier split is the whole model, and it is a pure function of two numbers: the tier's leakage rate
 and the generic gas density. `leaked_volume_nm3_per_tkm` — mirroring `dac.ambient_penalty` as the
@@ -1030,7 +1036,7 @@ for record in undocumented_report.unresolved:
 print("inventory:", undocumented_report.inventory)
 ```
 
-    Coverage(locations=frozenset({'IT', 'DZ', 'ID', 'QA', 'US', 'LY', 'MY', 'UA', 'AZ', 'NO', 'RU', 'IR', 'NL', 'GB'}), time_range=None, context=(), units=frozenset({'https://vocab.sentier.dev/units/unit/TONNE'}))
+    Coverage(locations=frozenset({'QA', 'AZ', 'IT', 'ID', 'UA', 'NL', 'LY', 'RU', 'US', 'MY', 'DZ', 'GB', 'IR', 'NO'}), time_range=None, context=(), units=frozenset({'https://vocab.sentier.dev/units/unit/TONNE'}))
     coverage_excluded
     NaturalGasOffshorePipelineTransport declares this product but its coverage does not cover location='CH' time='2025' context='distance=1000 km'
     inventory: {}

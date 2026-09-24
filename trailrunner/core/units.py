@@ -232,6 +232,34 @@ class UnitCatalog:
             return None
         return self.convert(amount, source, target)
 
+    def over_a_year(self, rate: float, rate_unit: str, amount_unit: str) -> float | None:
+        """What ``rate`` delivers in one year, in ``amount_unit``; ``None`` if it can't say.
+
+        A fleet states capacity as a rate (``TONNE_PER_YEAR``) while the demand
+        it answers is an amount (``KG``). Dividing one by the other without this
+        mixes units: 1000 kg over a 1 t/yr fleet would claim the whole fleet
+        rather than a year of it. The vocabulary gives rates their own kind
+        (``MassPerTime``) and multipliers to SI, so one year of the rate is
+        ``rate * multiplier(rate_unit) * multiplier(YEAR) / multiplier(amount_unit)``.
+
+        Only when ``rate_unit``'s kind is ``amount_unit``'s kind plus
+        ``PerTime``: anything else (a volume against a mass flow, an amount
+        that is not a rate) is ``None``, and the caller refuses it rather than
+        guessing a density or a period.
+        """
+        rate_info, amount_info, year = self.info(rate_unit), self.info(amount_unit), self.info(YEAR)
+        if rate_info is None or amount_info is None or year is None:
+            return None
+        if rate_info.quantity_kind is None or amount_info.quantity_kind is None:
+            return None
+        if rate_info.quantity_kind != amount_info.quantity_kind + "PerTime":
+            return None
+        if None in (rate_info.multiplier, amount_info.multiplier, year.multiplier):
+            return None
+        if rate_info.offset or amount_info.offset:
+            return None
+        return rate * rate_info.multiplier * year.multiplier / amount_info.multiplier
+
     def symbol(self, iri: str) -> str:
         """What a person reads: an override, the UCUM code, or the IRI's last segment.
 

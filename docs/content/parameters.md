@@ -212,3 +212,9 @@ existence either.
 plant's construction over its output according to the run's
 [capital rule](attribution.md#capital-per_output-per_year-first_life), and demand that
 plant's share **in the plant's own build year**, years before the output it pays for.
+The capacity is a rate (`TONNE_PER_YEAR`) and the demand an amount (`KG`), so before the
+demand is a share of the fleet, each plant's capacity is converted into one year of output
+in the demand's unit (`UnitCatalog.over_a_year`): 1 t/yr is 1000 kg a year. A capacity the
+vocabulary cannot read as a rate of the demanded quantity is refused with a
+`ValidationError` naming both units. The construction demand itself stays in the capacity
+unit.
