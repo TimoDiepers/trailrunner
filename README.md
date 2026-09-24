@@ -69,39 +69,3 @@ full log; the [CLI tutorial](docs/content/getting_started/cli.md) goes through e
 uv sync --extra dev
 uv run pytest
 ```
-
-## Writing a model
-
-A model answers one demand. `apply` receives the **full** demanded amount, the
-whole thing that was asked for, and must echo it back as production with the
-same flow, the same unit, and an amount that covers the demand. Nothing
-downstream rescales, so a model that under-produces would silently shrink the
-inventory. The Runner rejects one that does.
-
-```python
-from trailrunner import Demand, Exchange, Flow, Model, Result
-
-HEAT = "https://vocab.sentier.dev/products/heat"
-GAS = "https://vocab.sentier.dev/products/natural-gas"
-CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
-
-
-class MyBoiler(Model):
-    produces = (HEAT,)  # the product IRIs this model can make
-
-    def apply(self, demand: Demand) -> Result:
-        gas = demand.amount / 40.0  # kg of gas per MJ of heat, 90% efficient
-        here = dict(location=demand.flow.location, time=demand.flow.time)
-        return Result(
-            # what I made: the demand, echoed back
-            production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            # what I need: pushed onto the queue and traversed in turn
-            technosphere=[Demand(flow=Flow(iri=GAS, **here), amount=gas, unit="kg")],
-            # what I emitted: accumulated into the inventory
-            biosphere=[Exchange(flow=Flow(iri=CO2, **here), amount=2.75 * gas, unit="kg")],
-        )
-```
-
-[Writing a Model](docs/content/writing_a_model.md) covers the rest: declaring a
-`Coverage`, reading parameters from a parquet file, and what the report says
-about a demand nobody models.
