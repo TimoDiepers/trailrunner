@@ -32,7 +32,7 @@ without the model hard-coding anything. The field list is read from
 [trailpack](https://github.com/TimoDiepers/trailpack) writes these files: `Field`, `Unit`
 and `MetaDataBuilder` for the descriptor, `Packing.write_parquet` for the file.
 `examples/dac.ipynb` does it end to end. Any tool that writes the same metadata works: the
-[CLI tutorial](getting_started/cli.md#4-get-a-score-method) writes one with pyarrow alone.
+[CLI tutorial](getting_started/cli.md#5-get-a-score-method) writes one with pyarrow alone.
 
 The location and time columns default to `location` and `time`:
 

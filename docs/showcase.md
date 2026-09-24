@@ -283,19 +283,12 @@ first = Orchestrator(Narrating([tier1])).calculate(DEMAND)
            amount unit flow                             where  when  -> answered by
     pop      1000 kg   Portland cement, aluminous ceme… DK     2030  -> CementPlant
     pop      1125 kg   Gypsum; anhydrite; limestone fl… DK     2030  -> cutoff (nobody offered)
-    pop      2475 MJ   Natural gas, liquefied or in th… DK     2030  -> NaturalGasSupply
+    pop      2475 MJ   Natural gas, liquefied or in th… DK     2030  -> cutoff (nobody offered)
     pop        10 kg   Quicklime, slaked lime and hydr… DK     2030  -> cutoff (nobody offered)
     pop       100 kWh  electricity                      DK     2030  -> GridElectricity
-    pop     68.75 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
-    pop     50.53 tkm  natural-gas-transport-offshore-… NO     2030  -> NaturalGasOffshorePipelineTransport
     pop     8.466 kWh  electricity-natural-gas          DK     2030  -> GasPower
     pop     84.66 kWh  electricity-wind                 DK     2030  -> cutoff (nobody offered)
     pop      12.7 kWh  electricity-hydro                DK     2030  -> cutoff (nobody offered)
-    pop 8.995e-08 unit pipeline-natural-gas-long-dista… NO     2030  -> cutoff (nobody offered)
-    pop   0.01306 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
-    pop     16.54 MJ   natural-gas-burned-in-gas-turbi… NO     2030  -> cutoff (nobody offered)
-    pop 5.862e-06 tkm  transport-freight-lorry-16t-32t  NO     2030  -> cutoff (nobody offered)
-    pop 5.862e-05 kg   disposal-used-mineral-oil-10-pe… NO     2030  -> cutoff (nobody offered)
     pop     49.16 MJ   Natural gas, liquefied or in th… DK     2030  -> NaturalGasSupply
     pop     1.365 Nm3  natural-gas-at-production        NO     2030  -> NaturalGasExtraction
     pop     1.004 tkm  natural-gas-transport-offshore-… NO     2030  -> NaturalGasOffshorePipelineTransport
@@ -311,19 +304,11 @@ print()
 print(first.tree(labels=VOCAB.label))  # the vocabulary's names, where it has one
 ```
 
-    11 nodes, 11 inventory entries
-    12 unresolved (no_model_found: 12)
+    7 nodes, 11 inventory entries
+    9 unresolved (coverage_excluded: 1, no_model_found: 8)
     0 proxies
     attribution: allocation=none, capital=per_output
     1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  [model: CementPlant]
-      2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
-        68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-        50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
-          0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-          8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
-          16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
-          5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
-          5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
       100 kWh electricity @DK/2030  [model: GridElectricity]
         8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
           49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
@@ -337,19 +322,27 @@ print(first.tree(labels=VOCAB.label))  # the vocabulary's names, where it has on
         84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
         12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
       1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  [cutoff: no_model_found]
+      2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]
       10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [cutoff: no_model_found]
 
-The fuel is no longer a leaf. `NaturalGasSupply` answers the kiln's 2475 MJ,
-turns them into wellhead volume and route length, and hands those to a gas
+The gas chain runs. The gas power plant's 49 MJ reach `NaturalGasSupply`, which
+turns them into wellhead volume and route length and hands those to a gas
 field and to `NaturalGasOffshorePipelineTransport` — a model reverse-engineered
 from the BAFU/ecoinvent pipeline datasets, which was registered in this list
 long before anything asked it for a tonne-kilometre.
 
 Note where the pipeline runs. The supply model places both demands at the
-*origin*, so the Danish kiln's gas is transported in `NO` and its leakage is
-priced at the Norwegian shelf's low-leakage tier, not at a Danish average that
-does not exist. The pipeline's own inputs — compressor fuel, the pipe itself,
-a maintenance lorry — are cutoffs, and they are in the report with a reason.
+*origin*, so the Danish gas is transported in `NO` and its leakage is priced
+at the Norwegian shelf's low-leakage tier, not at a Danish average that does
+not exist. The pipeline's own inputs — compressor fuel, the pipe itself, a
+maintenance lorry — are cutoffs, and they are in the report with a reason.
+
+The kiln's own 2475 MJ are a cutoff too, but for a different reason:
+`coverage_excluded`, not `no_model_found`. The kiln burners ask for gas at
+`pressure=4 bar`, and `NaturalGasSupply` declares in its coverage that it
+delivers at 5. A supplier exists, but it doesn't match exactly, and tier 1
+alone won't pretend it does. Section 3 lets that condition be relaxed, on the
+record.
 
 ## 3. A demand nobody answers is relaxed along the vocabulary
 

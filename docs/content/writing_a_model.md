@@ -233,7 +233,7 @@ from trailrunner import Glossary
 glossary = Glossary([GasTurbine(), DirectAirCapture(params=dac_params)])
 ```
 
-For the [CLI](getting_started/cli.md#9-bring-your-own-models), put the same instances in a
+For the [CLI](getting_started/cli.md#10-bring-your-own-models), put the same instances in a
 module-level list called `MODELS`:
 
 ```python

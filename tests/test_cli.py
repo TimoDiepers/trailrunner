@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -131,3 +132,81 @@ def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
     assert code == 0
     assert "radiative_forcing over 20 years:" in out
     assert "W·yr/m2" in out
+
+
+SHOWCASE = Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
+CEMENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"
+CEMENT_RUN = [
+    "run", CEMENT, "--amount", "1000", "--unit", "kg",
+    "--location", "DK", "--year", "2030", "--models", str(SHOWCASE),
+]
+
+
+def test_without_a_context_tolerance_the_kilns_4_bar_gas_is_a_coverage_miss(capsys):
+    assert main(CEMENT_RUN) == 0
+    out = capsys.readouterr().out
+    assert "fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]" in out
+
+
+def test_a_context_tolerance_lets_5_bar_gas_answer_it_as_a_proxy(capsys):
+    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1"]) == 0
+    out = capsys.readouterr().out
+    assert "[proxy: context: pressure 4 bar -> 5 bar]" in out
+    assert "1 proxy" in out
+
+
+def test_a_context_tolerance_that_forbids_the_side_leaves_the_cutoff(capsys):
+    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=1:0"]) == 0
+    out = capsys.readouterr().out
+    # Tier 1's reason wins: widening the coverage is what would fix it.
+    assert "(pressure=4 bar)  [cutoff: coverage_excluded]" in out
+    assert "0 proxies" in out
+
+
+@pytest.mark.parametrize("bad", ["pressure", "pressure=1", "=0:1", "pressure=a:b", "pressure=-1:0"])
+def test_a_malformed_context_tolerance_is_rejected_before_anything_runs(bad, capsys):
+    assert main([*CEMENT_RUN, "--context-tolerance", bad]) == 2
+    assert "context tolerance" in capsys.readouterr().err
+
+
+def test_proxy_order_parses_entries_and_combinations():
+    from trailrunner.cli import parse_proxy_order
+
+    assert parse_proxy_order(None) == ("context",)
+    assert parse_proxy_order("context.pressure,context.pressure+context.temperature") == (
+        "context.pressure",
+        ("context.pressure", "context.temperature"),
+    )
+
+
+@pytest.mark.parametrize(
+    "order, message",
+    [
+        ("location", "not a context dimension"),
+        ("context.temperature", "no context_tolerance for 'temperature'"),
+    ],
+)
+def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, capsys):
+    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1", "--proxy-order", order])
+    assert code == 2
+    assert message in capsys.readouterr().err
+
+
+def test_a_context_tolerance_given_twice_is_rejected(capsys):
+    code = main([
+        *CEMENT_RUN,
+        "--context-tolerance", "pressure=0:1",
+        "--context-tolerance", "pressure=0:2",
+    ])
+    assert code == 2
+    assert "more than once" in capsys.readouterr().err
+
+
+def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
+    code = main([
+        *CEMENT_RUN,
+        "--context-tolerance", "pressure=0:1",
+        "--proxy-order", "context.pressure",
+    ])
+    assert code == 0
+    assert "[proxy: context: pressure 4 bar -> 5 bar]" in capsys.readouterr().out

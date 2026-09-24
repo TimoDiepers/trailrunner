@@ -19,8 +19,9 @@ offer:
 Only tier 1 is an exact answer. Every later tier is a **concession**, and it writes what it
 conceded into the node's resolution, `report.proxies` and `report.tree()`.
 
-`Orchestrator(glossary)` is shorthand for a chain with tier 1 alone. That is what the
-[CLI](getting_started/cli.md) uses, and why it never produces a proxy.
+`Orchestrator(glossary)` is shorthand for a chain with tier 1 alone. The
+[CLI](getting_started/cli.md) uses that too, and adds a context-only tier 2 when it is
+given `--context-tolerance`.
 
 ## Building a chain
 
@@ -182,6 +183,38 @@ Composing is a concession you opt into. A combined entry needs a `max_steps` bud
 for each member, or `ProxySettings` rejects it, since it could never be tried. When nothing
 matches, the `generalisation_exhausted` detail counts candidates per entry, e.g.
 `candidates tried: location(2), location+time(2)`.
+
+### Combining context conditions
+
+Plain `"context"` moves one tolerated condition at a time. A demand that is off on two
+conditions, say gas asked for at 4 bar and 280 K from a grid delivering 5 bar at 288 K,
+is not answered by it, whatever the tolerances. To allow that, name each condition as a
+dimension of its own, `context.<name>`, and combine them like any other:
+
+```python
+ProxySettings(
+    order=(
+        "context.pressure",                              # pressure alone
+        "context.temperature",                           # temperature alone
+        ("context.pressure", "context.temperature"),     # both, only because it's listed
+    ),
+    context_tolerance={"pressure": (0.0, 1.0), "temperature": (0.0, 10.0)},
+)
+```
+
+```text
+111.111 MJ natural-gas @CH/2030 (pressure=4 bar, temperature=280 K)  [proxy: context: pressure 4 bar -> 5 bar; context: temperature 280 K -> 288 K]
+```
+
+The same rules apply as for any combined entry. Each condition stays within its own
+tolerance and budget; a `context.<name>` missing from `max_steps` takes the `context`
+budget. Conditions also combine with the other dimensions, e.g.
+`("location", "context.pressure")`. `ProxySettings` rejects a `context.<name>` with no
+`context_tolerance` for that name, since it could never be tried, and a combined entry that
+holds both `context` and one of its conditions, which would move the same condition twice.
+On the command line the same order is written
+`--proxy-order context.pressure,context.temperature,context.pressure+context.temperature`
+([CLI tutorial](getting_started/cli.md#4-when-a-supplier-almost-matches-context-tolerance)).
 
 A demand with nothing to relax (no location, no year, no taxonomy behind it) gets no
 explanation from this tier, so it is reported as `no_model_found`. That points the reader

@@ -45,7 +45,7 @@ Nothing here touches the network.
     from showcase_models import MODELS
     from trailrunner import (
         AttributionSettings, Demand, Exchange, Flow, Glossary, LocationHierarchy,
-        Model, Orchestrator, ParameterSet, Property, Result, Settings,
+        Model, Orchestrator, ParameterSet, Property, ProxySettings, Result, Settings,
     )
     from trailrunner.assessment import Method, assess
     from trailrunner.models import cement
@@ -136,7 +136,13 @@ MODELS_PLUS = [
 ]
 tier1 = ModelProvider(Glossary(MODELS_PLUS))
 taxonomy = PystTaxonomy(EXAMPLES / "pyst_cache.json", client=None)  # client=None: no network
-CHAIN = ResolutionChain([tier1, GeneralisingProvider(tier1, hierarchy=HIERARCHY, taxonomy=taxonomy)])
+# The kiln asks for gas at 4 bar and the supplier delivers 5: the same
+# pressure concession the tour makes, so the gas is answered here too.
+PROXY = ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+CHAIN = ResolutionChain([
+    tier1,
+    GeneralisingProvider(tier1, settings=PROXY, hierarchy=HIERARCHY, taxonomy=taxonomy),
+])
 
 
 def walk(allocation):
@@ -201,8 +207,8 @@ for key, value in credited.attribution[chp_node.id].items():
     print(f"  {key}: {value}")
 ```
 
-         economic:     566.0 kg CO2-eq   (4 unresolved (generalisation_exhausted: 4))
-     substitution:     593.7 kg CO2-eq   (5 unresolved (generalisation_exhausted: 5, of which 1 on a credit branch))
+         economic:     572.0 kg CO2-eq   (10 unresolved (generalisation_exhausted: 10))
+     substitution:     600.7 kg CO2-eq   (11 unresolved (generalisation_exhausted: 11, of which 1 on a credit branch))
     what the CHP node recorded under substitution:
       allocation: substitution
       share: 1.0

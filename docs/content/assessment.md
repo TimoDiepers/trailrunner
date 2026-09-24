@@ -25,7 +25,7 @@ assessment = assess(report, Method.from_parquet("gwp100.parquet"))  # one readin
 ```
 
 From the CLI: `trailrunner run ... --method gwp100.parquet` and `--dynamic
-radiative_forcing`. See the [CLI tutorial](getting_started/cli.md#4-get-a-score-method).
+radiative_forcing`. See the [CLI tutorial](getting_started/cli.md#5-get-a-score-method).
 
 ## Methods
 
@@ -65,7 +65,7 @@ with field units under `resources[].schema.fields`.
 | `cf` | the factor. Its declared `unit.name` is the method's score unit |
 
 The method's `name` comes from the datapackage's `name`. The
-[CLI tutorial](getting_started/cli.md#4-get-a-score-method) has a complete pyarrow script
+[CLI tutorial](getting_started/cli.md#5-get-a-score-method) has a complete pyarrow script
 that writes one.
 
 The file is refused on load if it is ambiguous or incomplete:
