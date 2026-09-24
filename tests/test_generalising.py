@@ -328,6 +328,129 @@ def test_a_relaxed_demand_still_carries_the_exclusion():
     assert provider([boiler]).offer(swiss_heat, exclude=(boiler,)) is None
 
 
+class RegionalDatedBoiler(Model):
+    """Answers only a demand that is both regional and late enough: no single
+    relaxation of a Swiss 2032 demand reaches it."""
+    produces = [HEAT]
+    coverage = Coverage(locations=frozenset({"RER"}), time_range=(2035, 2050))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+class GlobalDatedBoiler(Model):
+    produces = [HEAT]
+    coverage = Coverage(locations=frozenset({"GLO"}), time_range=(2033, 2050))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+SWISS_2032 = Demand(flow=Flow(iri=HEAT, location="CH", time=2032), amount=10.0, unit="MJ")
+COMBINED = ProxySettings(
+    order=("time", "location", ("location", "time")),
+    max_steps={"time": 1, "location": 2},
+)
+
+
+def test_relaxations_do_not_compose_unless_asked_to():
+    settings = ProxySettings(order=("time", "location"), max_steps={"time": 1, "location": 2})
+    assert provider([RegionalDatedBoiler()], settings=settings).offer(SWISS_2032) is None
+
+
+def test_a_combined_entry_answers_what_no_single_dimension_can():
+    offer = provider([RegionalDatedBoiler()], settings=COMBINED).offer(SWISS_2032)
+    assert isinstance(offer.model, RegionalDatedBoiler)
+    assert offer.demand.flow.location == "RER"
+    assert offer.demand.flow.time == 2035
+    assert offer.resolution["relaxations"] == ["location: CH -> RER", "time: 2032 -> 2035"]
+    assert offer.resolution["answered"] == f"{HEAT} @RER/2035"
+
+
+def at(location, year):
+    """A heat model covering one place and one year."""
+
+    class Boiler(Model):
+        produces = [HEAT]
+        coverage = Coverage(locations=frozenset({location}), time_range=(year, year))
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    Boiler.__name__ = f"Boiler{location}{year}"
+    return Boiler()
+
+
+def test_the_combined_search_tries_the_fewest_total_steps_first():
+    """Covered years, nearest first: 2033, 2034, 2036 -- steps 1, 2, 3.
+    GLO/2033 is three steps away, RER/2036 four; walking location as the outer
+    loop would reach RER/2036 first, and the search must not."""
+    models = [at("GLO", 2033), at("XX", 2034), at("RER", 2036)]
+    settings = ProxySettings(order=(("location", "time"),), max_steps={"time": 3, "location": 2})
+    offer = provider(models, settings=settings).offer(SWISS_2032)
+    assert offer.demand.flow.location == "GLO"
+    assert offer.demand.flow.time == 2033
+
+
+def test_a_combined_entry_placed_before_product_beats_the_product_proxy():
+    """The reason to compose at all: a neighbouring region and year can be a
+    better proxy than a wider product category, and the order says which."""
+    taxonomy = StaticTaxonomy({HEAT: [VEHICLE]})
+
+    class WiderProduct(Model):
+        produces = [VEHICLE]
+
+        def apply(self, demand):
+            return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+    models = [RegionalDatedBoiler(), WiderProduct()]
+    budgets = {"time": 1, "location": 2, "product": 1}
+    combo_first = ProxySettings(order=("location", ("location", "time"), "product"), max_steps=budgets)
+    product_first = ProxySettings(order=("location", "product", ("location", "time")), max_steps=budgets)
+    assert isinstance(provider(models, combo_first, taxonomy).offer(SWISS_2032).model, RegionalDatedBoiler)
+    assert isinstance(provider(models, product_first, taxonomy).offer(SWISS_2032).model, WiderProduct)
+
+
+def test_the_combined_search_respects_every_member_budget():
+    tight = ProxySettings(order=(("location", "time"),), max_steps={"time": 1, "location": 1})
+    assert provider([GlobalDatedBoiler()], settings=tight).offer(SWISS_2032) is None
+    wide = ProxySettings(order=(("location", "time"),), max_steps={"time": 1, "location": 2})
+    assert isinstance(provider([GlobalDatedBoiler()], settings=wide).offer(SWISS_2032).model, GlobalDatedBoiler)
+
+
+def test_the_combined_search_respects_the_time_tolerance():
+    settings = ProxySettings(
+        order=(("location", "time"),), max_steps={"time": 1, "location": 2}, time_tolerance=2
+    )
+    assert provider([RegionalDatedBoiler()], settings=settings).offer(SWISS_2032) is None
+
+
+def test_a_tie_in_total_steps_goes_to_the_member_declared_first():
+    """Two steps either way: RER + second-nearest year, or GLO + nearest year.
+    ``("time", "location")`` prefers moving time less; ``("location", "time")``
+    prefers moving location less."""
+
+    # Covered years: 2033 (step 1), 2036 (step 2). RER/2036 is (location 1,
+    # time 2), GLO/2033 is (location 2, time 1): three steps each.
+    glo, rer = at("GLO", 2033), at("RER", 2036)
+    models = [glo, rer]
+    budgets = {"time": 2, "location": 2}
+    location_less = ProxySettings(order=(("location", "time"),), max_steps=budgets)
+    time_less = ProxySettings(order=(("time", "location"),), max_steps=budgets)
+    assert provider(models, location_less).offer(SWISS_2032).model is rer
+    assert provider(models, time_less).offer(SWISS_2032).model is glo
+
+
+def test_a_combined_offer_still_carries_the_exclusion():
+    boiler = RegionalDatedBoiler()
+    assert provider([boiler], settings=COMBINED).offer(SWISS_2032, exclude=(boiler,)) is None
+
+
+def test_explain_counts_the_combined_candidates():
+    _reason, detail = provider([RegionalDatedBoiler()], settings=COMBINED).explain(SWISS_2032)
+    assert "location+time(" in detail
+
+
 PYST_CACHE = Path(__file__).resolve().parent.parent / "examples" / "pyst_cache.json"
 
 # The real BONSAI parent of trailrunner.models.dac.HEAT (fi_1730_9, "heat
