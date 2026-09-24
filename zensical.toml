@@ -13,7 +13,6 @@ copyright = "Copyright &copy; 2026 trailrunner developers"
 nav = [
   { Home = [
     { Overview = "index.md" },
-    { "5-minute tour" = "showcase.md" },
     { "Pitch (3 min)" = "pitch.md" },
     { "Pitch (5 min)" = "pitch-5min.md" },
   ]},
@@ -101,6 +100,7 @@ toggle.icon = "lucide/moon-star"
 toggle.name = "Switch to light mode"
 
 [project.theme.icon]
+logo = "lucide/sport-shoe"
 repo = "fontawesome/brands/github"
 
 [[project.extra.social]]

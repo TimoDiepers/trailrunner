@@ -1,4 +1,5 @@
 ---
+icon: lucide/list-tree
 tags:
   - concepts
 ---

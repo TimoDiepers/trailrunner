@@ -1,4 +1,5 @@
 ---
+icon: lucide/book-open
 tags:
   - concepts
 ---
