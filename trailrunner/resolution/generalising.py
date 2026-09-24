@@ -4,11 +4,13 @@ Which concession is acceptable, and in what order, is a modelling decision —
 so the order and the budgets come from ``ProxySettings`` and every step taken
 is recorded. A proxy nobody can see is indistinguishable from a wrong number.
 
-**Relaxations do not compose.** Each dimension is tried from the original
-demand, in the declared order; a demand needing both a wider region and an
-earlier year is not answered. The composed search is a cross-product whose
-preference order is a second normative choice, and inventing one silently is
-the thing this module exists to prevent. Deferred, not forgotten.
+**Relaxations compose only when asked to.** Each plain entry in the order is
+tried from the original demand. A demand needing both a wider region and an
+earlier year is answered only by a combined entry such as
+``("location", "time")``, written where the practitioner wants it in the
+order. Its search order (fewest total steps, ties to the member written
+first) is documented on ``ProxySettings`` rather than invented here, because
+choosing one silently is the thing this module exists to prevent.
 """
 
 from collections.abc import Iterator, Sequence
@@ -73,11 +75,8 @@ class GeneralisingProvider:
         credit right back on the model that minted it, one hop later and
         wearing a proxy label.
         """
-        for dimension in self.settings.order:
-            budget = self.settings.steps_allowed(dimension)
-            if budget <= 0:
-                continue
-            for candidate, note in self._candidates(demand, dimension, budget):
+        for entry in self.settings.order:
+            for candidate, notes in self._entry_candidates(demand, entry):
                 inner_offer = self.inner.offer(candidate, exclude=exclude)
                 if inner_offer is None:
                     continue
@@ -87,7 +86,7 @@ class GeneralisingProvider:
                     tier="generalising",
                     resolution={
                         "model": type(inner_offer.model).__name__,
-                        "relaxations": [note],
+                        "relaxations": notes,
                         "asked": describe(demand),
                         "answered": describe(candidate),
                     },
@@ -111,13 +110,11 @@ class GeneralisingProvider:
         nothing of the tier-1 registry beyond what ``offer`` already asked.
         """
         tried = []
-        for dimension in self.settings.order:
-            budget = self.settings.steps_allowed(dimension)
-            if budget <= 0:
-                continue
-            attempts = sum(1 for _ in self._candidates(demand, dimension, budget))
+        for entry in self.settings.order:
+            attempts = sum(1 for _ in self._entry_candidates(demand, entry))
             if attempts:
-                tried.append(f"{dimension}({attempts})")
+                label = entry if isinstance(entry, str) else "+".join(entry)
+                tried.append(f"{label}({attempts})")
         if not tried:
             # Nothing to relax along any dimension: not this tier's story to
             # tell, so the chain falls through to ``no_model_found``.
@@ -128,9 +125,52 @@ class GeneralisingProvider:
             f"candidates tried: {', '.join(tried)}",
         )
 
+    def _entry_candidates(
+        self, demand: Demand, entry: str | tuple[str, ...]
+    ) -> Iterator[tuple[Demand, list[str]]]:
+        """One entry of the order: a single dimension, or several together.
+
+        A combined entry nests rather than crossing precomputed lists, because
+        what one dimension can offer depends on where another has moved the
+        demand: the years worth trying are the ones declared for the flow as
+        relaxed so far. Every member moves at least one step (the plain
+        entries already cover the rest), and the candidates are then sorted
+        by total steps, ties going to whichever moved the member written
+        first the least. Materialising them is cheap: budgets are a handful
+        of steps each.
+        """
+        if isinstance(entry, str):
+            budget = self.settings.steps_allowed(entry)
+            if budget <= 0:
+                return
+            for candidate, note, _step in self._candidates(demand, entry, budget):
+                yield candidate, [note]
+            return
+        combined = sorted(
+            self._combine(demand, tuple(entry), (), ()),
+            key=lambda found: (sum(found[0]), found[0]),
+        )
+        for _steps, candidate, notes in combined:
+            yield candidate, list(notes)
+
+    def _combine(
+        self,
+        demand: Demand,
+        members: tuple[str, ...],
+        steps: tuple[int, ...],
+        notes: tuple[str, ...],
+    ) -> Iterator[tuple[tuple[int, ...], Demand, tuple[str, ...]]]:
+        if not members:
+            yield steps, demand, notes
+            return
+        first, rest = members[0], members[1:]
+        budget = self.settings.steps_allowed(first)
+        for candidate, note, step in self._candidates(demand, first, budget):
+            yield from self._combine(candidate, rest, steps + (step,), notes + (note,))
+
     def _candidates(
         self, demand: Demand, dimension: str, budget: int
-    ) -> Iterator[tuple[Demand, str]]:
+    ) -> Iterator[tuple[Demand, str, int]]:
         """Every candidate worth trying along ``dimension``, within ``budget``.
 
         ``budget`` is a number of *steps away from the original demand*: hops
@@ -138,7 +178,8 @@ class GeneralisingProvider:
         to. One step can offer more than one candidate — a concept with two
         broader concepts is one level up either way — and all of them are
         tried, which is why the budget is enforced here rather than by
-        counting candidates at the call site.
+        counting candidates at the call site. Each candidate comes with the
+        step it sits at, which a combined entry sums to rank its search.
         """
         if dimension == "location":
             yield from self._location_candidates(demand, budget)
@@ -147,15 +188,17 @@ class GeneralisingProvider:
         elif dimension == "product":
             yield from self._product_candidates(demand, budget)
 
-    def _location_candidates(self, demand: Demand, budget: int) -> Iterator[tuple[Demand, str]]:
+    def _location_candidates(
+        self, demand: Demand, budget: int
+    ) -> Iterator[tuple[Demand, str, int]]:
         original = demand.flow.location
         if original is None:
             return
-        for location in self.hierarchy.chain(original)[1 : budget + 1]:
+        for step, location in enumerate(self.hierarchy.chain(original)[1 : budget + 1], 1):
             flow = replace(demand.flow, location=location)
-            yield replace(demand, flow=flow), f"location: {original} -> {location}"
+            yield replace(demand, flow=flow), f"location: {original} -> {location}", step
 
-    def _time_candidates(self, demand: Demand, budget: int) -> Iterator[tuple[Demand, str]]:
+    def _time_candidates(self, demand: Demand, budget: int) -> Iterator[tuple[Demand, str, int]]:
         """Snap to the nearest year a declaring model covers, within tolerance.
 
         Asks the registry rather than guessing: the only years worth trying are
@@ -176,11 +219,13 @@ class GeneralisingProvider:
             for year in sorted(set(years), key=lambda candidate: abs(candidate - original))
             if abs(year - original) <= self.settings.time_tolerance and year != original
         )
-        for year in islice(candidates, budget):
+        for step, year in enumerate(islice(candidates, budget), 1):
             flow = replace(demand.flow, time=year)
-            yield replace(demand, flow=flow), f"time: {original} -> {year}"
+            yield replace(demand, flow=flow), f"time: {original} -> {year}", step
 
-    def _product_candidates(self, demand: Demand, budget: int) -> Iterator[tuple[Demand, str]]:
+    def _product_candidates(
+        self, demand: Demand, budget: int
+    ) -> Iterator[tuple[Demand, str, int]]:
         """Walk ``skos:broader`` upward, breadth-first, ``budget`` levels.
 
         Breadth-first so the most specific surviving model still wins: every
@@ -201,7 +246,7 @@ class GeneralisingProvider:
         original = demand.flow.iri
         seen = {original}
         frontier = [original]
-        for _level in range(budget):
+        for level in range(1, budget + 1):
             wider = []
             for iri in frontier:
                 for broader in self.taxonomy.broader(iri):
@@ -213,6 +258,7 @@ class GeneralisingProvider:
                     yield (
                         replace(demand, flow=flow),
                         f"product: {_short(original)} -> {_short(broader)}",
+                        level,
                     )
             if not wider:
                 return

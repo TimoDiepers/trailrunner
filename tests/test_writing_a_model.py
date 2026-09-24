@@ -1,8 +1,9 @@
-"""The README has to teach the Model contract, not just run a shipped model.
+"""The docs have to teach the Model contract, not just run a shipped model.
 
 A model author's first question is what ``apply`` must return. Discovering the
 answer from the Runner's validation errors, one raise at a time, is not a
-documented API. So: the README carries a worked model, and this executes it.
+documented API. So: "Writing a Model" carries a worked model, and this
+executes it.
 """
 
 import re
@@ -13,38 +14,38 @@ import pytest
 from trailrunner import Demand, Flow, Model, Runner, ValidationError
 from trailrunner.orchestration.glossary import Glossary
 
-README = Path(__file__).resolve().parent.parent / "README.md"
+GUIDE = Path(__file__).resolve().parent.parent / "docs" / "content" / "writing_a_model.md"
 
 
-def readme_block_defining(name: str) -> str:
-    blocks = re.findall(r"```python\n(.*?)```", README.read_text(), flags=re.DOTALL)
+def guide_block_defining(name: str) -> str:
+    blocks = re.findall(r"```python\n(.*?)```", GUIDE.read_text(), flags=re.DOTALL)
     matching = [block for block in blocks if f"class {name}(Model)" in block]
-    assert matching, f"the README defines no {name} model"
+    assert matching, f"writing_a_model.md defines no {name} model"
     return matching[0]
 
 
-def test_the_readme_shows_how_to_write_a_model():
+def test_the_guide_shows_how_to_write_a_model():
     namespace: dict = {}
-    exec(readme_block_defining("MyBoiler"), namespace)  # noqa: S102 — that is the point
-    boiler = namespace["MyBoiler"]()
+    exec(guide_block_defining("GasTurbine"), namespace)  # noqa: S102 — that is the point
+    model = namespace["GasTurbine"]()
 
-    heat = list(boiler.produces)[0]
-    demand = Demand(flow=Flow(iri=heat, location="CH", time=2030), amount=100.0, unit="MJ")
-    result = Runner(Glossary([boiler])).apply(demand)
+    product = list(model.produces)[0]
+    demand = Demand(flow=Flow(iri=product, location="CH", time=2030), amount=100.0, unit="kWh")
+    result = Runner(Glossary([model])).apply(demand)
 
-    assert result.biosphere, "the README's model should emit something"
+    assert result.biosphere, "the guide's model should emit something"
 
 
-def test_the_readme_model_satisfies_the_production_contract():
+def test_the_guide_model_satisfies_the_production_contract():
     """The example must not teach a shape the Runner rejects."""
     namespace: dict = {}
-    exec(readme_block_defining("MyBoiler"), namespace)  # noqa: S102
-    boiler = namespace["MyBoiler"]()
-    heat = list(boiler.produces)[0]
+    exec(guide_block_defining("GasTurbine"), namespace)  # noqa: S102
+    model = namespace["GasTurbine"]()
+    product = list(model.produces)[0]
 
     for amount in (1.0, 250.0, 1e6):
-        demand = Demand(flow=Flow(iri=heat), amount=amount, unit="MJ")
-        Runner.validate(demand, boiler.apply(demand), model=boiler)
+        demand = Demand(flow=Flow(iri=product), amount=amount, unit="kWh")
+        Runner.validate(demand, model.apply(demand), model=model)
 
 
 def test_apply_documents_the_production_contract():

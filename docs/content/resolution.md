@@ -120,14 +120,44 @@ That is the best answer available, and a poor one in substance: `fi_374` average
 category that contains the cement being made. The concession is written at the node so a
 reader can judge it.
 
-### Relaxations don't compose
+### Combining relaxations
 
-Each dimension is tried starting from the *original* demand. A demand that needs both a
-wider region *and* a different year isn't answered. The combined search would need a second
-preference order (region first or year first?), and choosing one silently is exactly what
-this tier avoids. Such a demand falls through and shows up as a `generalisation_exhausted`
-cutoff whose detail counts the candidates tried, e.g. `candidates tried: location(2),
-product(3)`.
+Each plain entry in `order` is tried starting from the *original* demand. So a demand that
+needs both a wider region *and* a different year isn't answered by `"location"` or `"time"`
+alone. To allow it, add a combined entry, a tuple of dimensions relaxed together, wherever
+it belongs in your preference order:
+
+```python
+ProxySettings(
+    order=("time", "location", ("location", "time"), "product"),
+    max_steps={"time": 1, "location": 2, "product": 2},
+    time_tolerance=5,
+)
+```
+
+Here a Swiss 2032 demand with no model at `CH` and none for 2032 is asked again as
+`RER/2035` before the product is widened. A neighbouring region and year is often a closer
+proxy than a wider product category, but it's your call, so it goes in the order.
+
+The combined search follows three rules:
+
+- **Bounds.** Every member stays within its own budget: `max_steps` for location hops,
+  taxonomy levels and snapped years, plus `time_tolerance` for how far a year may move.
+  There is no separate budget for combinations.
+- **Every member moves.** A combined candidate relaxes each of its dimensions at least one
+  step. The plain entries already cover the candidates where only one moves.
+- **Fewest total steps first.** `RER/2033` (one hop, the nearest year) is tried before
+  `GLO/2033` (two hops) or `RER/2036` (one hop, the second-nearest year). When two
+  candidates are equally far, the one that moved the member written *first* the least
+  wins: `("location", "time")` prefers staying closer in space, `("time", "location")`
+  closer in time.
+
+A combined answer records every concession, e.g.
+`[proxy: location: CH -> RER; time: 2032 -> 2035]`. No combination is in the default order.
+Composing is a concession you opt into. A combined entry needs a `max_steps` budget above 0
+for each member, or `ProxySettings` rejects it, since it could never be tried. When nothing
+matches, the `generalisation_exhausted` detail counts candidates per entry, e.g.
+`candidates tried: location(2), location+time(2)`.
 
 A demand with nothing to relax (no location, no year, no taxonomy behind it) gets no
 explanation from this tier, so it is reported as `no_model_found`. That points the reader

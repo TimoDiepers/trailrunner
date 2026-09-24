@@ -84,3 +84,38 @@ def test_negative_time_tolerance_is_rejected():
 def test_valid_partial_max_steps_is_accepted():
     settings = ProxySettings(max_steps={"location": 2})
     assert settings.steps_allowed("location") == 2
+
+
+def test_a_combined_entry_is_accepted_alongside_its_members():
+    settings = ProxySettings(order=("location", ("location", "time"), "product"))
+    assert settings.order[1] == ("location", "time")
+
+
+def test_a_combined_entry_needs_two_dimensions():
+    with pytest.raises(ValueError, match="at least two"):
+        ProxySettings(order=(("location",),))
+
+
+def test_a_combined_entry_rejects_an_unknown_dimension():
+    with pytest.raises(ValueError, match="locaiton"):
+        ProxySettings(order=(("locaiton", "time"),))
+
+
+def test_a_combined_entry_rejects_a_repeated_dimension():
+    with pytest.raises(ValueError, match="once"):
+        ProxySettings(order=(("time", "time"),))
+
+
+def test_the_same_combination_may_appear_only_once():
+    """Whatever order its members are written in: the pair is one search."""
+    with pytest.raises(ValueError, match="once"):
+        ProxySettings(order=(("location", "time"), ("time", "location")))
+
+
+def test_a_combined_entry_needs_a_budget_for_every_member():
+    """Every member must move at least one step, so a zero budget makes the
+    entry unreachable -- say so where it is written, not by silence at run time."""
+    with pytest.raises(ValueError, match="product"):
+        ProxySettings(
+            order=(("location", "product"),), max_steps={"location": 2}
+        )

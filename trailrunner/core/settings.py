@@ -48,10 +48,18 @@ class ProxySettings:
     relaxing the year and relaxing the product are different concessions, and
     which one is acceptable first is a modelling decision.
 
+    An entry is one dimension, or a tuple of them to relax *together*:
+    ``("time", "location", ("location", "time"), "product")`` tries a
+    neighbouring region and year before a wider product category. A combined
+    entry moves every member at least one step, within each member's own
+    budget, and tries the fewest total steps first; a tie goes to the
+    candidate that moved the member written first the least. None is in the
+    default order: composing is a concession the practitioner opts into.
+
     Frozen to prevent reassignment, but not hashable — ``max_steps`` is a dict.
     """
 
-    order: tuple[str, ...] = PROXY_DIMENSIONS
+    order: tuple[str | tuple[str, ...], ...] = PROXY_DIMENSIONS
     max_steps: dict[str, int] = field(
         default_factory=lambda: {"time": 1, "location": 3, "product": 2}
     )
@@ -69,14 +77,34 @@ class ProxySettings:
     """Years. How far a demand's year may be moved to meet a model's coverage."""
 
     def __post_init__(self) -> None:
-        for dimension in self.order:
-            _check(dimension, PROXY_DIMENSIONS, "proxy dimension")
-        if len(set(self.order)) != len(self.order):
-            raise ValueError(f"each proxy dimension may appear only once in {self.order}")
+        seen: set[frozenset[str]] = set()
+        for entry in self.order:
+            members = (entry,) if isinstance(entry, str) else tuple(entry)
+            for dimension in members:
+                _check(dimension, PROXY_DIMENSIONS, "proxy dimension")
+            if len(set(members)) != len(members):
+                raise ValueError(f"each proxy dimension may appear only once in {entry}")
+            key = frozenset(members)
+            if key in seen:
+                raise ValueError(f"each proxy entry may appear only once in {self.order}")
+            seen.add(key)
         for dimension, budget in self.max_steps.items():
             _check(dimension, PROXY_DIMENSIONS, "proxy dimension")
             if budget < 0:
                 raise ValueError(f"{budget!r} is not a valid proxy budget; must be >= 0")
+        for entry in self.order:
+            if isinstance(entry, str):
+                continue
+            if len(entry) < 2:
+                raise ValueError(
+                    f"{entry!r} combines at least two dimensions or is written as a plain one"
+                )
+            unbudgeted = [dimension for dimension in entry if self.steps_allowed(dimension) <= 0]
+            if unbudgeted:
+                raise ValueError(
+                    f"{entry!r} can never be tried: no max_steps budget for "
+                    f"{', '.join(unbudgeted)}"
+                )
         if self.time_tolerance < 0:
             raise ValueError(
                 f"{self.time_tolerance!r} is not a valid time_tolerance; must be >= 0"
