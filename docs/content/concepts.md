@@ -27,8 +27,9 @@ flowchart LR
 ## Flow, Exchange, Demand
 
 A [`Flow`](../api/flow.md) is **identity**: what a thing is (`iri`), where it is
-(`location`), and when it is (`time`, a year). It has no amount and no unit, so it is
-hashable and serves directly as the inventory's aggregation key.
+(`location`), when it is (`time`, read in a `time_standard`), and under which conditions it
+is asked for (`context`, such as a pressure). It has no amount and no unit, so it is hashable
+and serves directly as the inventory's aggregation key.
 
 The `iri` is a concept in the [sentier vocabulary](https://vocab.sentier.dev), not a
 free-text name. Two models written independently have to agree on identity before they
@@ -39,9 +40,30 @@ prints) and its broader parents (`skos:broader`, which the
 
 `location` is an opaque key resolved through a [`LocationHierarchy`](../api/location.md)
 (`CH → RER → GLO`), so regions and the globe can be expressed as well as countries. `None`
-on either `location` or `time` means the flow isn't specific to a place or a year.
+on either `location` or `time` means the flow isn't specific to a place or a time.
 
-An [`Exchange`](../api/flow.md) is a quantified flow: the `amount` and `unit` live here. It
+A **time** is a string plus the IRI of the standard it is written in, and the two travel
+together: `time="2030"` with `time_standard=GYEAR`, or `time="2030-06-15"` with `DATE`. The
+standard is what turns the string into an interval, so a model valid for 2030 can answer a
+demand for a day inside it. Four standards ship in `trailrunner.core.time`, all XSD:
+
+| Constant | IRI | Example |
+| --- | --- | --- |
+| `GYEAR` | `xsd:gYear` | `"2030"` |
+| `GYEAR_MONTH` | `xsd:gYearMonth` | `"2030-06"` |
+| `DATE` | `xsd:date` | `"2030-06-15"` |
+| `DATETIME` | `xsd:dateTime` | `"2030-06-15T12:00:00Z"` |
+
+`in_year(2030)` spells the common case (`Flow(iri=..., **in_year(2030))`), and
+`when(flow)` passes a flow's time on unchanged. Any other standard can be taught with
+`register_time_standard(iri, parser)`, where `parser` maps a value to its UTC interval.
+
+An [`Exchange`](../api/flow.md) is a quantified flow: the `amount` and `unit` live here. A
+**unit** is a vocabulary IRI too, a concept in the sentier units scheme
+(`https://vocab.sentier.dev/units/`, QUDT-derived), so the library knows that a tonne is
+exactly a thousand kilograms and can [convert](resolution.md#units) between them.
+`trailrunner.core.units` names the common ones (`KG`, `TONNE`, `MJ`, `KWH`, `M3`, `PA`,
+`KILOMETRE`, ...) and `symbol(iri)` gives what a person reads (`kg`, `t`, `kWh`). An exchange
 may also carry `properties` (mass, price, energy content) for
 [allocation](attribution.md) to partition on.
 
@@ -50,9 +72,11 @@ means "a technosphere exchange somebody must satisfy".
 
 ```python
 from trailrunner import Demand, Flow
+from trailrunner.core.time import in_year
+from trailrunner.core.units import MJ
 
-flow = Flow(iri="https://vocab.sentier.dev/products/heat", location="CH", time=2030)
-demand = Demand(flow=flow, amount=5000.0, unit="MJ")
+flow = Flow(iri="https://vocab.sentier.dev/products/heat", location="CH", **in_year(2030))
+demand = Demand(flow=flow, amount=5000.0, unit=MJ)
 ```
 
 ## Model

@@ -310,8 +310,10 @@ Python, which takes the same order.
 ## 5. Get a score: `--method`
 
 A characterization method is a parquet file with one row per factor: `flow_iri`,
-`flow_unit`, an optional `location`, and `cf`. The `cf` column declares the score's unit
-in the embedded Data Package metadata. [Assessment](../assessment.md#the-method-parquet-layout)
+`flow_unit` (a unit IRI), an optional `location`, and `cf`. The `cf` column declares the
+score's unit in the embedded Data Package metadata. Units are vocabulary IRIs here too: the
+score is in kilograms of CO<sub>2</sub>-equivalent, so its unit is `KiloGM` and the
+indicator is in the method's name. [Assessment](../assessment.md#the-method-parquet-layout)
 has the full layout. This script writes a three-gas IPCC AR6 GWP100 with pyarrow alone:
 
 ```python title="make_gwp100.py"
@@ -320,10 +322,12 @@ import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+KG = "https://vocab.sentier.dev/units/unit/KiloGM"  # trailrunner.core.units.KG
+
 rows = [
-    {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": "kg", "location": "GLO", "cf": 1.0},
-    {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": "kg", "location": "GLO", "cf": 29.8},
-    {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": "kg", "location": "GLO", "cf": 273.0},
+    {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": KG, "location": "GLO", "cf": 1.0},
+    {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": KG, "location": "GLO", "cf": 29.8},
+    {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": KG, "location": "GLO", "cf": 273.0},
 ]
 
 datapackage = {
@@ -334,7 +338,7 @@ datapackage = {
             {"name": "flow_iri", "type": "string"},
             {"name": "flow_unit", "type": "string"},
             {"name": "location", "type": "string"},
-            {"name": "cf", "type": "number", "unit": {"name": "kg CO2-eq"}},  # the score unit
+            {"name": "cf", "type": "number", "unit": {"name": KG}},  # the score unit
         ]},
     }],
 }
@@ -348,7 +352,7 @@ pq.write_table(table, "gwp100.parquet")
 uv run python make_gwp100.py
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
     --context-tolerance "pressure=0:1e5 Pa" \
     --method gwp100.parquet
@@ -357,14 +361,15 @@ uv run trailrunner run \
 After the tree, the CLI prints the assessment:
 
 ```text
-543.908 kg CO2-eq
+543.908 kg
 method: IPCC AR6 GWP100
 8 uncharacterized flows on 6 nodes (not in the score, and not zero)
 12 unresolved
 1 proxy
 ```
 
-Factors written for `GLO` apply to Danish and Norwegian flows, because every location
+The score reads `kg`: kilograms of CO<sub>2</sub>-equivalent, the indicator being the
+method named on the next line. Factors written for `GLO` apply to Danish and Norwegian flows, because every location
 lookup ends at the hierarchy's root. The last three lines are what makes the number
 honest:
 
@@ -380,7 +385,7 @@ Converting an existing Brightway method instead of writing one by hand is covere
 
 ## 6. Get a curve: `--dynamic`
 
-Every flow carries its year, so the inventory is already a time series. `--dynamic` runs
+Every flow carries its time, so the inventory is already a time series. `--dynamic` runs
 [`assess_dynamic()`](../assessment.md#assess_dynamic-a-time-explicit-reading) on it. This
 needs the `dynamic` extra:
 
@@ -388,7 +393,7 @@ needs the `dynamic` extra:
 uv sync --extra dev --extra dynamic
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
     --context-tolerance "pressure=0:1e5 Pa" \
     --dynamic radiative_forcing --horizon 100
@@ -401,8 +406,8 @@ wrong-unit, undated and beyond-horizon exchanges.
 `--dynamic GWP` puts the same curve in CO<sub>2</sub>-equivalents:
 
 ```text
-GWP over 100 years: 543.881 kg CO2eq
-543.881 kg CO2eq
+GWP over 100 years: 543.881 kg
+543.881 kg
 metric: GWP, horizon: 100 years
 horizon anchored at: 2030-01-01
 18 uncharacterized exchanges
@@ -561,7 +566,7 @@ attribution: allocation=none, capital=per_output
 100 MJ heat @CH/2030  [model: Boiler]
   111.111 MJ natural-gas @CH/2030  [model: GasSupply]
 
-6.88444 kg CO2-eq
+6.88444 kg
 method: IPCC AR6 GWP100
 0 uncharacterized flows
 0 unresolved

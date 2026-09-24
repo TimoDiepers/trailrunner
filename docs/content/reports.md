@@ -43,7 +43,7 @@ Here is the shipped cement chain for 1 t in Denmark in 2030, with tier 1 only:
 0 proxies
 attribution: allocation=none, capital=per_output
 
-1000 kg fi_37440 @DK/2030  [model: CementPlant]
+1 t fi_37440 @DK/2030  [model: CementPlant; unit: t -> kg ×1000]
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]
     8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
       49.1551 MJ fi_12020 @DK/2030  [model: NaturalGasSupply]
@@ -51,11 +51,13 @@ attribution: allocation=none, capital=per_output
     84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
     12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
   1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
-  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]
+  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [cutoff: coverage_excluded]
   10 kg fi_37420 @DK/2030  [cutoff: no_model_found]
 ```
 
-The kiln's gas asks for `pressure=4 bar` and the only supplier delivers 5, so tier 1
+The root line shows the tonne converted to the kilograms `CementPlant` answers in: exact,
+logged, and not a proxy ([Units](resolution.md#units)). The kiln's gas asks for
+`pressure=400000 Pa` and the only supplier delivers 500000 Pa, so tier 1
 reports it as `coverage_excluded`: a supplier exists, and its coverage is what to look
 at. A [`context_tolerance`](resolution.md#tier-2-generalising-a-demand) turns it into a
 recorded proxy instead.
@@ -66,14 +68,15 @@ rules, and then, only when they apply, a truncation line and a warning count. Ch
 before trusting the inventory.
 
 **`tree()`** is the traversal as indented text. Each line is
-`amount unit product @location/year (context)  [how it was answered]`, with the context
+`amount unit product @location/time (context)  [how it was answered]`, with the context
 part only when the demand names one:
 
 | Tag | Meaning |
 | --- | --- |
 | `[model: CementPlant]` | an exact match in tier 1 |
+| `[model: CementPlant; unit: t -> kg ×1000]` | a tier-1 match, the amount converted exactly into a unit the model answers in |
 | `[proxy: product: fi_37420 -> fi_374]` | answered by relaxing the demand, naming what was relaxed |
-| `[proxy: context: pressure 4 bar -> 5 bar]` | answered after moving a context condition within its tolerance |
+| `[proxy: context: pressure 400000 Pa -> 500000 Pa]` | answered after moving a context condition within its tolerance |
 | `[background: cumulative]` | borrowed from a background pack, upstream included |
 | `[background: unit_process, incomplete]` | borrowed, direct emissions only, upstream missing |
 | `[cutoff: no_model_found]` | nothing answered, with the reason |
@@ -89,18 +92,20 @@ committed cache, and anything without a name falls back to the segment:
 from trailrunner.resolution import PystLabels
 
 print(report.tree(labels=PystLabels("examples/pyst_labels.json").label))
-# 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, ... @DK/2030  [model: CementPlant]
+# 1 t Portland cement, aluminous cement, slag cement and similar hydraulic cements, ... @DK/2030  [model: CementPlant; unit: t -> kg ×1000]
 #   100 kWh electricity @DK/2030  [model: GridElectricity]
 ```
 
 ## `inventory`
 
 Biosphere exchanges summed over the whole traversal, keyed by `(Flow, unit)`. The `Flow`
-keeps its location and year, so emissions at different places or times stay separate:
+keeps its location and time, so emissions at different places or times stay separate:
 
 ```python
+from trailrunner.core.units import symbol
+
 for (flow, unit), amount in report.inventory.items():
-    print(f"{amount:>12.4g} {unit}  {flow.iri}  {flow.location} {flow.time}")
+    print(f"{amount:>12.4g} {symbol(unit)}  {flow.iri}  {flow.location} {flow.time}")
 ```
 
 Two entries for the same substance in different units also stay separate. Nothing is

@@ -76,7 +76,7 @@ class Flow:
             interval(self.time, self.time_standard)  # raises ValueError naming the standard
 
     def describe_context(self) -> str:
-        """The context as one short string, ``pressure=4 bar``; empty if there is none."""
+        """The context as one short string, ``pressure=400000 Pa``; empty if there is none."""
         return ", ".join(
             f"{entry.name}={entry.value:g} {symbol(entry.unit)}" for entry in self.context
         )
