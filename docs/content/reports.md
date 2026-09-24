@@ -38,23 +38,27 @@ print(report.tree())
 Here is the shipped cement chain for 1 t in Denmark in 2030, with tier 1 only:
 
 ```text
-11 nodes, 11 inventory entries
-12 unresolved (no_model_found: 12)
+7 nodes, 11 inventory entries
+9 unresolved (coverage_excluded: 1, no_model_found: 8)
 0 proxies
 attribution: allocation=none, capital=per_output
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030  [model: NaturalGasSupply]
-    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-    ...
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]
     8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
-    ...
+      49.1551 MJ fi_12020 @DK/2030  [model: NaturalGasSupply]
+      ...
     84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
     12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
   1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
+  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]
   10 kg fi_37420 @DK/2030  [cutoff: no_model_found]
 ```
+
+The kiln's gas asks for `pressure=4 bar` and the only supplier delivers 5, so tier 1
+reports it as `coverage_excluded`: a supplier exists, and its coverage is what to look
+at. A [`context_tolerance`](resolution.md#tier-2-generalising-a-demand) turns it into a
+recorded proxy instead.
 
 **`summary()`** gives, in order: node and inventory counts, unresolved demands broken down
 by reason, the proxy count (with incomplete borrows called out), the run's attribution
@@ -62,12 +66,14 @@ rules, and then, only when they apply, a truncation line and a warning count. Ch
 before trusting the inventory.
 
 **`tree()`** is the traversal as indented text. Each line is
-`amount unit product @location/year  [how it was answered]`:
+`amount unit product @location/year (context)  [how it was answered]`, with the context
+part only when the demand names one:
 
 | Tag | Meaning |
 | --- | --- |
 | `[model: CementPlant]` | an exact match in tier 1 |
 | `[proxy: product: fi_37420 -> fi_374]` | answered by relaxing the demand, naming what was relaxed |
+| `[proxy: context: pressure 4 bar -> 5 bar]` | answered after moving a context condition within its tolerance |
 | `[background: cumulative]` | borrowed from a background pack, upstream included |
 | `[background: unit_process, incomplete]` | borrowed, direct emissions only, upstream missing |
 | `[cutoff: no_model_found]` | nothing answered, with the reason |
@@ -84,7 +90,7 @@ from trailrunner.resolution import PystLabels
 
 print(report.tree(labels=PystLabels("examples/pyst_labels.json").label))
 # 1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, ... @DK/2030  [model: CementPlant]
-#   2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030  [model: NaturalGasSupply]
+#   100 kWh electricity @DK/2030  [model: GridElectricity]
 ```
 
 ## `inventory`

@@ -10,9 +10,10 @@ import sys
 from pathlib import Path
 
 from trailrunner.core.flow import Demand, Flow
-from trailrunner.core.settings import AttributionSettings, Settings
+from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
+from trailrunner.resolution import GeneralisingProvider, ModelProvider, ResolutionChain
 
 
 def load_models(path: Path) -> list:
@@ -26,6 +27,24 @@ def load_models(path: Path) -> list:
     if models is None:
         raise AttributeError(f"{path} defines no MODELS list")
     return list(models)
+
+
+def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, float]]:
+    """``["pressure=0:1"]`` -> ``{"pressure": (0.0, 1.0)}``: below, then above."""
+    tolerance: dict[str, tuple[float, float]] = {}
+    for value in values or []:
+        name, sep, bounds = value.partition("=")
+        below, colon, above = bounds.partition(":")
+        try:
+            if not (name and sep and colon):
+                raise ValueError
+            tolerance[name] = (float(below), float(above))
+        except ValueError:
+            raise ValueError(
+                f"{value!r} is not a context tolerance; write NAME=BELOW:ABOVE, "
+                "e.g. pressure=0:1"
+            ) from None
+    return tolerance
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +63,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--horizon", type=int, default=100)
     run.add_argument("--allocation", default="none")
     run.add_argument("--capital", default="per_output")
+    run.add_argument(
+        "--context-tolerance",
+        action="append",
+        metavar="NAME=BELOW:ABOVE",
+        help="let a context condition be met this far below/above what was asked, "
+        "e.g. pressure=0:1; repeatable",
+    )
     run.add_argument("--max-depth", type=int, default=10)
     run.add_argument("--max-nodes", type=int, default=1000)
     run.add_argument("--out", default=None, help="write the parquet log here")
@@ -54,8 +80,13 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
+        context_tolerance = parse_context_tolerance(args.context_tolerance)
         settings = Settings(
-            attribution=AttributionSettings(allocation=args.allocation, capital=args.capital)
+            attribution=AttributionSettings(allocation=args.allocation, capital=args.capital),
+            # Context only. The CLI has no location hierarchy or taxonomy to
+            # relax along, and a flag about pressure should not quietly start
+            # moving years as well.
+            proxy=ProxySettings(order=("context",), context_tolerance=context_tolerance),
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -72,8 +103,12 @@ def main(argv: list[str] | None = None) -> int:
         amount=args.amount,
         unit=args.unit,
     )
+    tier1 = ModelProvider(Glossary(models))
+    providers = [tier1]
+    if context_tolerance:
+        providers.append(GeneralisingProvider(tier1, settings=settings.proxy))
     orchestrator = Orchestrator(
-        Glossary(models),
+        ResolutionChain(providers),
         max_depth=args.max_depth,
         max_nodes=args.max_nodes,
         settings=settings,

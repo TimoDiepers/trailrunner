@@ -26,6 +26,7 @@ usage: trailrunner run [-h] --amount AMOUNT --unit UNIT [--location LOCATION]
                        [--year YEAR] --models MODELS [--method METHOD]
                        [--dynamic DYNAMIC] [--horizon HORIZON]
                        [--allocation ALLOCATION] [--capital CAPITAL]
+                       [--context-tolerance NAME=BELOW:ABOVE]
                        [--max-depth MAX_DEPTH] [--max-nodes MAX_NODES]
                        [--out OUT]
                        iri
@@ -51,17 +52,18 @@ Portland cement (BONSAI `fi_37440`) in Denmark in 2030:
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
-    --models examples/showcase_models.py
+    --models examples/showcase_models.py \
+    --context-tolerance pressure=0:1
 ```
 
 ```text
 11 nodes, 11 inventory entries
 12 unresolved (no_model_found: 12)
-0 proxies
+1 proxy
 attribution: allocation=none, capital=per_output
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030  [model: NaturalGasSupply]
+  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
     68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
       0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
@@ -84,12 +86,29 @@ How to read it:
 - **The summary comes first**, because it says how far to trust the rest: 11 nodes ran,
   and 12 demands found no model.
 - **Every tree line** is one node: the amount demanded, the product (the last segment of
-  its IRI), `@location/year`, and in brackets how it was answered.
+  its IRI), `@location/year`, any context in parentheses, and in brackets how it was
+  answered.
+- **The kiln's gas is a proxy.** The kiln burners ask for gas at 4 bar, and
+  `NaturalGasSupply` delivers at 5, so no model matches exactly.
+  `--context-tolerance pressure=0:1` lets pressure be met up to 1 bar *higher* and never
+  lower (`BELOW:ABOVE`, in the condition's own unit). Tier 2 then answers it and writes
+  down the move. The gas plant's gas asks for no pressure, so it is a plain match.
 - **The gas moved.** `NaturalGasSupply` places extraction and pipeline transport in `NO`,
   the gas's origin, not at the Danish consumer, and every model below it works with that.
 - **Cutoffs hang where they happened.** Limestone (`fi_15200`) and lime (`fi_37420`) are
   demanded by the cement plant, and wind and hydro power by the grid mix. Nobody models
   them, and the report says so rather than counting them as zero.
+
+Leave the flag out and the 4-bar demand stays unanswered, with the reason that tells you
+what to change:
+
+```text
+  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [cutoff: coverage_excluded]
+```
+
+The flag relaxes context only. The CLI does not widen locations, move years or climb
+the product taxonomy; for those, build a
+[`ResolutionChain`](../resolution.md) in Python.
 
 ## 3. Change the year and a different model answers
 
@@ -101,7 +120,8 @@ Ask for 2020 and the meter answers:
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2020 \
-    --models examples/showcase_models.py
+    --models examples/showcase_models.py \
+    --context-tolerance pressure=0:1
 ```
 
 ```text
@@ -164,6 +184,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
+    --context-tolerance pressure=0:1 \
     --method gwp100.parquet
 ```
 
@@ -174,7 +195,7 @@ After the tree, the CLI prints the assessment:
 method: IPCC AR6 GWP100
 8 uncharacterized flows on 6 nodes (not in the score, and not zero)
 12 unresolved
-0 proxies
+1 proxy
 ```
 
 Factors written for `GLO` apply to Danish and Norwegian flows, because every location
@@ -184,8 +205,9 @@ honest:
 - **8 uncharacterized flows** are emissions the method has no factor for: ethane, mercury,
   NMVOC, the gas taken out of the ground. A GWP100 method rightly ignores most of them.
   They are listed rather than added in as zero.
-- **12 unresolved** and **0 proxies** are carried over from the traversal, so anyone
-  handed only the score still sees that the supply chain was cut off in 12 places.
+- **12 unresolved** and **1 proxy** are carried over from the traversal, so anyone
+  handed only the score still sees that the supply chain was cut off in 12 places and
+  that one demand was met by a stand-in.
 
 Converting an existing Brightway method instead of writing one by hand is covered in
 [Assessment](../assessment.md#the-brightway-converter-an-offline-escape-hatch).
@@ -202,6 +224,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
     --models examples/showcase_models.py \
+    --context-tolerance pressure=0:1 \
     --dynamic radiative_forcing --horizon 100
 ```
 
@@ -221,7 +244,7 @@ horizon anchored at: 2030-01-01
 0 undated exchanges
 0 beyond-horizon exchanges
 12 unresolved
-0 proxies
+1 proxy
 ```
 
 It nearly matches the static score, because everything in this run happens in 2030. The
@@ -263,18 +286,19 @@ solved. `--max-depth` (default 10) limits how deep a branch goes. `--max-nodes` 
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --year 2030 \
-    --models examples/showcase_models.py --max-depth 2
+    --models examples/showcase_models.py \
+    --context-tolerance pressure=0:1 --max-depth 2
 ```
 
 ```text
 3 nodes, 1 inventory entry
 7 unresolved (max_depth: 5, no_model_found: 2)
-0 proxies
+1 proxy
 attribution: allocation=none, capital=per_output
 traversal was truncated: max_depth or max_nodes was reached
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030  [model: NaturalGasSupply]
+  2475 MJ fi_12020 @DK/2030 (pressure=4 bar)  [proxy: context: pressure 4 bar -> 5 bar]
     68.75 Nm3 natural-gas-at-production @NO/2030  [cutoff: max_depth]
     50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [cutoff: max_depth]
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]
