@@ -14,6 +14,7 @@ nav = [
   { Home = [
     { Overview = "index.md" },
     { "5-minute tour" = "showcase.md" },
+    { Pitch = "pitch.md" },
   ]},
   { "User Guide" = [
     { Installation = "content/installation.md" },
