@@ -110,6 +110,7 @@ flowchart TB
       49.16 MJ Natural gas …                      [model: NaturalGasSupply]
     84.66 kWh electricity-wind                    [cutoff: no_model_found]
   1125 kg Gypsum; limestone flux; …               [cutoff: no_model_found]
+  10 kg Quicklime, slaked lime …                  [cutoff: no_model_found]
 ```
 
 Nobody wired that gas chain. The kiln asked for MJ; supply converted them to
@@ -122,6 +123,7 @@ the Norwegian shelf, at its low-leakage tier.
 ## Nothing answers? Relax along the vocabulary — deliberately
 
 Tier 1 = models. Every later tier = **concession**, written at the node.
+That last cutoff — 10 kg of lime — retried:
 
 ```text
        model: BinderSupply

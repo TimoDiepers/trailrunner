@@ -83,6 +83,7 @@ compose at all.
     8.47 kWh electricity-natural-gas            [model: GasPower]
     84.66 kWh electricity-wind                  [cutoff: no_model_found]
   1125 kg Gypsum; limestone flux; …            [cutoff: no_model_found]
+  10 kg Quicklime, slaked lime …               [cutoff: no_model_found]
 ```
 
 Nobody wired that gas chain up. Every miss stays in the report, with a reason.
@@ -90,6 +91,8 @@ Nobody wired that gas chain up. Every miss stays in the report, with a reason.
 ---
 
 ## Nothing answers? Relax along the vocabulary — deliberately
+
+That last cutoff — 10 kg of lime — retried:
 
 ```text
        model: BinderSupply
