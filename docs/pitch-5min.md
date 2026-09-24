@@ -85,7 +85,7 @@ flowchart TB
     R -->|apply| M[Model]
     M -->|Result| R
     R -->|new demands| Q
-    R -->|flows| I[(inventory)]
+    R -->|elementary flows| I[(inventory)]
 
     classDef resolution fill:#2dd4bf22,stroke:#2dd4bf
     classDef execution fill:#f59e0b22,stroke:#f59e0b
