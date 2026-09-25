@@ -1,5 +1,7 @@
+import importlib.util
 import json
 import urllib.error
+from pathlib import Path
 
 import pytest
 
@@ -126,6 +128,61 @@ def test_a_404_is_unknown_and_not_cached(tmp_path):
 
 def test_offline_miss_is_undetermined():
     assert UnitCatalog().known(VOCAB + "LB") is None
+
+
+def _load_warm_unit_cache():
+    """Import dev/warm_unit_cache.py as a module; it is a script, not a package."""
+    path = Path(__file__).resolve().parents[1] / "dev" / "warm_unit_cache.py"
+    spec = importlib.util.spec_from_file_location("warm_unit_cache", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_warm_cache_replaces_the_bundled_file_only_once_everything_resolves(tmp_path):
+    warm_unit_cache = _load_warm_unit_cache()
+    a, b = VOCAB + "WARM-TEST-A", VOCAB + "WARM-TEST-B"
+    bundled = tmp_path / "units.json"
+    bundled.write_text("SENTINEL-BEFORE-REFRESH")
+    client = StubClient({a: payload(a, "Mass", 1.0, "a"), b: payload(b, "Mass", 2.0, "b")})
+
+    result = warm_unit_cache.refresh(client, constants=[a, b], bundled_path=bundled)
+
+    assert result == 0
+    # UnitCatalog always merges in the real bundled constants too, so the
+    # written file is a full dump, not just the two test IRIs -- assert
+    # containment rather than an exact set.
+    data = json.loads(bundled.read_text())
+    assert data[a]["symbol"] == "a"
+    assert data[b]["symbol"] == "b"
+
+
+def test_warm_cache_leaves_the_bundled_file_unchanged_on_a_failed_fetch(tmp_path):
+    warm_unit_cache = _load_warm_unit_cache()
+    a, b = VOCAB + "WARM-TEST-C", VOCAB + "WARM-TEST-D"
+    bundled = tmp_path / "units.json"
+    original = "SENTINEL-BEFORE-REFRESH"
+    bundled.write_text(original)
+
+    class FlakyClient:
+        """Answers ``a`` fine but drops the connection for ``b`` -- a real
+        network failure, distinct from the 404 ``StubClient`` gives for an
+        IRI the vocabulary simply does not have."""
+
+        def __init__(self):
+            self.payloads = {a: payload(a, "Mass", 1.0, "a")}
+
+        def concept_payload(self, iri):
+            if iri == b:
+                raise OSError("network down")
+            if iri not in self.payloads:
+                raise urllib.error.HTTPError(iri, 404, "Not Found", {}, None)
+            return self.payloads[iri]
+
+    result = warm_unit_cache.refresh(FlakyClient(), constants=[a, b], bundled_path=bundled)
+
+    assert result == 1
+    assert bundled.read_text() == original
 
 
 def test_symbol_prefers_the_display_override_then_ucum_then_last_segment():
