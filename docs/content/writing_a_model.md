@@ -250,6 +250,85 @@ MODELS = [GasTurbine(), DirectAirCapture(params=dac_params)]
 Two registered models that both cover the same product at the same place and year raise
 [`AmbiguousModelMatch`](../api/errors.md). Narrow one of their coverages.
 
+## Migrating from int years and string units
+
+`Flow.time`, `Coverage.time_range` and every `unit` used to accept whatever you handed
+them: an `int` year, a `(start, end)` tuple, a free-text string like `"kg"` or `"bar"`.
+None of that round-tripped safely — a year compared as a string sorts wrong, and a
+misspelled unit just failed to match instead of telling you so. Both are typed now, and
+each old shape raises immediately, naming the fix.
+
+**`Flow(time=2030)`** — an int year. `Flow.time` is a string in the standard named by
+`Flow.time_standard`, so a bare int has nowhere to go:
+
+```text
+TypeError: Flow.time is a string in a declared standard, not 2030; write Flow(iri=..., **in_year(2030))
+```
+
+Write `Flow(iri=..., **in_year(2030))` instead; `in_year` sets `time` and
+`time_standard` together.
+
+**`Coverage(time_range=(2026, 2050))`** — a plain tuple. `time_range` is a `TimeRange`,
+which knows how to compare a coarse range against a finer date; a tuple of ints doesn't:
+
+```text
+TypeError: Coverage.time_range is a TimeRange; write time_range=year_range(2026, 2050)
+```
+
+Write `Coverage(time_range=year_range(2026, 2050))`.
+
+**`unit="kg"`** — a free-text unit reaching a demand. Units are vocabulary IRIs, not
+symbols, so a model or `ModelProvider` that gets a bare string can't tell KG from a typo:
+
+```text
+UnknownUnit: 'kg' is not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Write `unit=KG`, imported from `trailrunner.core.units`.
+
+**`Property("pressure", 4, "bar")`** — the same problem on a context condition. A
+`Coverage` compares context by converting into its own unit, so it has to recognise the
+one the demander wrote:
+
+```text
+UnknownUnit: context condition 'pressure' is in 'bar', not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Write the value in the vocabulary's own unit and IRI: `Property("pressure", 4e5, PA)`.
+
+**An int year column in a parquet file** — the old `time_column` held integers with no
+declared standard. `ParameterSet.from_parquet` refuses to guess which calendar `2030`
+means, or whether it sorts as a number or a string:
+
+```text
+MissingTimeStandard: column 'time' in dac.parquet declares no time standard; add "timeStandard": "http://www.w3.org/2001/XMLSchema#gYear" (or another registered standard) to its field in the embedded datapackage, and make sure the column holds strings (e.g. '2030'), not integers
+```
+
+Cast the column to string and add a `"timeStandard"` field to the embedded datapackage
+schema.
+
+**`unit="tkm"`** — a unit that packs two quantities (mass and distance) into one
+symbol. The vocabulary has no such compound unit, so it fails the same way `"kg"` does:
+
+```text
+UnknownUnit: 'tkm' is not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Split it: demand `unit=TONNE` and put the distance on the flow's context, e.g.
+`Property("distance", 500, KILOMETRE)`, the way `NaturalGasPipelineTransport` does.
+
+**`"kg/year"`** — a rate written as a unit string, for a capacity or a fleet limit.
+Same failure, same reason: it isn't an IRI the vocabulary knows.
+
+```text
+UnknownUnit: 'kg/year' is not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Write `unit=TONNE_PER_YEAR`, one of the vocabulary's own rate units.
+
+The code blocks above show the error each old shape now raises, not code this page runs;
+`tests/test_writing_a_model.py` only executes the blocks that define a model.
+
 ## Testing it
 
 `Runner.validate` is the same check the orchestrator runs, callable on its own:
