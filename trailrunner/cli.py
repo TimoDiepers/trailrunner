@@ -69,9 +69,14 @@ def _condition(text: str, catalog: UnitCatalog) -> Property:
     """``"pressure=4e5 Pa"`` -> ``Property("pressure", 400000.0, PA)``."""
     name, separator, rest = text.partition("=")
     parts = rest.split(None, 1)
+    malformed = ValueError(f'{text!r} is not a condition; write "NAME=VALUE UNIT", e.g. "pressure=4e5 Pa"')
     if not separator or not name.strip() or len(parts) != 2:
-        raise ValueError(f'{text!r} is not a condition; write "NAME=VALUE UNIT", e.g. "pressure=4e5 Pa"')
-    return Property(name.strip(), float(parts[0]), catalog.resolve(parts[1].strip()))
+        raise malformed
+    try:
+        value = float(parts[0])
+    except ValueError:
+        raise malformed from None
+    return Property(name.strip(), value, catalog.resolve(parts[1].strip()))
 
 
 def parse_proxy_order(value: str | None) -> tuple[str | tuple[str, ...], ...]:

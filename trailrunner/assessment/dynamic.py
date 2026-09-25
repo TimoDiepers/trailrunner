@@ -149,7 +149,9 @@ def default_functions() -> dict[tuple[str, str], Callable]:
     The unit is half the key because the IPCC AR6 functions are defined per
     kilogram (their radiative efficiencies are ``radiative_efficiency_kg``).
     Applying one to an amount denominated in anything else is not a rounding
-    error, it is a factor of 1000, so ``"kg"`` is stated rather than assumed.
+    error, it is a factor of 1000, so ``KG`` is stated rather than assumed.
+    The key matches on that IRI exactly and nothing is converted to reach
+    it, unlike static ``Method``, which tries a flow's other units too.
 
     **Two sign conventions meet in this table, so each removal flow is paired
     with the function that matches how it is written down.**

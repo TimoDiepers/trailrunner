@@ -291,6 +291,14 @@ def test_a_malformed_context_exits_2(models_file, capsys):
                  "--context", "pressure 4", "--models", str(models_file)]) == 2
 
 
+def test_a_non_numeric_context_value_exits_2_naming_the_argument(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg",
+                 "--context", "pressure=abc Pa", "--models", str(models_file)]) == 2
+    err = capsys.readouterr().err
+    assert "pressure=abc Pa" in err
+    assert "NAME=VALUE UNIT" in err
+
+
 def test_year_is_gone(models_file):
     with pytest.raises(SystemExit):
         main(["run", HEAT, "--amount", "1", "--unit", "kg", "--year", "2030", "--models", str(models_file)])

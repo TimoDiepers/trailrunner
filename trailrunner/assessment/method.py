@@ -50,10 +50,12 @@ class Method:
     between CFs, because a CF is a modelling convention rather than a measured
     quantity, and interpolating between two conventions produces neither.
 
-    Lookup precedence is **location first, time second**: the outer loop walks
-    the location chain and the inner loop tries ``flow.time`` then ``None``.
-    So a ``CH`` row with no year beats a ``GLO`` row written for exactly the
-    year asked for. A method states its factors where they hold; a regional
+    Lookup precedence is **location, then unit, then a containing dated row,
+    then an undated row**: the outer loop walks the location chain, the next
+    loop tries the flow's own unit before any other unit of its kind, and
+    only within a (location, unit) does time decide between rows. So a
+    ``CH`` row with no year beats a ``GLO`` row written for exactly the year
+    asked for. A method states its factors where they hold; a regional
     convention that did not bother to date itself is still that region's
     convention, and reaching past it to the global table would substitute a
     different method's opinion for this one's.
