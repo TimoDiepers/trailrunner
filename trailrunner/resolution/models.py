@@ -3,9 +3,10 @@
 from collections.abc import Sequence
 from dataclasses import replace
 
+from trailrunner.core.errors import UnknownUnit
 from trailrunner.core.flow import Demand
 from trailrunner.core.model import Model
-from trailrunner.core.units import UnitCatalog, default_catalog
+from trailrunner.core.units import KG, VOCAB, UnitCatalog, default_catalog
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.resolution.chain import Offer, describe
 
@@ -25,6 +26,11 @@ class ModelProvider:
         self.units = units if units is not None else default_catalog()
 
     def offer(self, demand: Demand, exclude: Sequence[Model] = ()) -> Offer | None:
+        if self.units.known(demand.unit) is False:
+            raise UnknownUnit(
+                f"{demand.unit!r} is not a unit of the vocabulary ({VOCAB}); units are "
+                f"IRIs such as {KG} — write unit=KG (from trailrunner.core.units)"
+            )
         model = self.glossary.resolve(demand.flow, exclude=exclude)
         if model is None:
             return None
@@ -77,11 +83,26 @@ class ModelProvider:
         model = self.glossary.resolve(demand.flow, exclude=exclude)
         if model is not None:
             accepted = sorted(model.coverage.units)  # non-None, or offer() would have answered
+            demand_symbol = self.units.symbol(demand.unit)
+            accepted_symbols = [self.units.symbol(unit) for unit in accepted]
+            hint = ""
+            if demand_symbol in accepted_symbols:
+                # The units differ but display the same symbol -- typically an
+                # uncached vocabulary IRI whose symbol falls back to its last
+                # path segment. Saying "in kg but the demand is in kg" would
+                # read as a contradiction, so show the full IRIs instead.
+                accepted_display = ", ".join(accepted)
+                demand_display = demand.unit
+                if self.units.known(demand.unit) is None:
+                    hint = " (uncached; run dev/warm_unit_cache.py to confirm it)"
+            else:
+                accepted_display = ", ".join(accepted_symbols)
+                demand_display = demand_symbol
             return (
                 "unit_mismatch",
                 f"{type(model).__name__} answers {demand.flow.iri} in "
-                f"{', '.join(self.units.symbol(unit) for unit in accepted)} but the demand is in "
-                f"{self.units.symbol(demand.unit)}, a different quantity",
+                f"{accepted_display} but the demand is in "
+                f"{demand_display}, a different quantity{hint}",
             )
         near_misses = self.glossary.declared_models(demand.flow, exclude=exclude)
         if not near_misses:

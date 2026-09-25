@@ -1,7 +1,10 @@
+import pytest
+
+from trailrunner.core.errors import UnknownUnit
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
-from trailrunner.core.units import KG, M3, MJ, TONNE
+from trailrunner.core.units import KG, M3, MJ, TONNE, VOCAB
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.params.coverage import Coverage
@@ -94,3 +97,28 @@ def test_a_generalised_demand_is_converted_too():
     assert node.resolution["conversion"] == "unit: t -> kg ×1000"
     assert report.inventory[(Flow(iri=CO2), KG)] == 500.0
     assert "unit: t -> kg ×1000" in report.tree()
+
+
+def test_a_free_text_unit_is_refused_at_the_model_provider():
+    # Review focus 2 (legacy free-text units ruling).
+    with pytest.raises(UnknownUnit, match=r"'kg' is not a unit of the vocabulary"):
+        ModelProvider(Glossary([PerKilogram()])).offer(
+            Demand(flow=Flow(iri=CEMENT), amount=5.0, unit="kg")
+        )
+
+
+def test_an_uncached_vocab_unit_with_a_colliding_symbol_shows_full_iris():
+    # Review focus 2: `known()` is None (an uncached vocabulary IRI), so
+    # offer/explain keep working, but its fallback symbol happens to read
+    # the same as the accepted unit's -- the detail must show full IRIs
+    # instead, plus the warm-cache hint.
+    demand_unit = VOCAB + "kg"  # not bundled; symbol falls back to "kg", same as KG's
+    report = Orchestrator(Glossary([PerKilogram()])).calculate(
+        Demand(flow=Flow(iri=CEMENT), amount=1.0, unit=demand_unit)
+    )
+    assert report.nodes == []
+    [record] = report.unresolved
+    assert record.reason == "unit_mismatch"
+    assert KG in record.detail
+    assert demand_unit in record.detail
+    assert "warm_unit_cache" in record.detail

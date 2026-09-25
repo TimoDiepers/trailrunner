@@ -2,9 +2,10 @@
 
 from dataclasses import dataclass
 
+from trailrunner.core.errors import UnknownUnit
 from trailrunner.core.flow import Flow
 from trailrunner.core.time import TimeRange
-from trailrunner.core.units import UnitCatalog, default_catalog
+from trailrunner.core.units import KG, VOCAB, UnitCatalog, default_catalog
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,12 @@ class Coverage:
             asked = flow.get_context(declared.name)
             if asked is None:
                 continue
+            if catalog.known(asked.unit) is False:
+                raise UnknownUnit(
+                    f"context condition {declared.name!r} is in {asked.unit!r}, not a "
+                    f"unit of the vocabulary ({VOCAB}); units are IRIs such as {KG} — "
+                    "write unit=KG (from trailrunner.core.units)"
+                )
             value = catalog.try_convert(asked.value, asked.unit, declared.unit)
             if value is None:
                 return False

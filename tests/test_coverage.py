@@ -1,5 +1,6 @@
 import pytest
 
+from trailrunner.core.errors import UnknownUnit
 from trailrunner.core.flow import Flow, Property
 from trailrunner.core.time import DATE, GYEAR, in_year, year_range
 from trailrunner.core.units import KG, KILOMETRE, METRE, PA
@@ -93,3 +94,10 @@ def test_coverage_rejects_units_that_is_not_a_frozenset_of_str():
         Coverage(units={KG})  # a plain set, not a frozenset
     with pytest.raises(TypeError):
         Coverage(units=frozenset({1, 2}))  # not strings
+
+
+def test_a_context_condition_in_a_free_text_unit_raises_unknown_unit():
+    # Review focus 2 (legacy free-text units ruling).
+    coverage = Coverage(context=(ContextRange("pressure", PA, 5e5, 5e5),))
+    with pytest.raises(UnknownUnit, match="pressure"):
+        coverage.covers(Flow(iri="gas", context=(Property("pressure", 4.0, "bar"),)))
