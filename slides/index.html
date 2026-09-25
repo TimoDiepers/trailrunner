@@ -220,21 +220,34 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .1s !important; }
 }
 
+
 /* Additions for the short deck */
 .prompt.block { display: block; white-space: pre; font-size: 16.5px; line-height: 1.6; margin-top: 44px; }
 .iri { font-family: var(--font-mono); color: var(--accent); }
-.flowline { display: grid; grid-template-columns: 1fr 300px 1fr; align-items: center; gap: 0; margin-top: 26px; }
+.concept { display: grid; grid-template-columns: 720px 1fr 420px; align-items: center; flex: 1; }
+.concept .card { padding: 26px 30px; }
+.group { padding: 14px 0; border-top: 1px solid var(--line); }
+.group .gl { font-family: var(--font-mono); font-size: 18px; margin-bottom: 8px; }
+.kv { display: grid; grid-template-columns: 1fr; font-size: 15px; line-height: 1.45; margin-bottom: 8px; }
+.kv span:first-child { color: var(--faint); font-family: var(--font-mono); }
+.kv span:last-child { font-family: var(--font-mono); color: var(--ink); font-size: 17px; }
 .mini-loop svg { width: 100%; height: 100%; overflow: visible; }
-.ladder.compact { gap: 10px; }
-.ladder.compact .step { grid-template-columns: 60px 1fr; padding: 13px 20px; }
+.ladder.compact { gap: 12px; }
+.ladder.compact .step { grid-template-columns: 56px 220px 1fr; padding: 16px 22px; }
 .ladder.compact .step .num { font-size: 24px; }
-.ladder.compact .step .h { font-size: 22px; }
-.ladder.compact .step .d { font-size: 18px; }
-.ladder.compact .step:nth-child(2) { margin-left: 34px; }
-.ladder.compact .step:nth-child(3) { margin-left: 68px; }
-.ladder.compact .step:nth-child(4) { margin-left: 102px; }
-.notes3 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-top: 22px; }
-.notes3 .note { grid-template-columns: 34px 1fr; font-size: 19px; }
+.ladder.compact .step .h { font-size: 21px; }
+.ladder.compact .step .ex { font-family: var(--font-mono); font-size: 16px; color: var(--muted); }
+.ladder.compact .step:nth-child(2) { margin-left: 30px; }
+.ladder.compact .step:nth-child(3) { margin-left: 60px; }
+.ladder.compact .step:nth-child(4) { margin-left: 90px; }
+.swap { display: grid; grid-template-columns: 1fr 170px 1fr; align-items: center; margin-top: 18px; }
+.swap .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 22px; }
+.swap .box.to { border-color: var(--t2); }
+.swap .box .lbl { font-family: var(--font-mono); font-size: 15px; color: var(--faint); margin-bottom: 6px; }
+.swap .box .name { font-size: 22px; margin-top: 8px; }
+.swap .arrow { text-align: center; font-family: var(--font-mono); font-size: 16px; color: var(--t2); }
+.swap .arrow .line { height: 2px; background: var(--t2); margin: 8px 16px; position: relative; }
+.swap .arrow .line::after { content: ""; position: absolute; right: -2px; top: -5px; border-left: 10px solid var(--t2); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
 </style>
 </head>
 <body>
@@ -247,7 +260,7 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
 <section class="slide center" data-title="trailrunner">
   <div class="kicker">BrightCon 2025 hackathon</div>
   <h1>trailrunner</h1>
-  <p class="lead" style="margin-top:28px; font-size:30px">Life cycle inventories built by traversing computational process models. Every product, flow, unit and condition is an IRI from the <a href="https://vocab.sentier.dev">sentier vocabulary</a>.</p>
+  <p class="lead" style="margin-top:28px; font-size:30px">Life cycle inventories from computational process models, connected through the <a href="https://vocab.sentier.dev">sentier vocabulary</a>.</p>
   <div class="prompt block"><span class="p">$</span> trailrunner run https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1 --unit https://vocab.sentier.dev/units/unit/TONNE \
     --location DK --time 2030-06-15 \
@@ -255,138 +268,115 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
     --models examples/showcase_models.py<span class="cursor"></span></div>
 </section>
 
-<!-- ============================ 2. THE QUESTION ============================ -->
-<section class="slide center" data-title="The question">
-  <div class="kicker"><b>01</b> the question</div>
-  <div class="q-big">1 t cement</div>
-  <div class="q-meta">
-    <div class="tag">location <b>DK</b></div>
-    <div class="tag">time <b>2030-06-15</b></div>
-    <div class="tag">burner gas at <b>4 bar</b></div>
-  </div>
-  <p class="lead" style="margin-top:56px">A static unit process answers for one region, one year and one set of conditions. trailrunner computes the answer for <b>this</b> demand, by asking models that compute theirs.</p>
-</section>
-
-<!-- ============================ 3. A FUNCTION ============================ -->
+<!-- ============================ 2. CONCEPT: FUNCTION ============================ -->
 <section class="slide" data-title="A process is a function">
-  <div class="kicker"><b>02</b> the idea</div>
+  <div class="kicker"><b>01</b> idea</div>
   <h2>A process is a function of its demand</h2>
-  <div class="panel" style="flex:none">
-    <div class="panel-head"><i></i><i></i><i></i><span>a demand, and the model that answers it</span></div>
-<pre class="sm" style="font-size:16px">DEMAND = <span class="fn">Demand</span>(
-    flow=<span class="fn">Flow</span>(iri=<span class="s">"https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"</span>,   <span class="cm"># Portland cement</span>
-              location=<span class="s">"DK"</span>, time=<span class="s">"2030-06-15"</span>, time_standard=<span class="s">"http://www.w3.org/2001/XMLSchema#date"</span>),
-    amount=<span class="n">1.0</span>, unit=<span class="s">"https://vocab.sentier.dev/units/unit/TONNE"</span>,
-)
-
-<span class="k">class</span> <span class="cl">CementPlant</span>(Model):
-    produces = [<span class="s">"https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"</span>]</pre>
-  </div>
-  <div class="flowline">
-    <div class="card" data-f="1">
+  <div class="concept">
+    <div class="card">
       <h5>Demand</h5>
-      <div class="lane"><span class="lbl c-t1">what</span><span>product IRI, amount, unit IRI</span></div>
-      <div class="lane"><span class="lbl c-t2">where, when</span><span>location, time in a declared standard</span></div>
-      <div class="lane"><span class="lbl c-mut">context</span><span>conditions named by IRI</span></div>
+      <div class="group">
+        <div class="gl c-t1">what</div>
+        <div class="kv"><span>product</span><span class="c-t1">https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440</span></div>
+        <div class="kv"><span>amount</span><span>1 https://vocab.sentier.dev/units/unit/TONNE</span></div>
+      </div>
+      <div class="group">
+        <div class="gl c-t2">context</div>
+        <div class="kv"><span>where</span><span>DK</span></div>
+        <div class="kv"><span>when</span><span>2030-06-15</span></div>
+        <div class="kv"><span>pressure</span><span>400000 https://vocab.sentier.dev/units/unit/PA</span></div>
+      </div>
     </div>
-    <div class="machine" data-f="1" style="height:200px">
-      <svg viewBox="0 0 360 200" aria-hidden="true">
+    <div class="machine" style="height:220px; padding:0 10px">
+      <svg viewBox="0 0 240 220" aria-hidden="true">
         <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#8d9a95"/></marker></defs>
-        <line x1="10" y1="100" x2="100" y2="100" stroke="#8d9a95" stroke-width="2" marker-end="url(#ar)"/>
-        <rect x="110" y="50" width="140" height="100" rx="12" fill="#161b1a" stroke="#5fbfae" stroke-width="1.5"/>
-        <text x="180" y="96" text-anchor="middle" font-family="Consolas, IBM Plex Mono, monospace" font-size="21" fill="#dde3e0">Model</text>
-        <text x="180" y="126" text-anchor="middle" font-family="Consolas, IBM Plex Mono, monospace" font-size="18" fill="#5fbfae">.apply()</text>
-        <line x1="260" y1="100" x2="350" y2="100" stroke="#8d9a95" stroke-width="2" marker-end="url(#ar)"/>
+        <line x1="4" y1="110" x2="44" y2="110" stroke="#8d9a95" stroke-width="2" marker-end="url(#ar)"/>
+        <rect x="50" y="60" width="140" height="100" rx="12" fill="#161b1a" stroke="#5fbfae" stroke-width="1.5"/>
+        <text x="120" y="104" text-anchor="middle" font-family="Consolas, IBM Plex Mono, monospace" font-size="21" fill="#dde3e0">Model</text>
+        <text x="120" y="134" text-anchor="middle" font-family="Consolas, IBM Plex Mono, monospace" font-size="18" fill="#5fbfae">.apply()</text>
+        <line x1="196" y1="110" x2="236" y2="110" stroke="#8d9a95" stroke-width="2" marker-end="url(#ar)"/>
       </svg>
     </div>
     <div class="card" data-f="1">
-      <h5>and returns a Result</h5>
-      <div class="lane"><span class="lbl c-t1">production</span><span>what it made</span></div>
-      <div class="lane"><span class="lbl c-t2">technosphere</span><span>what it needs, as new demands</span></div>
-      <div class="lane"><span class="lbl c-inv">biosphere</span><span>what it emitted</span></div>
+      <h5>Result</h5>
+      <div class="lane"><span class="lbl c-t1">production</span><span>1 t cement</span></div>
+      <div class="lane"><span class="lbl c-t2">technosphere</span><span>gas, lime, power, kilns<br><span class="txt">each a new demand</span></span></div>
+      <div class="lane"><span class="lbl c-inv">biosphere</span><span>CO₂</span></div>
     </div>
   </div>
-  <p class="small" data-f="2" style="margin-top:22px; font-size:22px">A demand reaches whichever model produces its IRI, with no name matching. Ask for another location, time or pressure and the model computes a different result.</p>
 </section>
 
-<!-- ============================ 4. LOOP + FALLBACKS ============================ -->
+<!-- ============================ 3. LOOP + FALLBACKS ============================ -->
 <section class="slide" data-title="One loop">
-  <div class="kicker"><b>03</b> the idea</div>
+  <div class="kicker"><b>02</b> idea</div>
   <h2>One loop builds the supply chain</h2>
-  <div class="row" style="gap:50px; flex:1; align-items:center">
-    <div class="mini-loop" style="width:640px; height:560px">
-      <svg viewBox="0 0 640 560" aria-hidden="true" font-family="IBM Plex Sans, sans-serif">
-        <defs><marker id="ar3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#9d8bd6"/></marker></defs>
-        <path id="track" d="M 110 260 C 110 110, 220 70, 300 70 C 380 70, 490 110, 490 260 C 490 410, 380 450, 300 450 C 220 450, 110 410, 110 260 Z" fill="none" stroke="#2c3432" stroke-width="2" stroke-dasharray="4 8"/>
+  <div class="row" style="gap:40px; flex:1; align-items:center">
+    <div class="mini-loop" style="width:700px; height:600px">
+      <svg viewBox="0 0 700 600" aria-hidden="true" font-family="IBM Plex Sans, sans-serif">
+        <defs>
+          <marker id="ar3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#9d8bd6"/></marker>
+          <marker id="ar4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#5fbfae"/></marker>
+        </defs>
+        <path id="track" d="M 200 280 C 200 130, 310 90, 390 90 C 470 90, 580 130, 580 280 C 580 430, 470 470, 390 470 C 310 470, 200 430, 200 280 Z" fill="none" stroke="#2c3432" stroke-width="2" stroke-dasharray="4 8"/>
         <circle r="7" fill="#5fbfae"><animateMotion dur="7s" repeatCount="indefinite"><mpath href="#track"/></animateMotion></circle>
-        <g><rect x="20" y="220" width="180" height="80" rx="12" fill="#161b1a" stroke="#8d9a95" stroke-width="1.5"/>
-          <text x="110" y="256" text-anchor="middle" font-size="22" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">Queue</text>
-          <text x="110" y="283" text-anchor="middle" font-size="15" fill="#8d9a95">pop a demand</text></g>
-        <g><rect x="190" y="30" width="220" height="80" rx="12" fill="#161b1a" stroke="#5fbfae" stroke-width="1.5"/>
-          <text x="300" y="66" text-anchor="middle" font-size="20" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">ResolutionChain</text>
-          <text x="300" y="93" text-anchor="middle" font-size="15" fill="#8d9a95">who produces this IRI?</text></g>
-        <g><rect x="400" y="220" width="180" height="80" rx="12" fill="#161b1a" stroke="#d9a441" stroke-width="1.5"/>
-          <text x="490" y="256" text-anchor="middle" font-size="22" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">Model</text>
-          <text x="490" y="283" text-anchor="middle" font-size="15" fill="#8d9a95">apply(demand)</text></g>
-        <g><rect x="190" y="410" width="220" height="80" rx="12" fill="#161b1a" stroke="#8d9a95" stroke-width="1.5"/>
-          <text x="300" y="446" text-anchor="middle" font-size="22" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">Result</text>
-          <text x="300" y="473" text-anchor="middle" font-size="15" fill="#8d9a95">inputs go back on the queue</text></g>
-        <line x1="490" y1="300" x2="490" y2="515" stroke="#9d8bd6" stroke-width="2" marker-end="url(#ar3)"/>
-        <text x="500" y="540" font-size="17" font-family="Consolas, IBM Plex Mono, monospace" fill="#9d8bd6">inventory, dated</text>
+
+        <!-- initial demand in -->
+        <text x="0" y="252" font-size="17" font-family="Consolas, IBM Plex Mono, monospace" fill="#5fbfae">demand</text>
+        <line x1="0" y1="280" x2="104" y2="280" stroke="#5fbfae" stroke-width="2" marker-end="url(#ar4)"/>
+
+        <g><rect x="110" y="240" width="180" height="80" rx="12" fill="#161b1a" stroke="#8d9a95" stroke-width="1.5"/>
+          <text x="200" y="287" text-anchor="middle" font-size="22" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">Queue</text></g>
+        <g><rect x="280" y="50" width="220" height="80" rx="12" fill="#161b1a" stroke="#5fbfae" stroke-width="1.5"/>
+          <text x="390" y="86" text-anchor="middle" font-size="20" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">who produces</text>
+          <text x="390" y="112" text-anchor="middle" font-size="20" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">this IRI?</text></g>
+        <g><rect x="490" y="240" width="180" height="80" rx="12" fill="#161b1a" stroke="#d9a441" stroke-width="1.5"/>
+          <text x="580" y="287" text-anchor="middle" font-size="22" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">Model</text></g>
+        <g><rect x="280" y="430" width="220" height="80" rx="12" fill="#161b1a" stroke="#8d9a95" stroke-width="1.5"/>
+          <text x="390" y="466" text-anchor="middle" font-size="20" font-family="Consolas, IBM Plex Mono, monospace" fill="#dde3e0">new demands</text>
+          <text x="390" y="492" text-anchor="middle" font-size="15" fill="#8d9a95">back on the queue</text></g>
+
+        <!-- emissions out -->
+        <line x1="580" y1="320" x2="580" y2="555" stroke="#9d8bd6" stroke-width="2" marker-end="url(#ar3)"/>
+        <text x="592" y="585" font-size="17" font-family="Consolas, IBM Plex Mono, monospace" fill="#9d8bd6">inventory</text>
       </svg>
     </div>
-    <div class="col grow">
-      <div class="small" style="font-size:22px; color:var(--ink)">Without an exact match, the chain falls back one step at a time.</div>
+    <div class="col grow" style="gap:18px">
+      <div class="mono c-mut" style="font-size:19px">no exact match? fall back</div>
       <div class="ladder compact">
-        <div class="step" data-f="1"><div class="num c-t1">1</div><div><div class="h">exact match</div><div class="d">product IRI, location, time, conditions</div></div></div>
-        <div class="step" data-f="2"><div class="num c-t2">2</div><div><div class="h">relaxed demand</div><div class="d">skos:broader concept, nearby place or time, tolerated condition</div></div></div>
-        <div class="step" data-f="3"><div class="num c-t3">3</div><div><div class="h">background dataset</div><div class="d">tagged incomplete</div></div></div>
-        <div class="step" data-f="4"><div class="num c-cut">×</div><div><div class="h">cutoff</div><div class="d">recorded with a reason</div></div></div>
+        <div class="step" data-f="1"><div class="num c-t1">1</div><div class="h">model</div><div class="ex">CementPlant</div></div>
+        <div class="step" data-f="2"><div class="num c-t2">2</div><div class="h">relax demand</div><div class="ex">lime → plaster, lime and cement</div></div>
+        <div class="step" data-f="3"><div class="num c-t3">3</div><div class="h">dataset</div><div class="ex">steel from a background pack</div></div>
+        <div class="step" data-f="4"><div class="num c-cut">×</div><div class="h">cutoff</div><div class="ex">limestone, with a reason</div></div>
       </div>
-      <div class="small" data-f="5" style="font-size:21px">Each fallback is written on the node that used it.</div>
     </div>
   </div>
 </section>
 
-<!-- ============================ 5. THE MODEL ============================ -->
-<section class="slide" data-title="The cement model" style="padding-top:60px">
-  <div class="kicker"><b>04</b> example</div>
-  <h2 style="margin-bottom:22px">The cement plant model</h2>
+<!-- ============================ 4. THE MODEL ============================ -->
+<section class="slide" data-title="The cement model">
+  <div class="kicker"><b>03</b> example</div>
+  <h2>A cement plant, written as a model</h2>
   <div class="panel">
     <div class="panel-head"><i></i><i></i><i></i><span>trailrunner/models/cement.py (abridged)</span></div>
-<pre class="sm" style="font-size:15px">CEMENT      = <span class="s">"https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"</span>
-NATURAL_GAS = <span class="s">"https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020"</span>
-CO2_FOSSIL  = <span class="s">"https://vocab.sentier.dev/flows/co2-fossil"</span>
-PRESSURE    = <span class="s">"https://vocab.sentier.dev/units/quantity-kind/Pressure"</span>
-
-<span class="k">class</span> <span class="cl">CementPlant</span>(Model):
-    produces = [CEMENT]
-    coverage = Coverage(time_range=year_range(<span class="n">2026</span>, <span class="n">2050</span>), units=frozenset({KG}))
+<pre class="sm" style="font-size:19px; line-height:1.6"><span class="k">class</span> <span class="cl">CementPlant</span>(Model):
+    produces = [<span class="s">"https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"</span>]
 
     <span class="k">def</span> <span class="fn">apply</span>(self, demand):
-        <span class="hl">row = self.params.at(location=demand.flow.location, **when(demand.flow))</span>          <span class="cm"># 1</span>
-        penalty = moisture_penalty(row[<span class="s">"moisture"</span>], row[<span class="s">"temperature"</span>])                  <span class="cm"># 2</span>
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))   <span class="cm"># data for this place and time</span>
         clinker = row[<span class="s">"clinker_factor"</span>] * demand.amount
-        fuel = row[<span class="s">"fuel_demand"</span>] * clinker * penalty
+        fuel = row[<span class="s">"fuel_demand"</span>] * clinker * moisture_penalty(row[<span class="s">"moisture"</span>], row[<span class="s">"temperature"</span>])
         <span class="k">return</span> Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            technosphere=[Demand(flow=self._gas(here(NATURAL_GAS)), amount=fuel, ...), ...],   <span class="cm"># 3</span>
-            biosphere=[Exchange(flow=here(CO2_FOSSIL), amount=CLINKER_CALCINATION_CO2 * clinker, unit=KG),
-                       Exchange(flow=here(CO2_FOSSIL), amount=GAS_CO2_PER_MJ * fuel, unit=KG)],   <span class="cm"># 4</span>
+            technosphere=[Demand(flow=here(NATURAL_GAS), amount=fuel, unit=row.unit_of("fuel_demand")), ...],
+            biosphere=[Exchange(flow=here(CO2_FOSSIL), amount=CLINKER_CALCINATION_CO2 * clinker, unit=KG), ...],
         )</pre>
-  </div>
-  <div class="notes3">
-    <div class="note" data-f="1"><span class="no">1</span><span><b>Parameters by place and time</b> from a <a href="https://github.com/TimoDiepers/trailpack">trailpack</a> parquet</span></div>
-    <div class="note" data-f="2"><span class="no">2</span><span><b>Physics.</b> Damp, cold air costs fuel</span></div>
-    <div class="note" data-f="3"><span class="no">3</span><span><b>Gas at the burner pressure</b>, returned as a new demand</span></div>
-    <div class="note" data-f="4"><span class="no">4</span><span><b>Calcination and combustion CO₂</b> kept apart</span></div>
   </div>
 </section>
 
-<!-- ============================ 6. CALL IT ============================ -->
-<section class="slide" data-title="Calling the model" style="padding-top:60px">
-  <div class="kicker"><b>05</b> example</div>
-  <h2 style="margin-bottom:22px">Its answer depends on where and when it is asked</h2>
+<!-- ============================ 5. CALL IT ============================ -->
+<section class="slide" data-title="Calling the model">
+  <div class="kicker"><b>04</b> example</div>
+  <h2>Call it, get flows back as IRIs</h2>
   <div class="panel">
     <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
 <pre style="font-size:17px; padding:14px 24px"><span class="k">answer</span> = cement_model.<span class="fn">apply</span>(IN_KG)   <span class="cm"># 1000 kg cement, DK, 2030-06-15</span></pre>
@@ -395,113 +385,114 @@ technosphere  1125.0  https://vocab.sentier.dev/units/unit/KiloGM   https://voca
 technosphere  <span class="hl">2475.0  https://vocab.sentier.dev/units/unit/MegaJ    https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020</span>
 technosphere    10.0  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420
 technosphere   100.0  https://vocab.sentier.dev/units/unit/KiloW-HR https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_17100
-   biosphere   <span class="c-inv">397.5  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/flows/co2-fossil</span>   <span class="c-faint"># calcination</span>
-   biosphere   <span class="c-inv">138.6  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/flows/co2-fossil</span>   <span class="c-faint"># combustion</span></pre>
+   biosphere   <span class="c-inv">397.5  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/flows/co2-fossil</span>
+   biosphere   <span class="c-inv">138.6  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/flows/co2-fossil</span></pre>
   </div>
-  <div class="row" style="gap:40px; margin-top:22px; align-items:center" data-f="1">
-    <div class="panel" style="width:720px">
-      <div class="panel-head"><i></i><i></i><i></i><span>same 1000 kg, two places, two years</span></div>
-<pre class="out" style="font-size:16px; padding:14px 24px"> where   when  moisture   degC   penalty   gas [MJ]
-    DK   2030     0.040   10.0     1.000     2475.0
-    DK   2040     0.040   11.0     0.996     2099.6
-   RER   2030     0.060    9.0     1.044     <span class="hl">2923.2</span>
-   RER   2040     0.055   10.0     1.030     2447.3</pre>
-    </div>
-    <svg id="gasbars" class="grow bar-chart" viewBox="0 0 560 300" style="height:230px" aria-label="Gas demand per tonne of cement"></svg>
+  <div class="row" style="margin-top:26px; align-items:center; gap:30px" data-f="1">
+    <div class="mono c-mut" style="font-size:19px; width:300px">natural gas per 1000 kg,<br>asked elsewhere</div>
+    <svg id="gasbars" class="bar-chart" viewBox="0 0 560 300" style="height:230px; width:430px" aria-label="Gas demand per tonne of cement"></svg>
   </div>
 </section>
 
-<!-- ============================ 7. RUN IT ============================ -->
+<!-- ============================ 6. RUN IT ============================ -->
 <section class="slide" data-title="Running the chain">
-  <div class="kicker"><b>06</b> example</div>
-  <h2>Hand the demand to the orchestrator</h2>
+  <div class="kicker"><b>05</b> example</div>
+  <h2>Run the whole chain</h2>
   <div class="panel">
     <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
-<pre class="sm">tier1 = <span class="fn">ModelProvider</span>(Glossary(MODELS))                                      <span class="cm"># models, exact match</span>
-PROXY = ProxySettings(context_tolerance={PRESSURE: (<span class="n">0.0</span>, <span class="n">1e5</span>, PA)})               <span class="cm"># up to 1e5 Pa higher, never lower</span>
-tier2 = <span class="fn">GeneralisingProvider</span>(tier1, settings=PROXY, hierarchy=HIERARCHY, taxonomy=taxonomy)
-tier3 = <span class="fn">BackgroundProvider</span>(pack)                                             <span class="cm"># background datasets</span>
-
-report = Orchestrator(ResolutionChain([tier1, tier2, tier3])).<span class="fn">calculate</span>(DEMAND)
+<pre class="sm">chain = ResolutionChain([
+    <span class="fn">ModelProvider</span>(glossary),                                   <span class="cm"># 1 model</span>
+    <span class="fn">GeneralisingProvider</span>(..., settings=ProxySettings(
+        context_tolerance={PRESSURE: (<span class="n">0.0</span>, <span class="n">1e5</span>, PA)})),         <span class="cm"># 2 relax demand</span>
+    <span class="fn">BackgroundProvider</span>(pack),                                  <span class="cm"># 3 dataset</span>
+])
+report = Orchestrator(chain).<span class="fn">calculate</span>(DEMAND)
 <span class="fn">print</span>(report.summary())</pre>
 <pre class="out sm" data-f="1">18 nodes, 13 inventory entries
 11 unresolved (generalisation_exhausted: 11)
 6 proxies (4 incomplete)
 attribution: allocation=none, capital=per_output</pre>
   </div>
-  <p class="small" data-f="1" style="margin-top:22px; font-size:22px">The demand was 1 t and <span class="mono">CementPlant</span> covers kilograms. The runner converts and notes it on the node as<br><span class="mono c-t1">[model: CementPlant; unit: t -&gt; kg ×1000]</span></p>
 </section>
 
-<!-- ============================ 8. THE GRAPH ============================ -->
+<!-- ============================ 7. THE GRAPH ============================ -->
 <section class="slide" data-title="Resolved supply chain" style="padding-top:60px">
-  <div class="kicker"><b>07</b> example</div>
+  <div class="kicker"><b>06</b> example</div>
   <div class="row" style="justify-content:space-between; align-items:baseline">
     <h2 style="font-size:40px; margin:0">The supply chain it found</h2>
     <div class="legend">
       <span><i style="background:var(--t1)"></i>model</span>
       <span><i style="background:var(--t2)"></i>relaxed demand</span>
-      <span><i style="background:var(--t3)"></i>background dataset</span>
+      <span><i style="background:var(--t3)"></i>dataset</span>
       <span><i style="border:1.5px dashed var(--cut)"></i>cutoff</span>
     </div>
   </div>
   <svg class="graph" id="graph" viewBox="0 0 1540 740" aria-label="The cement supply chain as resolved"></svg>
 </section>
 
-<!-- ============================ 9. FALLBACKS, REAL ============================ -->
+<!-- ============================ 8. FALLBACKS ============================ -->
 <section class="slide" data-title="Recorded fallbacks">
-  <div class="kicker"><b>08</b> example</div>
-  <h2>Two fallbacks, as recorded in the report</h2>
-  <div class="col" style="gap:14px">
-    <div style="font-size:24px">Lime was asked for, one <span class="mono">skos:broader</span> hop up has no producer, two hops up is <span class="c-t2">"Plaster, lime and cement"</span>.</div>
-    <div class="panel">
-      <div class="panel-head"><i></i><i></i><i></i><span>report.proxies[lime_node.id]</span></div>
-<pre class="out" style="font-size:14px; padding:14px 24px">       model: BinderSupply
- relaxations: ['product: fi_37420 -> fi_374']
-       asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420 @DK/2030-06-15
-    answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_374 @DK/2030-06-15
-        tier: generalising</pre>
+  <div class="kicker"><b>07</b> example</div>
+  <h2>Every fallback is on the record</h2>
+
+  <div class="swap">
+    <div class="box">
+      <div class="lbl">asked</div>
+      <div class="iri" style="font-size:13.5px">https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420</div>
+      <div class="name">Quicklime, slaked lime and hydraulic lime</div>
     </div>
-    <div data-f="1" style="font-size:24px; margin-top:14px">The burners want gas at 4e5 Pa. The supplier delivers <span class="c-t2">5e5 Pa, inside the tolerance</span> of +1e5 Pa and never lower.</div>
-    <div class="panel" data-f="1">
-      <div class="panel-head"><i></i><i></i><i></i><span>report.proxies[gas_node.id]</span></div>
-<pre class="out" style="font-size:14px; padding:14px 24px">       model: NaturalGasSupply
- relaxations: ['context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa']
-       asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa]
-    answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [https://vocab.sentier.dev/units/quantity-kind/Pressure=500000 Pa]
-        tier: generalising</pre>
+    <div class="arrow">skos:broader ×2<div class="line"></div></div>
+    <div class="box to">
+      <div class="lbl">answered</div>
+      <div class="iri" style="font-size:13.5px">https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_374</div>
+      <div class="name">Plaster, lime and cement</div>
     </div>
+  </div>
+
+  <div class="swap" data-f="1" style="margin-top:28px">
+    <div class="box">
+      <div class="lbl">asked</div>
+      <div class="iri" style="font-size:13.5px">https://vocab.sentier.dev/units/quantity-kind/Pressure</div>
+      <div class="name mono">400000 Pa</div>
+    </div>
+    <div class="arrow">tolerance +1e5 Pa<div class="line"></div></div>
+    <div class="box to">
+      <div class="lbl">answered</div>
+      <div class="iri" style="font-size:13.5px">https://vocab.sentier.dev/units/quantity-kind/Pressure</div>
+      <div class="name mono">500000 Pa</div>
+    </div>
+  </div>
+
+  <div class="panel" data-f="2" style="margin-top:28px">
+    <div class="panel-head"><i></i><i></i><i></i><span>report.proxies, one line each</span></div>
+<pre class="out" style="font-size:14px; padding:14px 24px"> relaxations: ['product: fi_37420 -> fi_374']
+ relaxations: ['context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa']</pre>
   </div>
 </section>
 
-<!-- ============================ 10. RESULTS ============================ -->
+<!-- ============================ 9. RESULTS ============================ -->
 <section class="slide" data-title="Results">
-  <div class="kicker"><b>09</b> results</div>
+  <div class="kicker"><b>08</b> results</div>
   <h2>552.96 kg CO₂-eq, and when it happens</h2>
-  <div class="row" style="gap:40px; align-items:flex-start">
+  <div class="row" style="gap:50px; align-items:center; flex:1">
     <div class="col" style="width:700px">
+      <div class="mono c-mut" style="font-size:18px">GWP100 by model, kg CO₂-eq</div>
       <svg id="contrib" class="bar-chart" viewBox="0 0 760 330" style="width:700px; height:304px" aria-label="GWP100 by model"></svg>
-      <p class="small" style="font-size:19px">IPCC AR6 GWP100, direct emissions per model. 8 flows without a characterization factor are listed, not set to zero.</p>
-      <div class="panel" style="margin-top:6px">
-        <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
-<pre class="sm" style="font-size:15px; padding:14px 22px">dynamic = <span class="fn">assess_dynamic</span>(report, metric=<span class="s">"radiative_forcing"</span>, horizon=<span class="n">100</span>)
-report.log.<span class="fn">to_parquet</span>(<span class="s">"showcase_log.parquet"</span>)   <span class="cm"># 304 rows, 27 columns</span></pre>
-      </div>
     </div>
     <div class="col grow">
-      <svg id="rf" class="bar-chart" viewBox="0 0 700 520" style="height:470px" aria-label="Marginal radiative forcing per year, log scale"></svg>
-      <p class="small" style="font-size:19px">Kilns built in 2026 and 2029, cement made in 2030. The dates were never lost, so the same inventory feeds a dynamic assessment.</p>
+      <svg id="rf" class="bar-chart" viewBox="0 0 700 520" style="height:500px" aria-label="Marginal radiative forcing per year, log scale"></svg>
     </div>
   </div>
 </section>
 
-<!-- ============================ 11. SUMMARY ============================ -->
+<!-- ============================ 10. SUMMARY ============================ -->
 <section class="slide center" data-title="Summary">
-  <div class="kicker"><b>10</b> summary</div>
+  <div class="kicker"><b>09</b> summary</div>
   <ul class="claims">
-    <li><span class="no">01</span><span>Products, flows, units and conditions are sentier vocabulary IRIs. Models connect through them.</span></li>
-    <li><span class="no">02</span><span>Processes compute their exchanges from location, time and conditions.</span></li>
-    <li><span class="no">03</span><span>Every fallback and cutoff is recorded where it happens.</span></li>
-    <li><span class="no">04</span><span>Inventories are time-explicit by construction.</span></li>
+    <li><span class="no">01</span><span>Everything is an IRI from the sentier vocabulary.</span></li>
+    <li><span class="no">02</span><span>Processes compute their answer from the demand.</span></li>
+    <li><span class="no">03</span><span>Every fallback is recorded.</span></li>
+    <li><span class="no">04</span><span>Time and place come along for free.</span></li>
   </ul>
   <div class="row" style="margin-top:56px; gap:60px; font-family:var(--font-mono); font-size:22px">
     <a href="https://github.com/TimoDiepers/trailrunner">github.com/TimoDiepers/trailrunner</a>
