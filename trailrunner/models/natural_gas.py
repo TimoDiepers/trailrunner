@@ -62,6 +62,16 @@ than dropped.
 
 KG_PER_TONNE = 1000.0
 
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
+"""The quantity kind the delivery pressure is declared as, in the sentier
+vocabulary (derived from QUDT).
+
+An IRI rather than ``"pressure"``: a context condition matches only on the
+exact name and unit, so two models written by two people agree on a pressure
+only if they name the same concept. Spelled out here rather than imported
+from ``cement``, for the same reason ``NATURAL_GAS`` is.
+"""
+
 DELIVERY_PRESSURE_PA = 5e5
 """Pressure the gas leaves this model at: a medium-pressure distribution grid.
 
@@ -90,7 +100,7 @@ class NaturalGasSupply(Model):
     coverage = Coverage(
         time_range=year_range(2000, 2050),
         context=(
-            ContextRange("pressure", PA, DELIVERY_PRESSURE_PA, DELIVERY_PRESSURE_PA),
+            ContextRange(PRESSURE, PA, DELIVERY_PRESSURE_PA, DELIVERY_PRESSURE_PA),
         ),
         units=frozenset({MJ}),
     )

@@ -122,6 +122,8 @@ asked again for 2035. Periods nothing claims are never tried.
 
 **Context** covers conditions other than place and year. A [`Flow`](../api/flow.md) can
 carry a `context` of named [`Property`](../api/flow.md) values, such as the pressure gas is wanted at.
+Name conditions by IRI, e.g. the quantity kinds of the [sentier vocabulary](https://vocab.sentier.dev)
+(derived from QUDT), so two models written by two people agree on what a condition means.
 A model declares what it can answer with a `ContextRange` in its
 [`Coverage`](../api/coverage.md). A range only restricts flows that name that condition;
 a demand that names no pressure accepts any. When nothing matches, tier 2 snaps the
@@ -134,13 +136,13 @@ it before they are compared:
 from trailrunner.core.units import PA
 
 # gas at a higher pressure can be throttled at the burner; at a lower one it cannot
-ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})
+ProxySettings(context_tolerance={"https://vocab.sentier.dev/units/quantity-kind/Pressure": (0.0, 1e5, PA)})
 ```
 
 The tour's kiln burners ask for 4e5 Pa (4 bar) and `NaturalGasSupply` delivers at 5e5 Pa:
 
 ```text
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
 ```
 
 A 6e5 Pa demand would not be moved down to 5e5 Pa. A condition asked in a unit of another
@@ -222,31 +224,42 @@ matches, the `generalisation_exhausted` detail counts candidates per entry, e.g.
 Plain `"context"` moves one tolerated condition at a time. A demand that is off on two
 conditions, say gas asked for at 4e5 Pa and 280 K from a grid delivering 5e5 Pa at 288 K,
 is not answered by it, whatever the tolerances. To allow that, name each condition as a
-dimension of its own, `context.<name>`, and combine them like any other:
+dimension of its own, `context.<name>`, and combine them like any other. Here the
+conditions are sentier quantity-kind IRIs, which is what the name of a `Property` should
+be when the models share it:
 
 ```python
+from trailrunner.core.units import KELVIN, PA
+
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
+TEMPERATURE = "https://vocab.sentier.dev/units/quantity-kind/Temperature"
+
 ProxySettings(
     order=(
-        "context.pressure",                              # pressure alone
-        "context.temperature",                           # temperature alone
-        ("context.pressure", "context.temperature"),     # both, only because it's listed
+        f"context.{PRESSURE}",                                  # pressure alone
+        f"context.{TEMPERATURE}",                               # temperature alone
+        (f"context.{PRESSURE}", f"context.{TEMPERATURE}"),      # both, only because it's listed
     ),
-    context_tolerance={"pressure": (0.0, 1e5, PA), "temperature": (0.0, 10.0, KELVIN)},
+    context_tolerance={PRESSURE: (0.0, 1e5, PA), TEMPERATURE: (0.0, 10.0, KELVIN)},
 )
 ```
 
 ```text
-111.111 MJ natural-gas @CH/2030 (pressure=400000 Pa, temperature=280 K)  [proxy: context: pressure 400000 Pa -> 500000 Pa; context: temperature 280 K -> 288 K]
+111.111 MJ natural-gas @CH/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa, https://vocab.sentier.dev/units/quantity-kind/Temperature=280 K)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa; context: https://vocab.sentier.dev/units/quantity-kind/Temperature 280 K -> 288 K]
 ```
+
+Names are compared exactly and printed in full, so an IRI always reads as one; units are
+printed by their symbol.
 
 The same rules apply as for any combined entry. Each condition stays within its own
 tolerance and budget; a `context.<name>` missing from `max_steps` takes the `context`
 budget. Conditions also combine with the other dimensions, e.g.
-`("location", "context.pressure")`. `ProxySettings` rejects a `context.<name>` with no
+`("location", f"context.{PRESSURE}")`. `ProxySettings` rejects a `context.<name>` with no
 `context_tolerance` for that name, since it could never be tried, and a combined entry that
 holds both `context` and one of its conditions, which would move the same condition twice.
 On the command line the same order is written
-`--proxy-order context.pressure,context.temperature,context.pressure+context.temperature`
+`--proxy-order context.$P,context.$T,context.$P+context.$T`, with `$P` and `$T` holding the
+two IRIs
 ([CLI tutorial](getting_started/cli.md#4-when-a-supplier-almost-matches-context-tolerance)).
 
 A demand with nothing to relax (no location, no year, no taxonomy behind it) gets no

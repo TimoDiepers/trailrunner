@@ -72,7 +72,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance "pressure=0:1e5 Pa"
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"
 ```
 
 ```text
@@ -83,7 +83,7 @@ time 2030 read as xsd:gYear
 attribution: allocation=none, capital=per_output
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
     68.75 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     0.0505312 t natural-gas-transport-offshore-pipeline-long-distance @NO/2030 (distance=1000 km)  [model: NaturalGasOffshorePipelineTransport]
       0.0130625 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
@@ -109,7 +109,7 @@ How to read it:
   its IRI), `@location/year`, any context in parentheses, and in brackets how it was
   answered.
 - **The kiln's gas is a proxy.** The kiln's burners ask for gas at 4e5 Pa (4 bar), the only
-  supplier delivers at 5e5 Pa (5 bar), and `--context-tolerance "pressure=0:1e5 Pa"`
+  supplier delivers at 5e5 Pa (5 bar), and `--context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"`
   accepts that. [Section 4](#4-when-a-supplier-almost-matches-context-tolerance) explains
   the flag.
 - **The gas moved.** `NaturalGasSupply` places extraction and pipeline transport in `NO`,
@@ -129,7 +129,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --time 2020 \
     --models examples/showcase_models.py \
-    --context-tolerance "pressure=0:1e5 Pa"
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"
 ```
 
 ```text
@@ -159,11 +159,11 @@ declares in its `Coverage` which values it can deliver. Both sides are in Python
 the match is.
 
 By default it is exact. In the shipped chain the kiln's burners ask for gas at
-**4e5 Pa** (4 bar) and `NaturalGasSupply` delivers at **5e5 Pa** (5 bar), so without any
-flag the kiln's gas is not answered:
+**4e5 Pa** (4 bar) and `NaturalGasSupply` delivers at **5e5 Pa** (5 bar), both as the
+quantity kind `https://vocab.sentier.dev/units/quantity-kind/Pressure`, so without any flag the kiln's gas is not answered:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [cutoff: coverage_excluded]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [cutoff: coverage_excluded]
 ```
 
 `coverage_excluded` rather than `no_model_found`: a supplier exists, and its coverage is
@@ -172,29 +172,34 @@ what refused.
 ### Accept a nearby value: `--context-tolerance "NAME=BELOW:ABOVE UNIT"`
 
 ```bash
---context-tolerance "pressure=0:1e5 Pa"
+--context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"
 ```
 
-reads as: pressure may be met **up to 0 Pa lower and up to 1e5 Pa higher** than asked. The
-unit is resolved through the same catalog as everything else -- a symbol (`Pa`), a
-vocabulary id (`PA`) or the full IRI all work -- and a condition may be asked in *any* unit
-of the same quantity kind: a demand in bar against a tolerance in Pa is converted exactly.
-Two numbers instead of one because most conditions have a safe side: gas at a higher
-pressure can be throttled down at the burner, gas at a lower one can't be pushed up there.
+reads as: the condition `https://vocab.sentier.dev/units/quantity-kind/Pressure` (the quantity kind *pressure* in the
+[sentier vocabulary](https://vocab.sentier.dev), derived from QUDT) may be met **up to 0 Pa
+lower and up to 1e5 Pa higher** than asked. The name is the IRI the models use, written in
+full; `pressure` would not match it, and the CLI warns when a tolerated condition is
+declared by no model. The unit is resolved through the same catalog as everything else --
+a symbol (`Pa`), a vocabulary id (`PA`) or the full IRI all work -- and a condition may be
+asked in *any* unit of the same quantity kind: a demand in another pressure unit against a
+tolerance in Pa is converted exactly. Two numbers instead of one because most conditions
+have a safe side: gas at a higher pressure can be throttled down at the burner, gas at a
+lower one can't be pushed up there.
 
 With the flag, the demand is moved to 5e5 Pa, answered by `NaturalGasSupply`, and the tree
 says so:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
 ```
 
 The parentheses show what was asked; the brackets show what was conceded. The summary
 counts it as `1 proxy`. A 6e5 Pa (6 bar) demand would not be answered with
-`pressure=0:1e5 Pa`, because 5e5 is below 6e5.
+`$P=0:1e5 Pa`, because 5e5 is below 6e5.
 
 Repeat the flag for each condition, e.g.
-`--context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K"`. A
+`--context-tolerance "$P=0:1e5 Pa" --context-tolerance "$T=0:10 K"`, with `$P`
+and `$T` holding the condition IRIs (see below). A
 condition given twice, a malformed value, or a unit the catalog does not know stops the
 run with exit code `2` before anything runs.
 
@@ -205,6 +210,12 @@ two conditions together is a bigger concession, and trailrunner makes you ask fo
 see the difference, put this in `burner_models.py`: a burner that asks for gas at 4e5 Pa
 (4 bar) *and* 280 K, and a grid that delivers 5e5 Pa (5 bar) at 288 K.
 
+This time the conditions are not free text but IRIs: the quantity kinds `Pressure` and
+`Temperature` of the [sentier vocabulary](https://vocab.sentier.dev) (derived from QUDT),
+in its units Pa and K. A condition matches only when the demand and the coverage name the
+**same IRI**, so "pressure" in one model and "Pressure" in another can't be confused, and a
+reader can look up exactly what was meant.
+
 ```python title="burner_models.py"
 from trailrunner import ContextRange, Coverage, Demand, Exchange, Flow, Model, Property, Result
 from trailrunner.core.time import when
@@ -213,6 +224,9 @@ from trailrunner.core.units import KELVIN, KG, MJ, PA
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
+
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
+TEMPERATURE = "https://vocab.sentier.dev/units/quantity-kind/Temperature"
 
 
 class Burner(Model):
@@ -223,7 +237,7 @@ class Burner(Model):
     def apply(self, demand: Demand) -> Result:
         gas = demand.amount / 0.9
         where = dict(location=demand.flow.location, **when(demand.flow))
-        wanted = (Property("pressure", 4e5, PA), Property("temperature", 280.0, KELVIN))
+        wanted = (Property(PRESSURE, 4e5, PA), Property(TEMPERATURE, 280.0, KELVIN))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
             technosphere=[Demand(flow=Flow(iri=GAS, context=wanted, **where), amount=gas, unit=MJ)],
@@ -236,8 +250,8 @@ class GasGrid(Model):
 
     produces = [GAS]
     coverage = Coverage(context=(
-        ContextRange("pressure", PA, 5e5, 5e5),
-        ContextRange("temperature", KELVIN, 288.0, 288.0),
+        ContextRange(PRESSURE, PA, 5e5, 5e5),
+        ContextRange(TEMPERATURE, KELVIN, 288.0, 288.0),
     ))
 
     def apply(self, demand: Demand) -> Result:
@@ -247,6 +261,14 @@ class GasGrid(Model):
 MODELS = [Burner(), GasGrid()]
 ```
 
+On the command line a condition is named by the same IRI. Shell variables keep the
+commands readable:
+
+```bash
+P=https://vocab.sentier.dev/units/quantity-kind/Pressure
+T=https://vocab.sentier.dev/units/quantity-kind/Temperature
+```
+
 Both conditions are off, and both are within tolerance, yet two tolerances alone don't
 answer it:
 
@@ -254,26 +276,27 @@ answer it:
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
     --amount 100 --unit MJ --location CH --time 2030 \
     --models burner_models.py \
-    --context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K"
+    --context-tolerance "$P=0:1e5 Pa" --context-tolerance "$T=0:10 K"
 ```
 
 ```text
 time 2030 read as xsd:gYear
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (pressure=400000 Pa, temperature=280 K)  [cutoff: coverage_excluded]
+  111.111 MJ natural-gas @CH/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa, https://vocab.sentier.dev/units/quantity-kind/Temperature=280 K)  [cutoff: coverage_excluded]
 ```
 
-Moving pressure alone leaves the temperature wrong, and the other way round.
-`--proxy-order` says which relaxations to try and in what order: entries are separated by
-commas and tried left to right, and `+` joins conditions that move **together**. Each
-condition is written `context.<name>`:
+The tree prints every condition as its full IRI, so it is always clear which
+concept was asked for. Moving pressure alone leaves the temperature wrong, and the other
+way round. `--proxy-order` says which relaxations to try and in what order: entries are
+separated by commas and tried left to right, and `+` joins conditions that move
+**together**. Each condition is written `context.<IRI>`:
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
     --amount 100 --unit MJ --location CH --time 2030 \
     --models burner_models.py \
-    --context-tolerance "pressure=0:1e5 Pa" --context-tolerance "temperature=0:10 K" \
-    --proxy-order context.pressure,context.temperature,context.pressure+context.temperature
+    --context-tolerance "$P=0:1e5 Pa" --context-tolerance "$T=0:10 K" \
+    --proxy-order context.$P,context.$T,context.$P+context.$T
 ```
 
 ```text
@@ -284,27 +307,37 @@ time 2030 read as xsd:gYear
 attribution: allocation=none, capital=per_output
 
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (pressure=400000 Pa, temperature=280 K)  [proxy: context: pressure 400000 Pa -> 500000 Pa; context: temperature 280 K -> 288 K]
+  111.111 MJ natural-gas @CH/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa, https://vocab.sentier.dev/units/quantity-kind/Temperature=280 K)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa; context: https://vocab.sentier.dev/units/quantity-kind/Temperature 280 K -> 288 K]
 ```
 
 That order reads: try pressure alone, then temperature alone, and only if neither works,
 both together. Leave out the last entry and the run won't combine them. Each condition
-still has to stay within its own tolerance: with `temperature=0:5 K`, 280 K can't reach
-288 K and the demand stays a cutoff, whatever the order says.
+still has to stay within its own tolerance: with `"$T=0:5 K"`, 280 K can't reach 288 K and
+the demand stays a cutoff, whatever the order says.
 
 | `--proxy-order` | tries |
 | --- | --- |
 | *(not given)* | each tolerated condition on its own, never two together |
-| `context.pressure` | pressure only; other conditions must match exactly |
-| `context.pressure,context.temperature` | pressure alone, then temperature alone; never both |
-| `context.pressure+context.temperature` | only both together |
-| `context.pressure,context.pressure+context.temperature` | pressure alone, then both |
+| `context.$P` | pressure only; other conditions must match exactly |
+| `context.$P,context.$T` | pressure alone, then temperature alone; never both |
+| `context.$P+context.$T` | only both together |
+| `context.$P,context.$P+context.$T` | pressure alone, then both |
+
+Names are matched exactly, never guessed. Write `"pressure=0:1e5 Pa"` against these models and
+nothing relaxes; the CLI says so, and points at the IRI you probably meant:
+
+```text
+warning: no model declares a context condition named 'pressure', so its tolerance relaxes nothing; did you mean https://vocab.sentier.dev/units/quantity-kind/Pressure?
+```
+
+The shipped cement chain uses the same `Pressure` IRI, which is why its commands spell it
+out in full: the flag must name a condition exactly as the models do.
 
 Every `context.<name>` in the order needs a `--context-tolerance` for that name, or the
-run stops with exit code `2` (`'context.temperature' can never be tried: no
-context_tolerance for 'temperature'`). The CLI relaxes context only. Widening the location,
-moving the year, climbing the product taxonomy, or mixing those with context (e.g.
-`("location", "context.pressure")`), needs a [`ResolutionChain`](../resolution.md) in
+run stops with exit code `2` (`'context.<name>' can never be tried: no context_tolerance
+for '<name>'`). The CLI relaxes context only. Widening the location, moving the year,
+climbing the product taxonomy, or mixing those with context (e.g.
+`("location", "context.<name>")`), needs a [`ResolutionChain`](../resolution.md) in
 Python, which takes the same order.
 
 ## 5. Get a score: `--method`
@@ -354,7 +387,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance "pressure=0:1e5 Pa" \
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa" \
     --method gwp100.parquet
 ```
 
@@ -395,7 +428,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance "pressure=0:1e5 Pa" \
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa" \
     --dynamic radiative_forcing --horizon 100
 ```
 
@@ -458,7 +491,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance "pressure=0:1e5 Pa" --max-depth 2
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa" --max-depth 2
 ```
 
 ```text
@@ -470,7 +503,7 @@ attribution: allocation=none, capital=per_output
 traversal was truncated: max_depth or max_nodes was reached
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
     68.75 m3 natural-gas-at-production @NO/2030  [cutoff: max_depth]
     0.0505312 t natural-gas-transport-offshore-pipeline-long-distance @NO/2030 (distance=1000 km)  [cutoff: max_depth]
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]

@@ -166,6 +166,7 @@ def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
 
 SHOWCASE = Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
 CEMENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
 CEMENT_RUN = [
     "run", CEMENT, "--amount", "1000", "--unit", "kg",
     "--location", "DK", "--time", "2030", "--models", str(SHOWCASE),
@@ -175,21 +176,21 @@ CEMENT_RUN = [
 def test_without_a_context_tolerance_the_kilns_4_bar_gas_is_a_coverage_miss(capsys):
     assert main(CEMENT_RUN) == 0
     out = capsys.readouterr().out
-    assert "fi_12020 @DK/2030 (pressure=400000 Pa)  [cutoff: coverage_excluded]" in out
+    assert f"fi_12020 @DK/2030 ({PRESSURE}=400000 Pa)  [cutoff: coverage_excluded]" in out
 
 
 def test_a_context_tolerance_lets_5_bar_gas_answer_it_as_a_proxy(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1e5 Pa"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1e5 Pa"]) == 0
     out = capsys.readouterr().out
-    assert "[proxy: context: pressure 400000 Pa -> 500000 Pa]" in out
+    assert f"[proxy: context: {PRESSURE} 400000 Pa -> 500000 Pa]" in out
     assert "1 proxy" in out
 
 
 def test_a_context_tolerance_that_forbids_the_side_leaves_the_cutoff(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", "pressure=1e5:0 Pa"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=1e5:0 Pa"]) == 0
     out = capsys.readouterr().out
     # Tier 1's reason wins: widening the coverage is what would fix it.
-    assert "(pressure=400000 Pa)  [cutoff: coverage_excluded]" in out
+    assert f"({PRESSURE}=400000 Pa)  [cutoff: coverage_excluded]" in out
     assert "0 proxies" in out
 
 
@@ -233,7 +234,7 @@ def test_proxy_order_parses_entries_and_combinations():
     ],
 )
 def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, capsys):
-    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1e5 Pa", "--proxy-order", order])
+    code = main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1e5 Pa", "--proxy-order", order])
     assert code == 2
     assert message in capsys.readouterr().err
 
@@ -241,8 +242,8 @@ def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, caps
 def test_a_context_tolerance_given_twice_is_rejected(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", "pressure=0:1e5 Pa",
-        "--context-tolerance", "pressure=0:2e5 Pa",
+        "--context-tolerance", f"{PRESSURE}=0:1e5 Pa",
+        "--context-tolerance", f"{PRESSURE}=0:2e5 Pa",
     ])
     assert code == 2
     assert "more than once" in capsys.readouterr().err
@@ -251,11 +252,11 @@ def test_a_context_tolerance_given_twice_is_rejected(capsys):
 def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", "pressure=0:1e5 Pa",
-        "--proxy-order", "context.pressure",
+        "--context-tolerance", f"{PRESSURE}=0:1e5 Pa",
+        "--proxy-order", f"context.{PRESSURE}",
     ])
     assert code == 0
-    assert "[proxy: context: pressure 400000 Pa -> 500000 Pa]" in capsys.readouterr().out
+    assert f"[proxy: context: {PRESSURE} 400000 Pa -> 500000 Pa]" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("unit", ["kg", "KiloGM", "https://vocab.sentier.dev/units/unit/KiloGM"])
@@ -302,3 +303,29 @@ def test_a_non_numeric_context_value_exits_2_naming_the_argument(models_file, ca
 def test_year_is_gone(models_file):
     with pytest.raises(SystemExit):
         main(["run", HEAT, "--amount", "1", "--unit", "kg", "--year", "2030", "--models", str(models_file)])
+
+
+def test_a_tolerance_no_model_declares_warns_and_suggests_the_iri(tmp_path, capsys):
+    path = tmp_path / "iri_models.py"
+    path.write_text(textwrap.dedent('''
+        from trailrunner import ContextRange, Coverage, Exchange, Model, Result
+
+        class Grid(Model):
+            produces = ["gas"]
+            coverage = Coverage(context=(ContextRange(
+                "https://vocab.sentier.dev/units/quantity-kind/Pressure",
+                "https://vocab.sentier.dev/units/unit/PA", 5e5, 5e5),))
+
+            def apply(self, demand):
+                return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+        MODELS = [Grid()]
+    '''))
+    code = main([
+        "run", "gas", "--amount", "1", "--unit", "MJ", "--models", str(path),
+        "--context-tolerance", "pressure=0:1e5 Pa",
+    ])
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "no model declares a context condition named 'pressure'" in err
+    assert "did you mean https://vocab.sentier.dev/units/quantity-kind/Pressure?" in err

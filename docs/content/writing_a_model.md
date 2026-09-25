@@ -294,7 +294,9 @@ one the demander wrote:
 UnknownUnit: context condition 'pressure' is in 'bar', not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
 ```
 
-Write the value in the vocabulary's own unit and IRI: `Property("pressure", 4e5, PA)`.
+Write the value in the vocabulary's own unit, and name the condition by the vocabulary's
+quantity kind: `Property(PRESSURE, 4e5, PA)`, with
+`PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"`.
 
 **An int year column in a parquet file** — the old `time_column` held integers with no
 declared standard. `ParameterSet.from_parquet` refuses to guess which calendar `2030`

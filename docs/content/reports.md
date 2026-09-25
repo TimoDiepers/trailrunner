@@ -51,13 +51,13 @@ attribution: allocation=none, capital=per_output
     84.6561 kWh electricity-wind @DK/2030  [cutoff: no_model_found]
     12.6984 kWh electricity-hydro @DK/2030  [cutoff: no_model_found]
   1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
-  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [cutoff: coverage_excluded]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [cutoff: coverage_excluded]
   10 kg fi_37420 @DK/2030  [cutoff: no_model_found]
 ```
 
 The root line shows the tonne converted to the kilograms `CementPlant` answers in: exact,
 logged, and not a proxy ([Units](resolution.md#units)). The kiln's gas asks for
-`pressure=400000 Pa` and the only supplier delivers 500000 Pa, so tier 1
+`https://vocab.sentier.dev/units/quantity-kind/Pressure` at 400000 Pa and the only supplier delivers 500000 Pa, so tier 1
 reports it as `coverage_excluded`: a supplier exists, and its coverage is what to look
 at. A [`context_tolerance`](resolution.md#tier-2-generalising-a-demand) turns it into a
 recorded proxy instead.
@@ -76,7 +76,7 @@ part only when the demand names one:
 | `[model: CementPlant]` | an exact match in tier 1 |
 | `[model: CementPlant; unit: t -> kg ×1000]` | a tier-1 match, the amount converted exactly into a unit the model answers in |
 | `[proxy: product: fi_37420 -> fi_374]` | answered by relaxing the demand, naming what was relaxed |
-| `[proxy: context: pressure 400000 Pa -> 500000 Pa]` | answered after moving a context condition within its tolerance |
+| `[proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]` | answered after moving a context condition within its tolerance |
 | `[background: cumulative]` | borrowed from a background pack, upstream included |
 | `[background: unit_process, incomplete]` | borrowed, direct emissions only, upstream missing |
 | `[cutoff: no_model_found]` | nothing answered, with the reason |

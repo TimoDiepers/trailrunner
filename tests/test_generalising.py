@@ -695,3 +695,34 @@ def test_a_year_snaps_exactly_as_it_did_with_int_years():
     demand = Demand(flow=Flow(iri=HEAT, **in_year(2034)), amount=1.0, unit=MJ)
     offer = provider([DatedBoiler()]).offer(demand)
     assert offer.resolution["relaxations"] == ["time: 2034 -> 2035"]
+
+
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
+
+
+class FiveBarGasByIri(Model):
+    produces = [GAS]
+    coverage = Coverage(context=(ContextRange(PRESSURE, PA, 5e5, 5e5),))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+def test_iri_conditions_match_by_iri_and_are_written_in_full():
+    demand = Demand(
+        flow=Flow(iri=GAS, context=(Property(PRESSURE, 4e5, PA),)), amount=10.0, unit=MJ
+    )
+    settings = ProxySettings(
+        order=(f"context.{PRESSURE}",), context_tolerance={PRESSURE: (0.0, 1e5, PA)}
+    )
+    offer = provider([FiveBarGasByIri()], settings=settings).offer(demand)
+    assert offer.resolution["relaxations"] == [f"context: {PRESSURE} 400000 Pa -> 500000 Pa"]
+    assert offer.resolution["answered"].endswith(f"[{PRESSURE}=500000 Pa]")
+
+
+def test_a_short_name_does_not_match_an_iri_condition():
+    demand = Demand(
+        flow=Flow(iri=GAS, context=(Property("Pressure", 4e5, PA),)), amount=10.0, unit=MJ
+    )
+    settings = ProxySettings(context_tolerance={"Pressure": (0.0, 1e5, PA)})
+    assert provider([FiveBarGasByIri()], settings=settings).offer(demand) is None

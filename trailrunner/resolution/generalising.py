@@ -299,6 +299,9 @@ class GeneralisingProvider:
                 for entry in demand.flow.context
             )
             flow = replace(demand.flow, context=context)
+            # The name in full, unlike the product note: a condition named by
+            # IRI must read as one, or it looks like the free-text name it
+            # isn't. The unit is a vocabulary unit, so its symbol is exact.
             shown = symbol(asked.unit)
             note = f"context: {name} {asked.value:g} {shown} -> {value:g} {shown}"
             yield replace(demand, flow=flow), note, step

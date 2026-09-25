@@ -333,7 +333,7 @@ print(first.tree(labels=VOCAB.label))  # the vocabulary's names, where it has on
         84.6561 kWh electricity-wind @DK/2030-06-15  [cutoff: no_model_found]
         12.6984 kWh electricity-hydro @DK/2030-06-15  [cutoff: no_model_found]
       1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030-06-15  [cutoff: no_model_found]
-      2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (pressure=400000 Pa)  [cutoff: coverage_excluded]
+      2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [cutoff: coverage_excluded]
       10 kg Quicklime, slaked lime and hydraulic lime @DK/2030-06-15  [cutoff: no_model_found]
 
 The demand is **1 t** of cement on **15 June 2030**. `CementPlant` reasons in
@@ -356,7 +356,8 @@ maintenance lorry — are cutoffs, and they are in the report with a reason.
 
 The kiln's own 2475 MJ are a cutoff too, but for a different reason:
 `coverage_excluded`, not `no_model_found`. The kiln burners ask for gas at
-`pressure=400000 Pa` (4 bar), and `NaturalGasSupply` declares in its
+400000 Pa (4 bar), as the quantity kind
+`https://vocab.sentier.dev/units/quantity-kind/Pressure`, and `NaturalGasSupply` declares in its
 coverage that it delivers at 500000 Pa. A supplier exists, but it doesn't match exactly, and tier 1
 alone won't pretend it does. Section 3 lets that condition be relaxed, on the
 record.
@@ -379,8 +380,11 @@ product this plant is making. It is the best answer available and a poor answer
 in substance, and it is written at the node rather than lost.
 
 **Tier 2 also relaxes context.** Place and year are not the only things a
-demand can ask for. This plant's burners take gas at 4e5 Pa (4 bar), so its
-gas demand carries `pressure=400000 Pa` in its [`Flow`](api/flow.md)'s `context`. `NaturalGasSupply`
+demand can ask for. Conditions are named by IRI, here from the
+[sentier vocabulary](https://vocab.sentier.dev) (derived from QUDT), so a supplier
+matches only if it means the same pressure in the same unit. This plant's burners
+take gas at 4e5 Pa (4 bar), so its gas demand carries
+`https://vocab.sentier.dev/units/quantity-kind/Pressure` = 400000 Pa in its [`Flow`](api/flow.md)'s `context`. `NaturalGasSupply`
 declares in its `Coverage` that it delivers at 5e5 Pa, so tier 1 does not match
 it. The practitioner allows pressure to be met up to 1e5 Pa *higher*, never
 lower, because gas can be throttled down at the burner and cannot be pushed
@@ -464,6 +468,7 @@ class CementKilnConstruction(Model):
 
 ```python
 from trailrunner import ProxySettings
+from trailrunner.models import natural_gas
 from trailrunner.resolution import (
     BackgroundPack, BackgroundProvider, GeneralisingProvider, PystTaxonomy,
 )
@@ -490,7 +495,7 @@ tier1 = ModelProvider(Glossary(MODELS_PLUS))
 taxonomy = PystTaxonomy(EXAMPLES / "pyst_cache.json", client=None)
 # Pressure may be met up to 1e5 Pa (1 bar) higher, never lower: gas is
 # throttled at the burner, not boosted there. (below, above, unit)
-PROXY = ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})
+PROXY = ProxySettings(context_tolerance={natural_gas.PRESSURE: (0.0, 1e5, PA)})
 tier2 = GeneralisingProvider(tier1, settings=PROXY, hierarchy=HIERARCHY, taxonomy=taxonomy)
 pack = BackgroundPack.from_parquet(EXAMPLES / "background_pack.parquet", hierarchy=HIERARCHY)
 CHAIN = ResolutionChain([tier1, tier2, BackgroundProvider(pack)])
@@ -506,7 +511,7 @@ print(report.tree(labels=VOCAB.label))
     6 proxies (4 incomplete)
     attribution: allocation=none, capital=per_output
     1 t Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030-06-15  [model: CementPlant; unit: t -> kg ×1000]
-      2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+      2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
         68.75 m3 natural-gas-at-production @NO/2030-06-15  [model: NaturalGasExtraction]
         0.0505312 t natural-gas-transport-offshore-pipeline-long-distance @NO/2030-06-15 (distance=1000 km)  [model: NaturalGasOffshorePipelineTransport]
           0.0130625 m3 natural-gas-at-production @NO/2030-06-15  [model: NaturalGasExtraction]
@@ -566,9 +571,9 @@ for key, value in report.proxies[gas_node.id].items():
 ```
 
            model: NaturalGasSupply
-     relaxations: ['context: pressure 400000 Pa -> 500000 Pa']
-           asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [pressure=400000 Pa]
-        answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [pressure=500000 Pa]
+     relaxations: ['context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa']
+           asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa]
+        answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [https://vocab.sentier.dev/units/quantity-kind/Pressure=500000 Pa]
             tier: generalising
 
 Every concession is deliberate, ordered by the practitioner, and written down.

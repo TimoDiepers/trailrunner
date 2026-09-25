@@ -60,7 +60,7 @@ uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
     --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance "pressure=0:1e5 Pa"
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"
 ```
 
 It prints a summary (how many nodes ran, how many demands went unanswered and why, how
@@ -69,23 +69,26 @@ many were answered by a stand-in), then the supply chain as a tree, one line per
 ```text
 time 2030 read as xsd:gYear
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
     68.75 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
     ...
   1125 kg fi_15200 @DK/2030  [cutoff: no_model_found]
 ```
 
-`@DK/2030` is where and when, `(pressure=400000 Pa)` (4 bar) is what the demand asked for
-beyond that, and the brackets say who answered: an exact `model`, a `proxy` with what was
-conceded, or a `cutoff` with the reason.
+`@DK/2030` is where and when, `(https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)` (4 bar) is what the demand asked
+for beyond that, and the brackets say who answered: an exact `model`, a `proxy` with what
+was conceded, or a `cutoff` with the reason.
 
 **`--context-tolerance`** is what turned the gas into a proxy. The kiln's burners ask for
-gas at 4e5 Pa (4 bar); the only supplier delivers at 5e5 Pa (5 bar). Matching is exact by
-default, so without the flag that gas is a `coverage_excluded` cutoff. `pressure=0:1e5 Pa`
+gas at 4e5 Pa (4 bar); the only supplier delivers at 5e5 Pa (5 bar). Both name the
+condition by the same IRI, the quantity kind `https://vocab.sentier.dev/units/quantity-kind/Pressure` from the
+[sentier vocabulary](https://vocab.sentier.dev) (derived from QUDT). Matching is exact by
+default, so without the flag that gas is a `coverage_excluded` cutoff. `https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa`
 reads *up to 0 Pa lower, up to 1e5 Pa higher* than asked: higher-pressure gas can be
 throttled at the burner, lower can't be boosted. The move is written into the tree and
 counted as a proxy. A condition may be asked, and tolerated, in any unit of its kind — the
-catalog converts.
+catalog converts. A tolerance naming a condition no model declares (say plain `pressure`)
+relaxes nothing, and the CLI warns and suggests the IRI.
 
 | Flag | What it does |
 | --- | --- |
@@ -93,8 +96,8 @@ catalog converts.
 | `--location`, `--time`, `--time-standard` | where and when; `--time` is a string (`2030`, `2030-06-15`, ...) in the standard `--time-standard` names, inferred from its shape when omitted, and always printed |
 | `--context "NAME=VALUE UNIT"` | a condition on the demand, e.g. `"pressure=4e5 Pa"`; repeatable |
 | `--models FILE` | a `.py` file defining a `MODELS` list (required) |
-| `--context-tolerance "NAME=BELOW:ABOVE UNIT"` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in `UNIT` (a symbol, vocabulary id or IRI); repeat per condition |
-| `--proxy-order ORDER` | which conditions to relax, in order: `,` between tries, `+` to move conditions together, e.g. `context.pressure,context.pressure+context.temperature`; default is one condition at a time |
+| `--context-tolerance "NAME=BELOW:ABOVE UNIT"` | let condition `NAME` be met up to `BELOW` lower / `ABOVE` higher, in `UNIT` (a symbol, vocabulary id or IRI); `NAME` is written exactly as the models name it, e.g. the quantity-kind IRI `https://vocab.sentier.dev/units/quantity-kind/Pressure` in the shipped chain; repeat per condition |
+| `--proxy-order ORDER` | which conditions to relax, in order: `,` between tries, `+` to move conditions together, each written `context.<name>`, e.g. `context.$P,context.$P+context.$T` with `$P`, `$T` holding condition IRIs such as `https://vocab.sentier.dev/units/quantity-kind/Pressure`; default is one condition at a time |
 | `--method FILE` | characterize with a method parquet and print a score |
 | `--dynamic METRIC`, `--horizon YEARS` | a time-explicit result, e.g. `radiative_forcing` |
 | `--allocation`, `--capital` | the run's normative choices for co-products and capital goods |

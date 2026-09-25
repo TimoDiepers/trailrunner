@@ -118,20 +118,21 @@ makes. Best available, poor in substance. Not hidden.
 
 **Tier 2 also relaxes context.** Time and place are not the only things a
 demand asks for. The kiln burners want gas at **4e5 Pa** (4 bar), carried in
-the flow's `context`; `NaturalGasSupply` declares in its coverage that it
+the flow's `context` as the sentier (QUDT-derived) concept
+`https://vocab.sentier.dev/units/quantity-kind/Pressure`; `NaturalGasSupply` declares in its coverage that it
 delivers at **5e5 Pa**. Tier 1 misses. The practitioner allows pressure to be
 met up to 1e5 Pa higher, never lower — gas is throttled at the burner, not
 boosted:
 
 ```python
-ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})  # (below, above, unit)
+ProxySettings(context_tolerance={natural_gas.PRESSURE: (0.0, 1e5, PA)})  # (below, above, unit)
 ```
 
 ```text
        model: NaturalGasSupply
- relaxations: ['context: pressure 400000 Pa -> 500000 Pa']
-       asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [pressure=400000 Pa]
-    answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [pressure=500000 Pa]
+ relaxations: ['context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa']
+       asked: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa]
+    answered: https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020 @DK/2030-06-15 [https://vocab.sentier.dev/units/quantity-kind/Pressure=500000 Pa]
         tier: generalising
 ```
 
@@ -167,7 +168,7 @@ One `while queue:` later — 1 t of Danish cement, every tier in one run:
 
 ```text
 1 t Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030-06-15  [model: CementPlant; unit: t -> kg ×1000]
-  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (pressure=400000 Pa)  [proxy: context: pressure 400000 Pa -> 500000 Pa]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
     68.75 m3 natural-gas-at-production @NO/2030-06-15  [model: NaturalGasExtraction]
     0.0505312 t natural-gas-transport-offshore-pipeline-long-distance @NO/2030-06-15 (distance=1000 km)  [model: NaturalGasOffshorePipelineTransport]
       0.0130625 m3 natural-gas-at-production @NO/2030-06-15  [model: NaturalGasExtraction]

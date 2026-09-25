@@ -52,6 +52,11 @@ CEMENT_KILN = "https://vocab.sentier.dev/products/cement-kiln"
 # assessment/dynamic.py and assessment/static.py already characterize.
 # Writing it anywhere else would drop it silently out of every score.
 CO2_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
+# The burner pressure the kiln asks its gas at, named by the sentier
+# vocabulary's (QUDT-derived) quantity kind and given in Pa. A supplier answers
+# it exactly only if it declares the same name and unit -- see
+# natural_gas.PRESSURE.
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
 
 CLINKER_CALCINATION_CO2 = 0.53  # kg CO2 per kg clinker, from CaCO3 -> CaO + CO2
 LIMESTONE_PER_CLINKER = 1.5  # kg raw limestone per kg clinker
@@ -177,7 +182,7 @@ class CementPlant(Model):
         """The kiln's gas, at the burner's pressure if the plant names one."""
         if self.burner_pressure is None:
             return flow
-        return replace(flow, context=(Property("pressure", self.burner_pressure, PA),))
+        return replace(flow, context=(Property(PRESSURE, self.burner_pressure, PA),))
 
     def _construction(self, demand: Demand) -> tuple[list[Demand], dict]:
         """One construction demand per operating kiln, in that kiln's build year.

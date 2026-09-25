@@ -102,6 +102,39 @@ def parse_proxy_order(value: str | None) -> tuple[str | tuple[str, ...], ...]:
     return tuple(order)
 
 
+def undeclared_conditions(tolerance: dict, models: list) -> list[str]:
+    """One message per tolerated condition that no model's coverage declares.
+
+    Such a tolerance can never move anything, and the usual cause is writing
+    ``pressure`` where the models say
+    ``https://vocab.sentier.dev/units/quantity-kind/Pressure``:
+    conditions match by exact name, so the run would quietly relax nothing.
+    A warning, not an error, because a models file may legitimately not
+    declare every condition a shared command line mentions.
+    """
+    declared = {
+        declared_range.name
+        for model in models
+        if getattr(model, "coverage", None) is not None
+        for declared_range in model.coverage.context
+    }
+    messages = []
+    for name in tolerance:
+        if name in declared:
+            continue
+        near = sorted(
+            candidate
+            for candidate in declared
+            if candidate.rstrip("/").rsplit("/", 1)[-1].lower() == name.lower()
+        )
+        hint = f"; did you mean {near[0]}?" if near else ""
+        messages.append(
+            f"no model declares a context condition named {name!r}, "
+            f"so its tolerance relaxes nothing{hint}"
+        )
+    return messages
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="trailrunner", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -131,8 +164,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="NAME=BELOW:ABOVE UNIT",
         help="let a context condition be met this far below/above what was asked, "
-        'in the unit named (symbol, vocabulary id or IRI), e.g. "pressure=0:1e5 Pa"; '
-        "repeatable",
+        "in the unit named (symbol, vocabulary id or IRI), e.g. "
+        '"https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"; repeatable',
     )
     run.add_argument(
         "--proxy-order",
@@ -172,6 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, AttributeError, ImportError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
+
+    for warning in undeclared_conditions(context_tolerance, models):
+        print(f"warning: {warning}", file=sys.stderr)
 
     catalog = UnitCatalog()
     try:

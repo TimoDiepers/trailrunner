@@ -59,10 +59,11 @@ MODELS = [
     #
     # The kiln's burners take gas at 4e5 Pa (4 bar) and NaturalGasSupply
     # delivers at 5e5 Pa, so tier 1 alone leaves the kiln's gas a
-    # coverage_excluded cutoff. Allow pressure to be met higher
-    # (`--context-tolerance "pressure=0:1e5 Pa"` on the CLI,
-    # ProxySettings(context_tolerance=...) in Python) and tier 2 answers it,
-    # on the record. The gas plant's gas names no pressure and needs none.
+    # coverage_excluded cutoff. Allow pressure to be met higher and tier 2
+    # answers it, on the record: on the CLI
+    # `--context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"`,
+    # in Python ProxySettings(context_tolerance={natural_gas.PRESSURE: (0.0, 1e5, PA)}).
+    # The gas plant's gas names no pressure and needs none.
     CementPlant(params=_cement_params, burner_pressure=4e5),
     MeteredCementPlant(params=_cement_metered_params),
     GridElectricity(params=_grid_params),
