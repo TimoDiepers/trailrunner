@@ -21,6 +21,7 @@ from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
 from trailrunner.core.time import in_year, when, year_of, year_range
+from trailrunner.core.units import KG
 
 # Real BONSAI vocabulary concepts (verified live against
 # https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
@@ -75,7 +76,7 @@ class DirectAirCapture(Model):
     """
 
     produces = [CO2_CAPTURED]
-    coverage = Coverage(time_range=year_range(2020, 2050))
+    coverage = Coverage(time_range=year_range(2020, 2050), units=frozenset({KG}))
     fleet: Fleet | None = None
 
     supports = ALLOCATION_RULES

@@ -17,7 +17,7 @@ from trailrunner.params.location import LocationHierarchy
 from trailrunner.params.parameter_set import ParameterSet
 
 from .conftest import write_parameter_parquet
-from trailrunner.core.units import DEG_C, KG, KWH, MJ, UNITLESS
+from trailrunner.core.units import DEG_C, KG, KWH, MJ, TONNE, UNITLESS
 from trailrunner.core.time import GYEAR, in_year, when
 
 HIERARCHY = LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"})
@@ -116,6 +116,37 @@ def test_dac_records_which_parameter_row_it_used(dac_params):
 def test_dac_is_out_of_coverage_before_2020(dac_params):
     glossary = Glossary([DirectAirCapture(params=dac_params)])
     assert glossary.resolve(Flow(iri=CO2_CAPTURED, location="CH", **in_year(1990))) is None
+
+
+def test_dac_declares_kg_so_a_tonne_demand_converts_before_apply(dac_params):
+    """A tonne demand must reach ``apply`` as the same kilograms, not 1/1000th.
+
+    Without ``Coverage.units`` declared, ``ModelProvider`` passes the demand
+    through unconverted, so a 1 t demand would be treated as 1 kg -- 1000x
+    too little heat and electricity, and a biosphere uptake of only 1 kg.
+    """
+    kg_result = DirectAirCapture(params=dac_params).apply(demand(amount=1000.0))
+    kg_heat = [d for d in kg_result.technosphere if d.flow.iri == HEAT][0].amount
+    kg_electricity = [d for d in kg_result.technosphere if d.flow.iri == ELECTRICITY][0].amount
+
+    glossary = Glossary([DirectAirCapture(params=dac_params)])
+    report = Orchestrator(glossary).calculate(
+        Demand(
+            flow=Flow(iri=CO2_CAPTURED, location="CH", time="2030", time_standard=GYEAR),
+            amount=1.0,
+            unit=TONNE,
+        )
+    )
+
+    node = report.nodes[0]
+    assert node.resolution["conversion"] == "unit: t -> kg ×1000"
+
+    by_iri = {r.demand.flow.iri: r.demand for r in report.unresolved}
+    assert by_iri[HEAT].amount == pytest.approx(kg_heat)
+    assert by_iri[ELECTRICITY].amount == pytest.approx(kg_electricity)
+
+    uptake = report.inventory[(Flow(iri=CO2_AIR, location="CH", **in_year(2030)), KG)]
+    assert uptake == -1000.0
 
 
 def test_end_to_end_traversal_with_a_heat_model(dac_params):
