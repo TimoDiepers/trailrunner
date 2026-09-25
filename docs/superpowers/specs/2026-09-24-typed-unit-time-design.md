@@ -17,17 +17,6 @@ for and tier 2 relaxes. Those conditions carry units too. This spec therefore
 types units **everywhere a unit appears** — exchanges, properties, context
 conditions, context ranges, context tolerances — not only on the exchange.
 
-## Amendment (2026-09-25): two unit namespaces
-
-`main` (#44) names context units by QUDT's own IRIs (`http://qudt.org/vocab/unit/BAR`)
-and conditions by QUDT quantity kinds (`http://qudt.org/vocab/quantitykind/Pressure`).
-Decision: **accept both namespaces.** `https://vocab.sentier.dev/units/unit/X` stays
-canonical. `http://qudt.org/vocab/unit/X` is the same unit when sentier has `X`
-(sentier's units are QUDT-derived with identical ids). A QUDT unit sentier lacks
-(e.g. `BAR`) is valid when the bundled catalog carries its QUDT facts. Quantity
-kinds from either namespace compare by their last path segment. Everything
-else in this spec (strictness, conversion, temperature) applies unchanged.
-
 ## Decisions taken
 
 | Question | Decision |
