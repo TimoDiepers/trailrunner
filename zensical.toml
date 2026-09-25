@@ -15,6 +15,7 @@ nav = [
     { Overview = "index.md" },
     { "Pitch (3 min)" = "pitch.md" },
     { "Pitch (5 min)" = "pitch-5min.md" },
+    { "Showcase slides" = "https://timodiepers.github.io/trailrunner/" },
   ]},
   { "User Guide" = [
     { Installation = "content/installation.md" },
