@@ -17,6 +17,8 @@ Most users touch four things: a [`Model`](model.md) subclass, a
 - [`model`](model.md) — the `Model` base class, Python code for one process.
 - [`result`](result.md) — what a model run returned.
 - [`settings`](settings.md) — run-wide knobs shared by every model.
+- [`units`](units.md) — unit vocabulary IRIs and the `UnitCatalog` that knows how they relate.
+- [`time`](time.md) — a flow's time as a string in a declared standard, read as an interval.
 - [`errors`](errors.md) — the errors `trailrunner` raises.
 
 ## Orchestration

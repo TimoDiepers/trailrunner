@@ -39,3 +39,19 @@ def test_every_exported_error_is_a_trailrunner_error():
 def test_all_lists_only_names_that_exist():
     for name in trailrunner.__all__:
         assert hasattr(trailrunner, name), name
+
+
+def test_units_and_time_are_importable_from_the_top():
+    """A caller declaring context conditions or a time range works from the
+    unit and time vocabulary IRIs without reaching into trailrunner.core."""
+    for name in (
+        "UnknownUnit",
+        "MissingTimeStandard",
+        "UnitCatalog",
+        "TimeRange",
+        "year_range",
+        "in_year",
+        "when",
+    ):
+        assert name in trailrunner.__all__
+        assert hasattr(trailrunner, name)
