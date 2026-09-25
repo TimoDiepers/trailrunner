@@ -81,3 +81,15 @@ def test_a_year_range_covers_a_day_in_it():
     coverage = Coverage(time_range=year_range(2026, 2050))
     assert coverage.covers(Flow(iri="c", time="2050-12-31", time_standard=DATE))
     assert not coverage.covers(Flow(iri="c", time="2025", time_standard=GYEAR))
+
+
+def test_coverage_rejects_a_tuple_time_range():
+    with pytest.raises(TypeError, match=r"time_range=year_range\(2026, 2050\)"):
+        Coverage(time_range=(2026, 2050))
+
+
+def test_coverage_rejects_units_that_is_not_a_frozenset_of_str():
+    with pytest.raises(TypeError):
+        Coverage(units={KG})  # a plain set, not a frozenset
+    with pytest.raises(TypeError):
+        Coverage(units=frozenset({1, 2}))  # not strings

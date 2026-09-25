@@ -61,6 +61,25 @@ class Coverage:
     a unit is on the demand, not on the flow.
     """
 
+    def __post_init__(self) -> None:
+        if self.time_range is not None and not isinstance(self.time_range, TimeRange):
+            try:
+                first, last = self.time_range
+            except (TypeError, ValueError):
+                first = last = self.time_range
+            raise TypeError(
+                "Coverage.time_range is a TimeRange; write "
+                f"time_range=year_range({first}, {last})"
+            )
+        if self.units is not None and (
+            not isinstance(self.units, frozenset)
+            or not all(isinstance(unit, str) for unit in self.units)
+        ):
+            raise TypeError(
+                "Coverage.units is a frozenset of unit IRIs (str); write "
+                "units=frozenset({KG})"
+            )
+
     def covers(self, flow: Flow, units: UnitCatalog | None = None) -> bool:
         catalog = units if units is not None else default_catalog()
         if self.locations is not None:
