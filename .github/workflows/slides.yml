@@ -1,0 +1,41 @@
+---
+name: Slides
+
+# The conference showcase deck lives in slides/ as one self-contained HTML
+# file. It is published to GitHub Pages on its own, separate from the Zensical
+# docs (which build on Read the Docs), so nothing here touches the docs build.
+#
+# One-time setup: Settings -> Pages -> Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "slides/**"
+      - ".github/workflows/slides.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish slides to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: slides
+      - id: deployment
+        uses: actions/deploy-pages@v4
