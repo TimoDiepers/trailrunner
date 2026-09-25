@@ -141,14 +141,26 @@ class ParameterSet:
     ) -> None:
         self._rows = [dict(row) for row in rows]
         self._time_standard = time_standard
-        dated = [row[time_column] for row in self._rows if row.get(time_column) is not None]
+        dated = [row for row in self._rows if row.get(time_column) is not None]
         if dated and time_standard is None:
             raise MissingTimeStandard(
                 f"{source or 'these rows'} carry times in {time_column!r} but no time "
                 f"standard; declare one (e.g. {GYEAR})"
             )
-        for value in dated:
-            interval(value, time_standard)  # a bad row fails here, not mid-traversal
+        # Parsed once here, not mid-traversal: a bad row fails immediately,
+        # with the file and column named, and every later lookup
+        # (_row_for_time) reuses the result instead of re-parsing it.
+        self._intervals: dict[int, Any] = {}
+        for row in dated:
+            value = row[time_column]
+            try:
+                self._intervals[id(row)] = interval(value, time_standard)
+            except ValueError as error:
+                raise ValueError(
+                    f"{source or 'these rows'}: column {time_column!r} has {value!r} "
+                    f"({error}); times are strings in the declared standard, e.g. "
+                    "'2030' — cast the column to string"
+                ) from None
         self._units = dict(units or {})
         self._iris = dict(iris or {})
         self._hierarchy = hierarchy or LocationHierarchy()
@@ -171,7 +183,8 @@ class ParameterSet:
             raise MissingTimeStandard(
                 f"column {time_column!r} in {path} declares no time standard; add "
                 f'"timeStandard": "{GYEAR}" (or another registered standard) to its '
-                "field in the embedded datapackage"
+                "field in the embedded datapackage, and make sure the column holds "
+                "strings (e.g. '2030'), not integers"
             )
         return cls(
             table.to_pylist(),
@@ -251,14 +264,11 @@ class ParameterSet:
         asked = interval(time, standard)
         dated = [row for row in rows if row.get(self._time_column) is not None]
         for row in dated:
-            if contains(interval(row[self._time_column], self._time_standard), asked):
+            if contains(self._intervals[id(row)], asked):
                 return row, {"time_used": row[self._time_column], "time_interpolated": False}
 
         here = midpoint_year(asked)
-        placed = [
-            (midpoint_year(interval(row[self._time_column], self._time_standard)), row)
-            for row in dated
-        ]
+        placed = [(midpoint_year(self._intervals[id(row)]), row) for row in dated]
         below = [pair for pair in placed if pair[0] < here]
         above = [pair for pair in placed if pair[0] > here]
         if not below or not above:

@@ -244,3 +244,48 @@ def test_a_file_without_a_time_standard_is_refused(tmp_path):
     ])
     with pytest.raises(MissingTimeStandard, match="timeStandard"):
         ParameterSet.from_parquet(path)
+
+
+def test_a_file_without_a_time_standard_says_the_column_must_be_strings(tmp_path):
+    """The MissingTimeStandard message an old int-year parquet hits should not
+    just ask for a timeStandard; it should also say the column must hold
+    strings, since an old file that gets one added still fails if the values
+    themselves are still ints."""
+    path = tmp_path / "p.parquet"
+    write_parameter_parquet(path, ROWS, [
+        {"name": "location", "type": "string"},
+        {"name": "time", "type": "string"},
+        {"name": "x", "type": "number"},
+    ])
+    with pytest.raises(MissingTimeStandard, match="string"):
+        ParameterSet.from_parquet(path)
+
+
+def test_an_int_year_row_names_the_source_column_and_value():
+    """An old int-year parquet that *does* declare a timeStandard still fails,
+    because the column itself still holds ints. That failure must name the
+    source, the column, and the bad value -- not just repeat the raw
+    ``interval()`` complaint mid-traversal."""
+    rows = [{"location": "CH", "time": 2030, "x": 1.0}]
+    with pytest.raises(ValueError, match="these rows") as excinfo:
+        ParameterSet(rows, time_standard=GYEAR)
+    message = str(excinfo.value)
+    assert "'time'" in message
+    assert "2030" in message
+    assert "cast the column to string" in message
+
+
+def test_an_int_year_row_from_a_file_names_the_path(tmp_path):
+    path = tmp_path / "legacy.parquet"
+    write_parameter_parquet(
+        path,
+        [{"location": "CH", "time": 2030, "x": 1.0}],
+        [
+            {"name": "location", "type": "string"},
+            {"name": "time", "type": "string", "time_standard": GYEAR},
+            {"name": "x", "type": "number"},
+        ],
+    )
+    with pytest.raises(ValueError, match="cast the column to string") as excinfo:
+        ParameterSet.from_parquet(path)
+    assert str(path) in str(excinfo.value)

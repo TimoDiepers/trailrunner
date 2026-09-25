@@ -93,10 +93,12 @@ class Method:
         self._hierarchy = hierarchy if hierarchy is not None else LocationHierarchy()
         self._units = units if units is not None else default_catalog()
         self._check_unit(unit, source)
-        # (flow_iri, flow_unit, location) -> [(time, cf), ...]. Time lives in
-        # a list rather than the key so ``_candidate_units`` can enumerate
-        # every unit a flow has a CF in without also enumerating every year.
-        self._rows: dict[tuple[str, str, str | None], list[tuple[Any, float]]] = {}
+        # (flow_iri, flow_unit, location) -> [(time, cf, interval), ...]. Time
+        # lives in a list rather than the key so ``_candidate_units`` can
+        # enumerate every unit a flow has a CF in without also enumerating
+        # every year. ``interval`` is the row's time pre-parsed at
+        # construction, so ``_match`` never re-parses it per lookup.
+        self._rows: dict[tuple[str, str, str | None], list[tuple[Any, float, Any]]] = {}
         self._flow_units: dict[str, set[str]] = {}
         seen: set[tuple[str, str, str | None, Any]] = set()
         for row in rows:
@@ -107,13 +109,24 @@ class Method:
             except KeyError as exc:
                 raise self._layout_error(source) from exc
             self._check_unit(flow_unit, source)
+            computed_interval = None
             if time is not None:
                 if time_standard is None:
                     raise MissingTimeStandard(
                         f"{source or 'the method rows'} carry times in 'time' but no "
                         f"time standard; declare one (e.g. {GYEAR})"
                     )
-                interval(time, time_standard)  # a bad row fails here, not mid-assessment
+                # Parsed once here, not mid-assessment: a bad row fails
+                # immediately, with the file and column named, and ``_match``
+                # reuses the result instead of re-parsing it on every lookup.
+                try:
+                    computed_interval = interval(time, time_standard)
+                except ValueError as error:
+                    raise ValueError(
+                        f"{source or 'the method rows'}: column 'time' has {time!r} "
+                        f"({error}); times are strings in the declared standard, e.g. "
+                        "'2030' — cast the column to string"
+                    ) from None
             key = (iri, flow_unit, location, time)
             if key in seen:
                 # Last-wins would put a number in the score that appears in no
@@ -126,7 +139,9 @@ class Method:
                     "each factor once"
                 )
             seen.add(key)
-            self._rows.setdefault((iri, flow_unit, location), []).append((time, value))
+            self._rows.setdefault((iri, flow_unit, location), []).append(
+                (time, value, computed_interval)
+            )
             self._flow_units.setdefault(iri, set()).add(flow_unit)
 
     def _check_unit(self, unit: str, source: str | None) -> None:
@@ -182,7 +197,8 @@ class Method:
             raise MissingTimeStandard(
                 f"column 'time' in {path} declares no time standard; add "
                 f'"timeStandard": "{GYEAR}" (or another registered standard) to its '
-                "field in the embedded datapackage"
+                "field in the embedded datapackage, and make sure the column holds "
+                "strings (e.g. '2030'), not integers"
             )
         raw = (table.schema.metadata or {}).get(DATAPACKAGE_KEY)
         name = "method"
@@ -262,10 +278,10 @@ class Method:
         """A row whose period contains the flow's time, then an undated row."""
         if flow.time is not None:
             asked = interval(flow.time, flow.time_standard)
-            for time, value in entries:
-                if time is not None and contains(interval(time, self._time_standard), asked):
+            for time, value, row_interval in entries:
+                if time is not None and contains(row_interval, asked):
                     return value, time
-        for time, value in entries:
+        for time, value, _ in entries:
             if time is None:
                 return value, None
         return None, None

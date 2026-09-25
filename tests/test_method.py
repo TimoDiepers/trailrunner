@@ -336,3 +336,33 @@ def test_method_rows_with_times_need_a_standard():
     rows = [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0}]
     with pytest.raises(MissingTimeStandard):
         Method(rows, unit=KG, name="m")
+
+
+def test_a_method_file_without_a_time_standard_says_the_column_must_be_strings(tmp_path):
+    path = tmp_path / "undeclared.parquet"
+    write_method_parquet(
+        path,
+        [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": "2030", "cf": 1.0}],
+        [
+            {"name": "flow_iri", **STRING},
+            {"name": "flow_unit", **STRING},
+            {"name": "location", **STRING},
+            {"name": "time", **STRING},
+            {"name": "cf", **CF},
+        ],
+    )
+    with pytest.raises(MissingTimeStandard, match="string"):
+        Method.from_parquet(path)
+
+
+def test_an_int_year_method_row_names_the_source_column_and_value():
+    """An old int-year method file that declares a timeStandard still fails,
+    because the column itself still holds ints -- named so, not just the raw
+    ``interval()`` complaint mid-assessment."""
+    rows = [{"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "time": 2030, "cf": 1.0}]
+    with pytest.raises(ValueError, match="the method rows") as excinfo:
+        Method(rows, unit=KG, name="m", time_standard=GYEAR)
+    message = str(excinfo.value)
+    assert "'time'" in message
+    assert "2030" in message
+    assert "cast the column to string" in message
