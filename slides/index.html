@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>trailrunner · showcase</title>
+<meta name="description" content="trailrunner: supply chains that assemble themselves. Hackathon showcase, with the Danish cement example end to end.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Schibsted+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ===========================================================
+   THEME
+   Tier colours match the docs' diagrams: amber = a model answered,
+   blue = a relaxed demand, teal = a borrowed dataset,
+   red = cutoff, violet = inventory.
+   =========================================================== */
+:root {
+  --bg: #0b1210;
+  --bg-2: #111a17;
+  --panel: #131d1a;
+  --line: #22302b;
+  --ink: #e9f0ec;
+  --muted: #8fa29a;
+  --faint: #56675f;
+  --accent: #2dd4bf;
+  --t1: #f5a524;
+  --t2: #60a5fa;
+  --t3: #2dd4bf;
+  --cut: #f87171;
+  --inv: #a78bfa;
+  --font-display: 'Bricolage Grotesque', 'Avenir Next', system-ui, sans-serif;
+  --font-body: 'Schibsted Grotesk', 'Avenir Next', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+body { font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+
+/* Topographic contours behind everything: this is a trail map. */
+#topo { position: fixed; inset: 0; width: 100%; height: 100%; opacity: .5; pointer-events: none; }
+
+/* ===========================================================
+   STAGE
+   Slides are authored on a fixed 1600x900 canvas and scaled to the
+   viewport, so a slide looks the same on a laptop and a projector
+   and can never overflow or scroll.
+   =========================================================== */
+#stage {
+  position: fixed; left: 50%; top: 50%;
+  width: 1600px; height: 900px;
+  transform: translate(-50%, -50%);
+}
+.slide {
+  position: absolute; inset: 0; width: 1600px; height: 900px;
+  overflow: hidden; padding: 80px 110px;
+  display: flex; flex-direction: column;
+  opacity: 0; visibility: hidden;
+  transition: opacity .5s var(--ease), visibility 0s linear .5s;
+}
+.slide.active { opacity: 1; visibility: visible; transition: opacity .5s var(--ease); }
+.center { justify-content: center; }
+
+/* Step builds: an element with data-f="n" appears at step n of its slide. */
+[data-f] { opacity: 0; transform: translateY(18px); transition: opacity .5s var(--ease), transform .6s var(--ease); }
+[data-f].on { opacity: 1; transform: none; }
+svg [data-f] { transform: none; }
+
+/* Entrance for everything marked .in when the slide becomes active. */
+.in { opacity: 0; transform: translateY(24px); transition: opacity .7s var(--ease), transform .8s var(--ease); }
+.slide.active .in { opacity: 1; transform: none; }
+.slide.active .in.d1 { transition-delay: .1s; } .slide.active .in.d2 { transition-delay: .25s; }
+.slide.active .in.d3 { transition-delay: .4s; } .slide.active .in.d4 { transition-delay: .55s; }
+.slide.active .in.d5 { transition-delay: .7s; }
+
+/* ===========================================================
+   TYPE
+   =========================================================== */
+.kicker { font-family: var(--font-mono); font-size: 20px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 22px; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: 150px; line-height: .92; letter-spacing: -.035em; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 64px; line-height: 1.02; letter-spacing: -.025em; margin-bottom: 36px; }
+h2 em, h1 em { font-style: normal; color: var(--accent); }
+.lead { font-size: 32px; line-height: 1.35; color: var(--muted); max-width: 1150px; }
+.lead b { color: var(--ink); font-weight: 600; }
+.small { font-size: 21px; color: var(--muted); line-height: 1.45; }
+.mono { font-family: var(--font-mono); }
+code { font-family: var(--font-mono); font-size: .88em; color: var(--accent); }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(45,212,191,.35); }
+
+.c-t1 { color: var(--t1); } .c-t2 { color: var(--t2); } .c-t3 { color: var(--t3); }
+.c-cut { color: var(--cut); } .c-inv { color: var(--inv); } .c-mut { color: var(--muted); } .c-faint { color: var(--faint); }
+
+/* ===========================================================
+   CODE / OUTPUT PANELS
+   =========================================================== */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.panel-head { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 15px; color: var(--faint); }
+.panel-head i { width: 11px; height: 11px; border-radius: 50%; background: #2a3833; display: inline-block; }
+.panel-head span { margin-left: 8px; }
+pre { font-family: var(--font-mono); font-size: 21px; line-height: 1.5; padding: 20px 24px; white-space: pre; color: #cfdad4; }
+pre.out { color: #b8c7c0; background: #0e1614; }
+pre.sm { font-size: 17px; }
+pre.xs { font-size: 12.6px; line-height: 1.5; }
+.k { color: #f472b6; } .s { color: #a3e635; } .n { color: #fbbf24; } .cm { color: #56675f; font-style: italic; }
+.fn { color: #7dd3fc; } .cl { color: #fcd34d; }
+.hl { background: rgba(45,212,191,.13); border-radius: 4px; box-shadow: 0 0 0 3px rgba(45,212,191,.13); }
+.hl-red { background: rgba(248,113,113,.14); border-radius: 4px; box-shadow: 0 0 0 3px rgba(248,113,113,.14); }
+
+/* Callout chips that annotate code from the side. */
+.note { display: flex; gap: 14px; align-items: baseline; font-size: 22px; line-height: 1.35; color: var(--muted); }
+.note b { color: var(--ink); font-weight: 600; }
+.dot { width: 12px; height: 12px; border-radius: 50%; flex: none; transform: translateY(-2px); }
+
+/* ===========================================================
+   CHROME: progress, counter, hint
+   =========================================================== */
+#progress { position: fixed; left: 0; bottom: 0; width: 100%; height: 3px; background: var(--accent); transform-origin: left; transform: scaleX(0); transition: transform .4s var(--ease); z-index: 5; }
+#counter { position: fixed; right: 20px; bottom: 14px; font-family: var(--font-mono); font-size: 12px; color: var(--faint); z-index: 5; }
+#brand { position: fixed; left: 20px; bottom: 14px; font-family: var(--font-mono); font-size: 12px; color: var(--faint); z-index: 5; }
+
+/* ===========================================================
+   SLIDE-SPECIFIC
+   =========================================================== */
+
+/* Title */
+.title-trail { position: absolute; left: 0; right: 0; bottom: 70px; height: 260px; }
+.title-trail path { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 10 14; stroke-linecap: round; }
+.draw { stroke-dashoffset: 3000; }
+.slide.active .draw { animation: draw 3.5s var(--ease) forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.pin { fill: var(--bg); stroke: var(--accent); stroke-width: 3; }
+
+/* The question */
+.q-big { font-family: var(--font-display); font-weight: 800; font-size: 170px; line-height: .95; letter-spacing: -.04em; }
+.q-meta { display: flex; gap: 26px; margin-top: 40px; }
+.tag { font-family: var(--font-mono); font-size: 30px; padding: 10px 22px; border: 1.5px solid var(--line); border-radius: 999px; color: var(--ink); background: var(--bg-2); }
+.tag b { color: var(--accent); font-weight: 600; }
+
+/* Frozen table vs function */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 70px; align-items: center; flex: 1; }
+.frozen { position: relative; border: 1.5px solid #2e4a55; border-radius: 16px; background: linear-gradient(180deg, #11202a, #0e171d); padding: 28px 32px; font-family: var(--font-mono); }
+.frozen h4 { font-family: var(--font-body); font-size: 24px; font-weight: 600; margin-bottom: 4px; color: #cfe6f0; }
+.frozen .meta { font-size: 17px; color: #6e8d9b; margin-bottom: 18px; }
+.frozen table { width: 100%; border-collapse: collapse; font-size: 21px; color: #a9c3cf; }
+.frozen td { padding: 8px 0; border-top: 1px solid #1f3440; }
+.frozen td:last-child { text-align: right; color: #d7eaf2; }
+.frozen .ice { position: absolute; top: -18px; right: 22px; font-family: var(--font-mono); font-size: 15px; letter-spacing: .12em; background: #1c3441; color: #9fd3ea; padding: 6px 12px; border-radius: 6px; }
+.cant { list-style: none; display: grid; gap: 22px; }
+.cant li { font-size: 34px; line-height: 1.25; color: var(--muted); display: flex; gap: 18px; }
+.cant li b { color: var(--ink); font-weight: 600; }
+.cant li::before { content: "✕"; color: var(--cut); font-weight: 700; }
+
+/* Function diagram */
+.fnrow { display: grid; grid-template-columns: 430px 1fr 470px; align-items: center; gap: 0; margin-top: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 26px 30px; }
+.card h5 { font-family: var(--font-mono); font-size: 16px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-bottom: 16px; }
+.field { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); font-size: 24px; }
+.field span:first-child { color: var(--muted); }
+.field span:last-child { font-family: var(--font-mono); font-size: 22px; }
+.machine { position: relative; height: 260px; }
+.machine svg { width: 100%; height: 100%; overflow: visible; }
+.lane { display: flex; gap: 16px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); font-size: 24px; }
+.lane .lbl { width: 110px; font-family: var(--font-mono); font-size: 18px; text-transform: uppercase; letter-spacing: .08em; }
+.lane .txt { color: var(--muted); font-size: 21px; }
+
+/* Vocabulary match */
+.vocab { position: relative; flex: 1; }
+.vocab svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.chip { position: absolute; border-radius: 14px; padding: 18px 24px; background: var(--panel); border: 1.5px solid var(--line); }
+.chip .t { font-size: 25px; font-weight: 600; }
+.chip .i { font-family: var(--font-mono); font-size: 17px; color: var(--faint); margin-top: 6px; }
+.chip.match { border-color: var(--t1); background: #211a0d; }
+.chip.ask { border-color: var(--accent); }
+
+/* Engine loop */
+.loop { position: relative; flex: 1; }
+.loop svg { width: 100%; height: 100%; overflow: visible; }
+.loop text { font-family: var(--font-body); fill: var(--ink); }
+
+/* Concession ladder */
+.ladder { display: grid; gap: 16px; margin-top: 6px; }
+.step { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 24px; padding: 20px 28px; border-radius: 14px; background: var(--panel); border: 1.5px solid var(--line); }
+.step .num { font-family: var(--font-display); font-weight: 800; font-size: 52px; line-height: 1; }
+.step .h { font-size: 32px; font-weight: 600; }
+.step .d { font-size: 22px; color: var(--muted); margin-top: 4px; }
+.step:nth-child(1) { margin-left: 0; border-color: rgba(245,165,36,.45); }
+.step:nth-child(2) { margin-left: 70px; border-color: rgba(96,165,250,.45); }
+.step:nth-child(3) { margin-left: 140px; border-color: rgba(45,212,191,.45); }
+.step:nth-child(4) { margin-left: 210px; border-color: rgba(248,113,113,.55); border-style: dashed; }
+.stamp { position: absolute; right: 110px; bottom: 90px; transform: rotate(-4deg); border: 3px solid var(--accent); color: var(--accent); font-family: var(--font-mono); font-weight: 600; font-size: 24px; letter-spacing: .06em; padding: 14px 22px; border-radius: 10px; text-transform: uppercase; }
+
+/* Free tiles */
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px; margin-top: 20px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 34px 30px; min-height: 380px; display: flex; flex-direction: column; gap: 20px; }
+.tile svg { width: 76px; height: 76px; }
+.tile .h { font-family: var(--font-display); font-size: 36px; font-weight: 700; line-height: 1.05; }
+.tile .d { font-size: 22px; color: var(--muted); line-height: 1.4; }
+
+/* Section divider */
+.section h1 { font-size: 200px; }
+.section > :not(.slab) { position: relative; z-index: 1; }
+.section .pun { font-family: var(--font-display); font-size: 44px; color: var(--muted); margin-top: 28px; }
+.slab { position: absolute; right: -220px; top: 90px; width: 640px; height: 720px; transform: rotate(8deg); border-radius: 28px;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,.07) 0 3px, transparent 4px) 0 0/46px 52px,
+    radial-gradient(circle at 70% 60%, rgba(0,0,0,.25) 0 5px, transparent 6px) 0 0/68px 60px,
+    radial-gradient(circle at 40% 80%, rgba(255,255,255,.05) 0 2px, transparent 3px) 0 0/30px 34px,
+    linear-gradient(160deg, #3a403e, #232826); opacity: .55; }
+
+/* Layout helpers */
+.row { display: flex; gap: 40px; }
+.grow { flex: 1; }
+.col { display: flex; flex-direction: column; gap: 22px; }
+.timeline { position: relative; height: 120px; margin: 10px 0 30px; }
+.bar-chart text { font-family: var(--font-body); }
+
+/* Trail graph */
+.graph { position: absolute; left: 30px; top: 150px; width: 1540px; height: 740px; }
+.graph .node rect { stroke-width: 2; rx: 12; }
+.graph .node text { font-family: var(--font-body); fill: var(--ink); }
+.graph .node .sub { fill: var(--muted); font-size: 15px; }
+.graph .node .ttl { font-size: 19px; font-weight: 600; }
+.graph .edge { fill: none; stroke-width: 2.5; }
+.graph .elbl { font-family: var(--font-mono); font-size: 13.5px; fill: var(--muted); }
+.legend { display: flex; gap: 30px; font-size: 19px; color: var(--muted); }
+.legend span { display: flex; align-items: center; gap: 10px; }
+.legend i { width: 26px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Closing */
+.claims { list-style: none; display: grid; gap: 20px; }
+.claims li { font-family: var(--font-display); font-size: 50px; font-weight: 700; line-height: 1.08; letter-spacing: -.02em; }
+.claims li span { color: var(--muted); font-weight: 400; }
+
+/* ===========================================================
+   PRINT: one slide per page, every build step shown
+   =========================================================== */
+@media print {
+  @page { size: 1600px 900px; margin: 0; }
+  html, body { overflow: visible; height: auto; }
+  #topo, #progress, #counter, #brand { display: none; }
+  #stage { position: static; transform: none !important; width: 1600px; height: auto; }
+  .slide { position: relative; opacity: 1; visibility: visible; page-break-after: always; break-after: page; }
+  [data-f], .in { opacity: 1 !important; transform: none !important; }
+  .draw { stroke-dashoffset: 0 !important; animation: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .15s !important; }
+  .draw { stroke-dashoffset: 0; }
+}
+</style>
+</head>
+<body>
+
+<svg id="topo" aria-hidden="true"></svg>
+
+<main id="stage">
+
+<!-- ============================ 1. TITLE ============================ -->
+<section class="slide center" data-title="trailrunner">
+  <div class="kicker in">BrightCon 2025 · hackathon result</div>
+  <h1 class="in d1">trail<em>runner</em></h1>
+  <p class="lead in d2" style="margin-top:34px; font-size:40px">Supply chains that <b>assemble themselves</b>.</p>
+  <svg class="title-trail" viewBox="0 0 1600 260" preserveAspectRatio="none" aria-hidden="true">
+    <path class="draw" d="M -20 200 C 180 120, 300 230, 470 170 S 760 60, 930 140 S 1220 230, 1380 110 S 1560 60, 1640 90"/>
+    <circle class="pin" cx="470" cy="170" r="10"/><circle class="pin" cx="930" cy="140" r="10"/><circle class="pin" cx="1380" cy="110" r="10"/>
+  </svg>
+</section>
+
+<!-- ============================ 2. THE QUESTION ============================ -->
+<section class="slide center" data-title="The question">
+  <div class="kicker in">the question</div>
+  <div class="q-big in d1">1000 kg of cement.</div>
+  <div class="q-meta in d2">
+    <div class="tag">where <b>Denmark</b></div>
+    <div class="tag">when <b>2030</b></div>
+    <div class="tag">burners want gas at <b>4 bar</b></div>
+  </div>
+  <p class="lead in d3" style="margin-top:60px; font-size:40px">What's the impact?</p>
+</section>
+
+<!-- ============================ 3. TODAY ============================ -->
+<section class="slide" data-title="Today: a table">
+  <div class="kicker">today</div>
+  <h2>A process is a <em>frozen table</em>.</h2>
+  <div class="two">
+    <div class="frozen in d1">
+      <span class="ice">FROZEN</span>
+      <h4>cement production, Portland</h4>
+      <div class="meta">RER · 2020 · one set of conditions</div>
+      <table>
+        <tr><td>clinker</td><td>0.87 kg</td></tr>
+        <tr><td>natural gas</td><td>2.9 MJ</td></tr>
+        <tr><td>electricity</td><td>0.11 kWh</td></tr>
+        <tr><td>lime</td><td>0.01 kg</td></tr>
+        <tr><td>CO₂, fossil</td><td>0.55 kg</td></tr>
+      </table>
+      <div class="meta" style="margin:16px 0 0">illustrative numbers</div>
+    </div>
+    <ul class="cant">
+      <li data-f="1"><span>Denmark, not Europe? <b>Find another table.</b></span></li>
+      <li data-f="2"><span>2030, not 2020? <b>Pretend.</b></span></li>
+      <li data-f="3"><span>Gas at 4 bar? <b>Nowhere to say it.</b></span></li>
+      <li data-f="4"><span>Upstream missing? <b>Silently zero.</b></span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================ 4. A FUNCTION ============================ -->
+<section class="slide" data-title="A process is a function">
+  <div class="kicker">trailrunner</div>
+  <h2>A process is a <em>function</em>.</h2>
+  <div class="fnrow">
+    <div class="card in d1">
+      <h5>Demand</h5>
+      <div class="field"><span>what</span><span class="c-t1">cement · fi_37440</span></div>
+      <div class="field"><span>how much</span><span>1000 kg</span></div>
+      <div class="field"><span>where</span><span>DK</span></div>
+      <div class="field"><span>when</span><span>2030</span></div>
+      <div class="field"><span>conditions</span><span>any, by IRI</span></div>
+    </div>
+    <div class="machine in d2">
+      <svg viewBox="0 0 400 260" aria-hidden="true">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#2dd4bf"/></marker></defs>
+        <line x1="10" y1="130" x2="110" y2="130" stroke="#2dd4bf" stroke-width="3" marker-end="url(#ar)"/>
+        <rect x="120" y="70" width="160" height="120" rx="18" fill="#10211d" stroke="#2dd4bf" stroke-width="2.5"/>
+        <text x="200" y="125" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="24" fill="#e9f0ec">Model</text>
+        <text x="200" y="158" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="20" fill="#2dd4bf">.apply()</text>
+        <line x1="290" y1="130" x2="390" y2="130" stroke="#2dd4bf" stroke-width="3" marker-end="url(#ar)"/>
+        <text x="200" y="232" text-anchor="middle" font-size="17" fill="#8fa29a" font-family="Schibsted Grotesk, sans-serif">your code · your physics</text>
+      </svg>
+    </div>
+    <div class="card in d3">
+      <h5>Result</h5>
+      <div class="lane"><span class="lbl c-t1">made</span><span>1000 kg cement</span></div>
+      <div class="lane"><span class="lbl c-t2">needs</span><span>gas, lime, power, kilns<br><span class="txt">→ new demands</span></span></div>
+      <div class="lane"><span class="lbl c-inv">emits</span><span>CO₂ from rock · CO₂ from flame</span></div>
+    </div>
+  </div>
+  <p class="lead in d4" style="margin-top:46px">Ask it for <b>somewhere else</b>, <b>some other year</b>, <b>other conditions</b> — it computes a different answer.</p>
+</section>
+
+<!-- ============================ 5. VOCABULARY ============================ -->
+<section class="slide" data-title="Models find each other">
+  <div class="kicker">no wiring</div>
+  <h2>Models find each other by <em>meaning</em>.</h2>
+  <div class="vocab">
+    <svg viewBox="0 0 1380 520" preserveAspectRatio="none" aria-hidden="true">
+      <path data-f="1" d="M 430 250 C 620 250, 700 110, 880 110" fill="none" stroke="#f5a524" stroke-width="3" stroke-dasharray="8 8"/>
+      <path d="M 430 250 C 620 250, 700 250, 880 250" fill="none" stroke="#22302b" stroke-width="2"/>
+      <path d="M 430 250 C 620 250, 700 390, 880 390" fill="none" stroke="#22302b" stroke-width="2"/>
+    </svg>
+    <div class="chip ask" style="left:0; top:185px; width:430px">
+      <div class="i" style="margin:0 0 8px">demand</div>
+      <div class="t">Natural gas, liquefied or gaseous</div>
+      <div class="i">vocab.sentier.dev/…/fi_12020</div>
+    </div>
+    <div class="chip match" data-f="1" style="left:880px; top:60px; width:500px">
+      <div class="t">NaturalGasSupply</div>
+      <div class="i">produces = [ …/fi_12020 ]</div>
+    </div>
+    <div class="chip" style="left:880px; top:200px; width:500px; opacity:.55">
+      <div class="t">GridElectricity</div>
+      <div class="i">produces = [ …/fi_17100 ]</div>
+    </div>
+    <div class="chip" style="left:880px; top:340px; width:500px; opacity:.55">
+      <div class="t">CementPlant</div>
+      <div class="i">produces = [ …/fi_37440 ]</div>
+    </div>
+  </div>
+  <p class="lead" data-f="2">Every flow is a concept in a shared vocabulary. Two models written by two people <b>compose</b> — no name matching, no registry.</p>
+</section>
+
+<!-- ============================ 6. THE LOOP ============================ -->
+<section class="slide" data-title="One loop">
+  <div class="kicker">the engine</div>
+  <h2>The whole engine is <em>one loop</em>.</h2>
+  <div class="loop">
+    <svg viewBox="0 0 1380 600" aria-hidden="true">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#56675f"/></marker>
+        <marker id="ar3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#a78bfa"/></marker>
+      </defs>
+      <path id="track" d="M 200 300 C 200 110, 380 70, 520 70 L 720 70 C 860 70, 1000 110, 1000 300 C 1000 490, 860 530, 720 530 L 520 530 C 380 530, 200 490, 200 300 Z" fill="none" stroke="#22302b" stroke-width="3" stroke-dasharray="4 10"/>
+      <circle r="11" fill="#2dd4bf"><animateMotion dur="6s" repeatCount="indefinite" rotate="auto"><mpath href="#track"/></animateMotion></circle>
+
+      <!-- stations -->
+      <g><rect x="90" y="250" width="220" height="100" rx="16" fill="#131d1a" stroke="#e9f0ec" stroke-width="2"/>
+        <text x="200" y="295" text-anchor="middle" font-size="28" font-weight="600">Queue</text>
+        <text x="200" y="328" text-anchor="middle" font-size="18" fill="#8fa29a">pop a demand</text></g>
+      <g><rect x="490" y="20" width="260" height="100" rx="16" fill="#0f2320" stroke="#2dd4bf" stroke-width="2"/>
+        <text x="620" y="65" text-anchor="middle" font-size="28" font-weight="600">Who offers?</text>
+        <text x="620" y="98" text-anchor="middle" font-size="18" fill="#8fa29a">match by vocabulary IRI</text></g>
+      <g><rect x="890" y="250" width="220" height="100" rx="16" fill="#241b0c" stroke="#f5a524" stroke-width="2"/>
+        <text x="1000" y="295" text-anchor="middle" font-size="28" font-weight="600">Model</text>
+        <text x="1000" y="328" text-anchor="middle" font-size="18" fill="#8fa29a">.apply(demand)</text></g>
+      <g><rect x="490" y="480" width="260" height="100" rx="16" fill="#131d1a" stroke="#e9f0ec" stroke-width="2"/>
+        <text x="620" y="525" text-anchor="middle" font-size="28" font-weight="600">Result</text>
+        <text x="620" y="558" text-anchor="middle" font-size="18" fill="#8fa29a">needs → back on the queue</text></g>
+
+      <!-- side outputs -->
+      <g data-f="1">
+        <line x1="1110" y1="300" x2="1210" y2="300" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#ar3)"/>
+        <rect x="1215" y="255" width="160" height="90" rx="14" fill="#1a1530" stroke="#a78bfa" stroke-width="2"/>
+        <text x="1295" y="295" text-anchor="middle" font-size="24" font-weight="600">inventory</text>
+        <text x="1295" y="325" text-anchor="middle" font-size="16" fill="#8fa29a">emissions, dated</text>
+      </g>
+      <g data-f="2">
+        <line x1="620" y1="185" x2="620" y2="415" stroke="#56675f" stroke-width="2" stroke-dasharray="3 6"/>
+        <rect x="520" y="250" width="200" height="100" rx="14" fill="#0b1210" stroke="#56675f" stroke-width="2"/>
+        <text x="620" y="292" text-anchor="middle" font-size="24" font-weight="600">Log</text>
+        <text x="620" y="322" text-anchor="middle" font-size="16" fill="#8fa29a">every step, one parquet</text>
+      </g>
+    </svg>
+  </div>
+  <div class="row" style="align-items:baseline; margin-top:-10px">
+    <code style="font-size:34px">while queue:</code>
+    <span class="small" style="font-size:24px">…and little else. Nothing is told about time or place — the flows carry both.</span>
+  </div>
+</section>
+
+<!-- ============================ 7. CONCESSIONS ============================ -->
+<section class="slide" data-title="When nobody answers">
+  <div class="kicker">when nobody answers</div>
+  <h2>Concede — <em>on the record</em>.</h2>
+  <div class="ladder">
+    <div class="step" data-f="1"><div class="num c-t1">1</div><div><div class="h">A model answers</div><div class="d">exact match: concept, place, year, conditions</div></div></div>
+    <div class="step" data-f="2"><div class="num c-t2">2</div><div><div class="h">Relax the demand</div><div class="d">broader concept · nearby place or year · a tolerated condition</div></div></div>
+    <div class="step" data-f="3"><div class="num c-t3">3</div><div><div class="h">Borrow a dataset</div><div class="d">from a background pack — tagged <span class="mono">incomplete</span></div></div></div>
+    <div class="step" data-f="4"><div class="num c-cut">✕</div><div><div class="h">Cutoff</div><div class="d">with a reason, at the place it happened — never a silent zero</div></div></div>
+  </div>
+  <div class="stamp" data-f="5">written at the node</div>
+</section>
+
+<!-- ============================ 8. FOR FREE ============================ -->
+<section class="slide" data-title="What falls out">
+  <div class="kicker">what falls out</div>
+  <h2>And then, <em>for free</em>:</h2>
+  <div class="tiles">
+    <div class="tile in d1">
+      <svg viewBox="0 0 80 80" fill="none" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"><circle cx="40" cy="40" r="30"/><path d="M40 22 V40 L53 48"/></svg>
+      <div class="h">Time rides along</div>
+      <div class="d">Every flow is dated. The inventory is already a time series — dynamic LCA, no second model.</div>
+    </div>
+    <div class="tile in d2">
+      <svg viewBox="0 0 80 80" fill="none" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M40 70 C 22 50, 16 40, 16 30 a24 24 0 0 1 48 0 c0 10, -6 20, -24 40z"/><circle cx="40" cy="30" r="8"/></svg>
+      <div class="h">Place rides along</div>
+      <div class="d">Danish gas is extracted and piped in Norway — and priced there.</div>
+    </div>
+    <div class="tile in d3">
+      <svg viewBox="0 0 80 80" fill="none" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"><path d="M12 58 a28 28 0 0 1 56 0"/><path d="M40 58 L56 34"/><circle cx="40" cy="58" r="4" fill="#2dd4bf"/></svg>
+      <div class="h">Measured beats modelled</div>
+      <div class="d">A meter is just another model. The year decides which answers.</div>
+    </div>
+    <div class="tile in d4">
+      <svg viewBox="0 0 80 80" fill="none" stroke="#2dd4bf" stroke-width="3.5" stroke-linejoin="round"><path d="M20 10 H48 L62 24 V70 H20 Z"/><path d="M48 10 V24 H62"/><path d="M28 40 H54 M28 50 H54 M28 60 H44" stroke-linecap="round"/></svg>
+      <div class="h">The run is a file</div>
+      <div class="d">Graph, gaps and choices in one parquet. Diff two studies with one read.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 9. SECTION ============================ -->
+<section class="slide center section" data-title="A concrete example">
+  <div class="slab" aria-hidden="true"></div>
+  <div class="kicker in">part two</div>
+  <h1 class="in d1">A <em>concrete</em><br>example.</h1>
+  <div class="pun in d2">1000 kg Portland cement · DK · 2030 · real code, real output</div>
+</section>
+
+<!-- ============================ 10. THE MODEL ============================ -->
+<section class="slide" data-title="The cement model">
+  <div class="kicker">1 · the model</div>
+  <h2 style="margin-bottom:26px">A cement plant is <em>a few lines of Python</em>.</h2>
+  <div class="row" style="gap:36px">
+    <div class="panel" style="width:1030px">
+      <div class="panel-head"><i></i><i></i><i></i><span>trailrunner/models/cement.py · abridged</span></div>
+<pre class="sm" style="font-size:15.5px"><span class="k">class</span> <span class="cl">CementPlant</span>(Model):
+    produces = [CEMENT]                     <span class="cm"># …/BONSAI2025.1/fi_37440</span>
+    coverage = Coverage(time_range=(<span class="n">2026</span>, <span class="n">2050</span>))
+
+    <span class="k">def</span> <span class="fn">apply</span>(self, demand):
+        <span class="hl">row = self.params.at(location=demand.flow.location, time=demand.flow.time)</span>
+        penalty = moisture_penalty(row[<span class="s">"moisture"</span>], row[<span class="s">"temperature"</span>])
+        clinker = row[<span class="s">"clinker_factor"</span>] * demand.amount
+        fuel = row[<span class="s">"fuel_demand"</span>] * clinker * penalty
+
+        <span class="k">return</span> Result(
+            production=[Exchange(flow=demand.flow, amount=demand.amount, ...)],
+            technosphere=[Demand(flow=here(NATURAL_GAS), amount=fuel, ...),
+                          Demand(flow=here(LIME), ...), <span class="cm"># limestone, power, kilns</span>
+            ],
+            biosphere=[Exchange(flow=here(CO2_FOSSIL), amount=CLINKER_CALCINATION_CO2 * clinker, ...),
+                       Exchange(flow=here(CO2_FOSSIL), amount=GAS_CO2_PER_MJ * fuel, ...)],
+        )</pre>
+    </div>
+    <div class="col grow" style="justify-content:center; gap:30px">
+      <div class="note" data-f="1"><span class="dot" style="background:var(--accent)"></span><span><b>Parameters per place &amp; year</b> — a <a href="https://github.com/TimoDiepers/trailpack">trailpack</a> parquet, units and IRIs embedded.</span></div>
+      <div class="note" data-f="2"><span class="dot" style="background:var(--t1)"></span><span><b>Physics</b> — damp, cold air costs fuel.</span></div>
+      <div class="note" data-f="3"><span class="dot" style="background:var(--t2)"></span><span><b>Needs become demands</b> — back on the queue, someone else answers.</span></div>
+      <div class="note" data-f="4"><span class="dot" style="background:var(--inv)"></span><span><b>Two CO₂ flows, not one</b> — rock and flame, kept apart.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 11. ONE CALL ============================ -->
+<section class="slide" data-title="One call">
+  <div class="kicker">1 · the model</div>
+  <h2>One call. <em>Made, needed, emitted.</em></h2>
+  <div class="panel">
+    <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
+<pre><span class="k">answer</span> = cement_model.<span class="fn">apply</span>(DEMAND)   <span class="cm"># 1000 kg cement @ DK / 2030</span></pre>
+<pre class="out sm">                 amount unit flow                                         where  when
+   production    1000.0 kg   Portland cement, aluminous cement, slag cem… DK     2030
+ technosphere    1125.0 kg   Gypsum; anhydrite; limestone flux; limeston… DK     2030
+ technosphere    <span class="hl">2475.0 MJ   Natural gas, liquefied or in the gaseous st…</span> DK     2030
+ technosphere      10.0 kg   Quicklime, slaked lime and hydraulic lime    DK     2030
+ technosphere     100.0 kWh  electricity                                  DK     2030
+    biosphere     <span class="c-inv">397.5 kg   co2-fossil</span>                                   DK     2030   <span class="c-faint">← the rock</span>
+    biosphere     <span class="c-inv">138.6 kg   co2-fossil</span>                                   DK     2030   <span class="c-faint">← the flame</span></pre>
+  </div>
+  <p class="small" style="margin-top:22px">Every name is the vocabulary's label for a real concept. Where and when are part of a flow's identity, not a comment on it.</p>
+</section>
+
+<!-- ============================ 12. ASK ELSEWHERE ============================ -->
+<section class="slide" data-title="Ask elsewhere">
+  <div class="kicker">1 · the model</div>
+  <h2>Same model, asked <em>somewhere else</em>.</h2>
+  <div class="row" style="gap:50px; align-items:flex-start">
+    <div class="panel" style="width:820px">
+      <div class="panel-head"><i></i><i></i><i></i><span>output</span></div>
+<pre class="out"> where   when  moisture   degC   penalty   gas [MJ]
+    DK   2030     0.040   10.0     1.000     2475.0
+    DK   2040     0.040   11.0     0.996     2099.6
+   RER   2030     0.060    9.0     1.044     <span class="hl">2923.2</span>
+   RER   2040     0.055   10.0     1.030     2447.3</pre>
+    </div>
+    <svg id="gasbars" class="grow bar-chart" viewBox="0 0 560 300" style="height:300px" aria-label="Gas demand per tonne of cement"></svg>
+  </div>
+  <p class="lead" style="margin-top:44px">Same 1000 kg. Damper, colder air and an older kiln fleet: <b>+18 % gas</b> in Europe-average 2030. A frozen table can't say that.</p>
+</section>
+
+<!-- ============================ 13. MEASURED ============================ -->
+<section class="slide" data-title="Measured beats modelled">
+  <div class="kicker">1 · the model</div>
+  <h2>Measured beats modelled — <em>when it exists</em>.</h2>
+  <svg class="timeline" viewBox="0 0 1380 120" aria-hidden="true">
+    <rect x="0" y="30" width="480" height="46" rx="10" fill="#10211d" stroke="#2dd4bf" stroke-width="2"/>
+    <text x="24" y="60" font-size="22" fill="#e9f0ec" font-family="Schibsted Grotesk, sans-serif" font-weight="600">MeteredCementPlant · stack monitor</text>
+    <rect x="490" y="30" width="890" height="46" rx="10" fill="#241b0c" stroke="#f5a524" stroke-width="2"/>
+    <text x="514" y="60" font-size="22" fill="#e9f0ec" font-family="Schibsted Grotesk, sans-serif" font-weight="600">CementPlant · computed</text>
+    <g font-family="JetBrains Mono, monospace" font-size="17" fill="#8fa29a">
+      <text x="0" y="108">2018</text><text x="440" y="108">2025</text><text x="490" y="108">2026</text><text x="1330" y="108">2050</text></g>
+    <line x1="297" y1="10" x2="297" y2="90" stroke="#e9f0ec" stroke-width="2" stroke-dasharray="4 4"/><text x="305" y="20" font-size="16" fill="#e9f0ec" font-family="JetBrains Mono, monospace">2023</text>
+    <line x1="700" y1="10" x2="700" y2="90" stroke="#e9f0ec" stroke-width="2" stroke-dasharray="4 4"/><text x="708" y="20" font-size="16" fill="#e9f0ec" font-family="JetBrains Mono, monospace">2030</text>
+  </svg>
+  <div class="row" style="gap:36px; align-items:flex-start">
+    <div class="panel grow">
+      <div class="panel-head"><i></i><i></i><i></i><span>same product IRI, disjoint coverage</span></div>
+<pre class="sm" style="font-size:15.5px">coverage = Coverage(time_range=(<span class="n">2018</span>, <span class="n">2025</span>))  <span class="cm"># MeteredCementPlant</span>
+coverage = Coverage(time_range=(<span class="n">2026</span>, <span class="n">2050</span>))  <span class="cm"># CementPlant</span></pre>
+    </div>
+    <div class="panel grow" data-f="1">
+      <div class="panel-head"><i></i><i></i><i></i><span>output</span></div>
+<pre class="out sm">2023  answered by <span class="c-t3">MeteredCementPlant</span>
+      source: measured
+      direct CO2:  562.0 kg in <span class="hl">1</span> exchange(s)
+2030  answered by <span class="c-t1">CementPlant</span>
+      source: modelled
+      direct CO2:  536.1 kg in <span class="hl">2</span> exchange(s)</pre>
+    </div>
+  </div>
+  <p class="small" data-f="2" style="margin-top:22px; font-size:24px">The meter sees one plume. The model knows which kilogram came from the rock and which from the flame.</p>
+</section>
+
+<!-- ============================ 14. RUN IT ============================ -->
+<section class="slide" data-title="Run the chain">
+  <div class="kicker">2 · the chain</div>
+  <h2>Hand it to the <em>orchestrator</em>.</h2>
+  <div class="panel">
+    <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
+<pre class="sm">tier1 = <span class="fn">ModelProvider</span>(Glossary(MODELS))                         <span class="cm"># models, exact match</span>
+tier2 = <span class="fn">GeneralisingProvider</span>(tier1, taxonomy=taxonomy, settings=ProxySettings(
+    context_tolerance={PRESSURE: (<span class="n">0.0</span>, <span class="n">1.0</span>)}))                   <span class="cm"># 1 bar higher is fine, never lower</span>
+tier3 = <span class="fn">BackgroundProvider</span>(pack)                                <span class="cm"># borrowed datasets</span>
+
+report = Orchestrator(ResolutionChain([tier1, tier2, tier3])).<span class="fn">calculate</span>(DEMAND)
+<span class="fn">print</span>(report.summary())</pre>
+<pre class="out sm" data-f="1">18 nodes, 13 inventory entries
+11 unresolved (generalisation_exhausted: 11)
+6 proxies (4 incomplete)
+attribution: allocation=none, capital=per_output</pre>
+  </div>
+  <div class="panel" data-f="2" style="margin-top:22px">
+    <div class="panel-head"><i></i><i></i><i></i><span>or from the shell</span></div>
+<pre class="xs" style="font-size:17px">$ trailrunner run …/fi_37440 --amount 1000 --unit kg --location DK --year 2030 \
+      --models examples/showcase_models.py --context-tolerance qudt:Pressure=0:1</pre>
+  </div>
+</section>
+
+<!-- ============================ 15. THE TREE ============================ -->
+<section class="slide" data-title="The trail, as text" style="padding:60px 70px">
+  <div class="kicker">2 · the chain</div>
+  <h2 style="font-size:50px; margin-bottom:18px">Every node says <em>how it was answered</em>.</h2>
+  <div class="panel">
+    <div class="panel-head"><i></i><i></i><i></i><span>print(report.tree(labels=VOCAB.label))</span></div>
+<pre class="out xs">1000 kg Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030  <span class="c-t1">[model: CementPlant]</span>
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (qudt:Pressure=4 unit:BAR)  <span class="c-t2">[proxy: context: qudt:Pressure 4 unit:BAR -> 5 unit:BAR]</span>
+    68.75 Nm3 natural-gas-at-production @<b>NO</b>/2030  <span class="c-t1">[model: NaturalGasExtraction]</span>
+    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @<b>NO</b>/2030  <span class="c-t1">[model: NaturalGasOffshorePipelineTransport]</span>
+      0.0130625 Nm3 natural-gas-at-production @NO/2030  <span class="c-t1">[model: NaturalGasExtraction]</span>
+      8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  <span class="c-cut">[cutoff: generalisation_exhausted]</span>
+      16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  <span class="c-cut">[cutoff: generalisation_exhausted]</span>
+      5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  <span class="c-cut">[cutoff: generalisation_exhausted]</span>
+      5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  <span class="c-cut">[cutoff: generalisation_exhausted]</span>
+  10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  <span class="c-t2">[proxy: product: fi_37420 -> fi_374]</span>
+  100 kWh electricity @DK/2030  <span class="c-t1">[model: GridElectricity]</span>
+    8.46561 kWh electricity-natural-gas @DK/2030  <span class="c-t1">[model: GasPower]</span>
+      49.1551 MJ Natural gas, liquefied or in the gaseous state @DK/2030  <span class="c-t1">[model: NaturalGasSupply]</span>
+        1.36542 Nm3 natural-gas-at-production @NO/2030  <span class="c-t1">[model: NaturalGasExtraction]</span>
+        1.00358 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  <span class="c-t1">[model: NaturalGasOffshorePipelineTransport]</span>
+          <span class="c-faint">… 1 model node, 4 cutoffs, as above</span>
+    84.6561 kWh electricity-wind @DK/2030  <span class="c-cut">[cutoff: generalisation_exhausted]</span>
+    12.6984 kWh electricity-hydro @DK/2030  <span class="c-cut">[cutoff: generalisation_exhausted]</span>
+  8.33333 kg/year cement-kiln @DK/<b>2026</b>  <span class="c-t1">[model: CementKilnConstruction]</span>
+    0.1 kg steel-low-alloyed @DK/2026  <span class="c-t3">[background: unit_process, incomplete]</span>
+    0.00666667 kg aluminium-primary @DK/2026  <span class="c-t3">[background: unit_process, incomplete]</span>
+  16.6667 kg/year cement-kiln @DK/<b>2029</b>  <span class="c-t1">[model: CementKilnConstruction]</span>
+    0.2 kg steel-low-alloyed @DK/2029  <span class="c-t3">[background: unit_process, incomplete]</span>
+    0.0133333 kg aluminium-primary @DK/2029  <span class="c-t3">[background: unit_process, incomplete]</span>
+  1125 kg Gypsum; anhydrite; limestone flux; limestone and other calcareous stone, of a kind used for the manufacture of lime or cement @DK/2030  <span class="c-cut">[cutoff: generalisation_exhausted]</span></pre>
+  </div>
+  <p class="small" style="margin-top:14px; font-size:17px">QUDT IRIs abbreviated (<span class="mono">qudt:Pressure</span> = http://qudt.org/vocab/quantitykind/Pressure); one repeated pipeline subtree folded. Everything else verbatim.</p>
+</section>
+
+<!-- ============================ 16. THE GRAPH ============================ -->
+<section class="slide" data-title="The trail" style="padding-top:60px">
+  <div class="kicker">2 · the chain</div>
+  <div class="row" style="justify-content:space-between; align-items:baseline">
+    <h2 style="font-size:50px; margin:0">The trail it <em>ran</em>.</h2>
+    <div class="legend">
+      <span><i style="background:var(--t1)"></i>model answered</span>
+      <span><i style="background:var(--t2)"></i>relaxed demand</span>
+      <span><i style="background:var(--t3)"></i>borrowed dataset</span>
+      <span><i style="border:2px dashed var(--cut)"></i>cutoff</span>
+    </div>
+  </div>
+  <svg class="graph" id="graph" viewBox="0 0 1540 740" aria-label="The cement supply chain as resolved"></svg>
+</section>
+
+<!-- ============================ 17. CONCESSIONS, REAL ============================ -->
+<section class="slide" data-title="Concessions on record">
+  <div class="kicker">2 · the chain</div>
+  <h2>Two concessions, <em>on the record</em>.</h2>
+  <div class="row" style="gap:36px">
+    <div class="col grow">
+      <div style="font-size:30px; font-weight:600">Asked for lime.<br><span class="c-t2">Answered by "Plaster, lime and cement".</span></div>
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>report.proxies[lime_node.id]</span></div>
+<pre class="out xs" style="font-size:16px">       model: BinderSupply
+ relaxations: ['product: fi_37420 -> fi_374']
+       asked: Quicklime, slaked lime and hydraulic lime
+    answered: Plaster, lime and cement
+        tier: generalising</pre>
+      </div>
+      <p class="small">Two <span class="mono">skos:broader</span> steps up. An average that contains the very product this plant makes — best available, poor in substance, <b style="color:var(--ink)">and visible</b>.</p>
+    </div>
+    <div class="col grow" data-f="1">
+      <div style="font-size:30px; font-weight:600">Asked for gas at 4 bar.<br><span class="c-t2">Met at 5 — allowed +1, never lower.</span></div>
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>report.proxies[gas_node.id]</span></div>
+<pre class="out xs" style="font-size:16px">       model: NaturalGasSupply
+ relaxations: ['context: qudt:Pressure 4 unit:BAR -> 5 unit:BAR']
+       asked: …/fi_12020 @DK/2030 [qudt:Pressure=4 unit:BAR]
+    answered: …/fi_12020 @DK/2030 [qudt:Pressure=5 unit:BAR]
+        tier: generalising</pre>
+      </div>
+      <p class="small">Conditions are named by IRI (QUDT), so a supplier only matches if it means the same pressure in the same unit. Gas is throttled at the burner, not boosted.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 18. IMPACT ============================ -->
+<section class="slide" data-title="Impact">
+  <div class="kicker">3 · the numbers</div>
+  <h2><span id="gwp-total">552.96</span> kg CO₂-eq <em>— and where it comes from</em>.</h2>
+  <svg id="contrib" class="bar-chart" viewBox="0 0 1380 470" style="width:1380px; height:470px" aria-label="GWP100 by model"></svg>
+  <p class="small" style="font-size:22px">IPCC AR6 GWP100, direct emissions by the model that emitted them. <span class="c-cut">8 uncharacterized flows</span> — ethane, mercury, NMVOC, gas from the ground — are reported, <b style="color:var(--ink)">not zero</b>.</p>
+</section>
+
+<!-- ============================ 19. TIME ============================ -->
+<section class="slide" data-title="Time rides along">
+  <div class="kicker">3 · the numbers</div>
+  <h2>The dates <em>survived</em>.</h2>
+  <div class="row" style="gap:50px; align-items:center">
+    <div class="col" style="width:640px">
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
+<pre class="sm">dynamic = <span class="fn">assess_dynamic</span>(
+    report,
+    metric=<span class="s">"radiative_forcing"</span>,
+    horizon=<span class="n">100</span>,
+)</pre>
+      </div>
+      <p class="lead" style="font-size:28px">Kilns built <b>2026</b> and <b>2029</b>. Cement made <b>2030</b>. The first year of making cement outweighs building the kilns by <b>four orders of magnitude</b>.</p>
+      <p class="small">No matrix rebuilt, no second model.</p>
+    </div>
+    <svg id="rf" class="grow bar-chart" viewBox="0 0 700 520" style="height:520px" aria-label="Marginal radiative forcing per year, log scale"></svg>
+  </div>
+</section>
+
+<!-- ============================ 20. THE FILE ============================ -->
+<section class="slide" data-title="The run is a file">
+  <div class="kicker">3 · the numbers</div>
+  <h2>The run <em>is a file</em>.</h2>
+  <div class="panel" style="max-width:1100px">
+    <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
+<pre>report.log.<span class="fn">to_parquet</span>(<span class="s">"showcase_log.parquet"</span>)</pre>
+<pre class="out">wrote showcase_log.parquet: 299 rows, 19 columns
+kinds: ['attribution', 'biosphere', 'node', 'provenance',
+        'resolution', 'unresolved']</pre>
+  </div>
+  <p class="lead" style="margin-top:40px">Every node, every cutoff, every fallback, every proxy — one row each. Parameters arrive as parquet, the run leaves as parquet. <b>Two studies diff with one read.</b></p>
+</section>
+
+<!-- ============================ 21. CLOSING ============================ -->
+<section class="slide center" data-title="Why">
+  <div class="kicker">why we want this</div>
+  <ul class="claims">
+    <li class="in d1">The supply chain <em style="color:var(--accent);font-style:normal">assembles itself</em>. <span>Vocabulary, not wiring.</span></li>
+    <li class="in d2">A process <em style="color:var(--accent);font-style:normal">reacts to its demand</em>. <span>Place, year, conditions.</span></li>
+    <li class="in d3">Every concession is <em style="color:var(--accent);font-style:normal">written down</em>. <span>Gaps are visible.</span></li>
+    <li class="in d4">Inventories are <em style="color:var(--accent);font-style:normal">time-explicit</em> by construction.</li>
+  </ul>
+  <div class="row in d5" style="margin-top:70px; gap:60px; font-family:var(--font-mono); font-size:24px">
+    <a href="https://github.com/TimoDiepers/trailrunner">github.com/TimoDiepers/trailrunner</a>
+    <a href="https://github.com/TimoDiepers/trailrunner/blob/main/examples/showcase.ipynb">examples/showcase.ipynb</a>
+  </div>
+</section>
+
+</main>
+
+<div id="brand">trailrunner</div>
+<div id="counter"></div>
+<div id="progress"></div>
+
+<script>
+/* ===========================================================
+   DATA
+   Copied from a run of examples/showcase.ipynb (the same run the
+   docs' 5-minute tour prints). Change the notebook, re-run it,
+   and update these.
+   =========================================================== */
+const GAS = [ // where, when, gas [MJ] per 1000 kg cement
+  ["DK 2030", 2475.0], ["DK 2040", 2099.6], ["RER 2030", 2923.2], ["RER 2040", 2447.3],
+];
+const GWP = [ // kg CO2-eq, IPCC AR6 GWP100, direct by model
+  ["CementPlant", 536.1, "t1"],
+  ["BinderSupply", 9.0, "t2"],
+  ["NaturalGasExtraction", 4.792, "t1"],
+  ["GasPower", 2.753, "t1"],
+  ["OffshorePipelineTransport", 0.263, "t1"],
+  ["background datasets", 0.054, "t3"],
+];
+const RF = [ // marginal radiative forcing [W/m2] per year
+  [2027, 2.973750e-17], [2028, 5.434073e-17], [2029, 2.520040e-17],
+  [2030, 5.947499e-17], [2031, 9.120960e-13], [2032, 1.666609e-12],
+];
+
+const COL = { t1: "#f5a524", t2: "#60a5fa", t3: "#2dd4bf", cut: "#f87171", inv: "#a78bfa",
+              ink: "#e9f0ec", mut: "#8fa29a", muted: "#8fa29a", faint: "#56675f", line: "#22302b", panel: "#131d1a" };
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/* ===========================================================
+   CHARTS
+   Bars grow when their slide becomes active (class .grow-bar).
+   =========================================================== */
+function gasBars() {
+  const svg = document.getElementById("gasbars");
+  const max = 3000, w = 480;
+  GAS.forEach(([label, v], i) => {
+    const y = 20 + i * 68;
+    el("text", { x: 0, y: y + 22, "font-size": 19, fill: COL.muted, "font-family": "JetBrains Mono, monospace" }, svg, label);
+    const bw = (v / max) * 320;
+    el("rect", { x: 110, y, width: bw, height: 34, rx: 6,
+      fill: label === "RER 2030" ? COL.t1 : "#3b4a44", class: "grow-bar" }, svg);
+    el("text", { x: 122 + bw, y: y + 24, "font-size": 19, fill: COL.ink, "font-family": "JetBrains Mono, monospace" }, svg, v.toFixed(0) + " MJ");
+  });
+}
+
+function contribBars() {
+  const svg = document.getElementById("contrib");
+  const max = GWP[0][1], x0 = 330, w = 900;
+  GWP.forEach(([label, v, tier], i) => {
+    const y = 10 + i * 76;
+    el("text", { x: x0 - 20, y: y + 32, "text-anchor": "end", "font-size": 24, fill: COL.ink }, svg, label);
+    el("rect", { x: x0, y, width: Math.max(3, (v / max) * w), height: 48, rx: 6, fill: COL[tier], class: "grow-bar" }, svg);
+    el("text", { x: x0 + Math.max(3, (v / max) * w) + 14, y: y + 33, "font-size": 23, fill: COL.muted,
+      "font-family": "JetBrains Mono, monospace" }, svg, v >= 1 ? v.toFixed(1) : v.toFixed(3));
+  });
+}
+
+function rfBars() {
+  const svg = document.getElementById("rf");
+  const lo = -18, hi = -11, x0 = 90, y0 = 440, h = 400, bw = 70, gap = 30;
+  for (let d = lo; d <= hi; d++) {
+    const y = y0 - ((d - lo) / (hi - lo)) * h;
+    el("line", { x1: x0, x2: 690, y1: y, y2: y, stroke: COL.line, "stroke-width": 1 }, svg);
+    el("text", { x: x0 - 12, y: y + 6, "text-anchor": "end", "font-size": 16, fill: COL.faint, "font-family": "JetBrains Mono, monospace" }, svg, "1e" + d);
+  }
+  RF.forEach(([year, v], i) => {
+    const bh = ((Math.log10(v) - lo) / (hi - lo)) * h;
+    const x = x0 + 30 + i * (bw + gap);
+    const kiln = year <= 2030;
+    el("rect", { x, y: y0 - bh, width: bw, height: bh, rx: 5, fill: kiln ? "#3b4a44" : COL.t1, class: "grow-bar-v" }, svg);
+    el("text", { x: x + bw / 2, y: y0 + 30, "text-anchor": "middle", "font-size": 18, fill: COL.muted, "font-family": "JetBrains Mono, monospace" }, svg, year);
+  });
+  el("text", { x: x0 + 30, y: 30, "font-size": 18, fill: COL.muted }, svg, "marginal radiative forcing, W/m² (log scale)");
+  el("text", { x: x0 + 30 + 2 * (bw + gap), y: y0 - 130, "text-anchor": "middle", "font-size": 18, fill: COL.muted }, svg, "kilns being built");
+  el("text", { x: x0 + 30 + 4.5 * (bw + gap), y: 70, "text-anchor": "middle", "font-size": 18, fill: COL.t1 }, svg, "making cement");
+}
+
+/* ===========================================================
+   TRAIL GRAPH
+   Nodes are placed by hand: Denmark left, Norway boxed on the right.
+   f = the build step a node or edge appears at.
+   =========================================================== */
+function trailGraph() {
+  const svg = document.getElementById("graph");
+  const defs = el("defs", {}, svg);
+  for (const [k, c] of Object.entries({ t1: COL.t1, t2: COL.t2, t3: COL.t3, cut: COL.cut, mut: COL.muted })) {
+    const m = el("marker", { id: "m-" + k, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto" }, defs);
+    el("path", { d: "M0 0 L10 5 L0 10z", fill: c }, m);
+  }
+  const g = (f) => el("g", f ? { "data-f": f } : {}, svg);
+
+  // Norway
+  const no = g(1);
+  el("rect", { x: 1110, y: 20, width: 425, height: 400, rx: 18, fill: "rgba(96,165,250,.04)", stroke: COL.line, "stroke-width": 2, "stroke-dasharray": "6 6" }, no);
+  el("text", { x: 1510, y: 400, "text-anchor": "end", "font-size": 44, "font-weight": 800, fill: "#1d2a26", "font-family": "Bricolage Grotesque, sans-serif" }, no, "NO");
+
+  const N = {};
+  function node(id, x, y, w, h, title, sub, kind, f, dashed) {
+    const grp = el("g", { class: "node", "data-f": f }, svg);
+    const stroke = COL[kind] || COL.muted;
+    const fill = { t1: "#211a0d", t2: "#0f1a2a", t3: "#0d2220", cut: "#1f1212", inv: "#1a1530" }[kind] || COL.panel;
+    el("rect", { x, y, width: w, height: h, fill, stroke, ...(dashed ? { "stroke-dasharray": "7 5" } : {}) }, grp);
+    el("text", { x: x + 16, y: y + (sub ? 30 : h / 2 + 7), class: "ttl" }, grp, title);
+    if (sub) sub.split("\n").forEach((s, i) => el("text", { x: x + 16, y: y + 54 + i * 20, class: "sub" }, grp, s));
+    N[id] = { x, y, w, h };
+  }
+  function edge(d, kind, f, label, lx, ly, dashed) {
+    const grp = el("g", { "data-f": f }, svg);
+    el("path", { d, class: "edge", stroke: COL[kind], "marker-end": `url(#m-${kind === "t1" ? "t1" : kind})`,
+      ...(dashed ? { "stroke-dasharray": "6 6" } : {}) }, grp);
+    if (label) label.split("\n").forEach((s, i) => el("text", { x: lx, y: ly + i * 17, class: "elbl" }, grp, s));
+  }
+
+  // demand + tier 1
+  node("D", 0, 300, 175, 70, "1000 kg cement", "DK · 2030", "mut", 0);
+  node("CP", 230, 290, 215, 90, "CementPlant", "DK · 2030\ncomputed", "t1", 0);
+  node("GE", 560, 250, 230, 70, "GridElectricity", "DK · 2030 · 100 kWh", "t1", 1);
+  node("GP", 870, 250, 200, 70, "GasPower", "DK · 2030", "t1", 1);
+  node("NGS", 560, 70, 230, 90, "NaturalGasSupply", "DK · 2030\ndelivers at 5 bar", "t1", 1);
+  node("NGE", 1150, 50, 250, 70, "NaturalGasExtraction", "NO · 2030 · 68.75 Nm³", "t1", 1);
+  node("PT", 1150, 190, 350, 70, "OffshorePipelineTransport", "NO · 2030 · 50.5 tkm · from BAFU/ecoinvent", "t1", 1);
+  node("K26", 560, 510, 250, 70, "CementKilnConstruction", "DK · built 2026 · 8.3 kg/yr", "t1", 1);
+  node("K29", 560, 610, 250, 70, "CementKilnConstruction", "DK · built 2029 · 16.7 kg/yr", "t1", 1);
+  edge("M 175 335 L 228 335", "mut", 0);
+  edge("M 445 318 C 500 318, 500 285, 558 285", "t1", 1);
+  edge("M 790 285 L 868 285", "t1", 1, "8.5 kWh", 800, 275);
+  edge("M 970 250 C 970 150, 880 115, 792 115", "t1", 1, "49 MJ gas", 884, 238);
+  edge("M 790 95 C 950 95, 1000 85, 1148 85", "t1", 1);
+  edge("M 790 135 C 950 135, 1000 225, 1148 225", "t1", 1);
+  edge("M 1300 190 L 1300 122", "t1", 1, "leak 0.013 Nm³", 1310, 162);
+  edge("M 445 355 C 500 355, 500 545, 558 545", "t1", 1);
+  edge("M 445 365 C 480 365, 490 645, 558 645", "t1", 1);
+
+  // tier 2
+  node("BS", 560, 380, 250, 90, "BinderSupply", "10 kg lime asked →\nanswered: plaster, lime & cement", "t2", 2);
+  edge("M 445 300 C 500 300, 500 130, 558 130", "t2", 2, "2475 MJ gas @ 4 bar\n→ met at 5 bar", 330, 170);
+  edge("M 445 340 C 500 340, 500 425, 558 425", "t2", 2);
+
+  // tier 3
+  node("B26", 900, 510, 230, 70, "background dataset", "steel · aluminium · 2026", "t3", 3, true);
+  node("B29", 900, 610, 230, 70, "background dataset", "steel · aluminium · 2029", "t3", 3, true);
+  edge("M 810 545 L 898 545", "t3", 3);
+  edge("M 810 645 L 898 645", "t3", 3);
+
+  // cutoffs
+  node("XL", 560, 700, 250, 38, "✕ limestone · 1125 kg", "", "cut", 4, true);
+  node("XE", 870, 350, 200, 38, "✕ wind · hydro", "", "cut", 4, true);
+  node("XP", 1150, 300, 350, 38, "✕ pipe · turbine fuel · lorry · oil", "", "cut", 4, true);
+  edge("M 445 375 C 470 375, 470 719, 558 719", "cut", 4, null, 0, 0, true);
+  edge("M 790 305 C 830 305, 830 369, 868 369", "cut", 4, null, 0, 0, true);
+  edge("M 1325 260 L 1325 298", "cut", 4, null, 0, 0, true);
+
+  // inventory
+  const inv = g(5);
+  el("rect", { x: 1190, y: 480, width: 345, height: 200, rx: 16, fill: "#1a1530", stroke: COL.inv, "stroke-width": 2 }, inv);
+  el("text", { x: 1215, y: 520, "font-size": 18, fill: COL.inv, "font-family": "JetBrains Mono, monospace" }, inv, "INVENTORY");
+  el("text", { x: 1215, y: 575, "font-size": 46, "font-weight": 800, fill: COL.ink, "font-family": "Bricolage Grotesque, sans-serif" }, inv, "552.96");
+  el("text", { x: 1215, y: 605, "font-size": 19, fill: COL.muted }, inv, "kg CO₂-eq · GWP100");
+  el("text", { x: 1215, y: 645, "font-size": 17, fill: COL.muted }, inv, "13 entries, each dated and placed");
+  el("text", { x: 1215, y: 667, "font-size": 17, fill: COL.muted }, inv, "18 nodes · 6 proxies · 11 cutoffs");
+}
+
+/* ===========================================================
+   TOPOGRAPHIC BACKGROUND
+   Wobbly concentric rings around two "peaks". Deterministic,
+   so the background is the same every time.
+   =========================================================== */
+function topo() {
+  const svg = document.getElementById("topo");
+  const W = 1600, H = 900;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+  const peaks = [[1250, 180, 16, 1.3], [180, 820, 12, 2.1]];
+  peaks.forEach(([cx, cy, rings, seed]) => {
+    for (let r = 1; r <= rings; r++) {
+      const R = r * 46;
+      let d = "";
+      for (let a = 0; a <= 64; a++) {
+        const t = (a / 64) * Math.PI * 2;
+        const wob = 1 + 0.13 * Math.sin(3 * t + seed + r * 0.35) + 0.07 * Math.sin(5 * t - seed * 2 + r * 0.2);
+        const x = cx + Math.cos(t) * R * wob * 1.25, y = cy + Math.sin(t) * R * wob;
+        d += (a ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+      }
+      el("path", { d: d + "Z", fill: "none", stroke: r % 4 === 0 ? "#1b2723" : "#141e1b", "stroke-width": r % 4 === 0 ? 1.6 : 1 }, svg);
+    }
+  });
+}
+
+/* ===========================================================
+   PRESENTATION CONTROLLER
+   → / space / PgDn / click: next step, then next slide
+   ← / PgUp: back · Home/End · f: fullscreen · #n in the URL
+   =========================================================== */
+class Deck {
+  constructor() {
+    this.stage = document.getElementById("stage");
+    this.slides = [...document.querySelectorAll(".slide")];
+    this.i = 0; this.step = 0;
+    this.slides.forEach((s) => {
+      s.steps = Math.max(0, ...[...s.querySelectorAll("[data-f]")].map((e) => +e.dataset.f));
+    });
+    this.fit(); addEventListener("resize", () => this.fit());
+    addEventListener("keydown", (e) => this.key(e));
+    addEventListener("hashchange", () => this.fromHash());
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("a")) return;
+      e.clientX > innerWidth / 3 ? this.next() : this.prev();
+    });
+    let x0 = null;
+    addEventListener("touchstart", (e) => (x0 = e.touches[0].clientX), { passive: true });
+    addEventListener("touchend", (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 50) dx < 0 ? this.next() : this.prev();
+      x0 = null;
+    });
+    this.fromHash() || this.show(0, 0);
+  }
+  fit() {
+    const s = Math.min(innerWidth / 1600, innerHeight / 900);
+    this.stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+    this.stage.style.transformOrigin = "center center";
+  }
+  key(e) {
+    if (["ArrowRight", "ArrowDown", " ", "PageDown", "Enter"].includes(e.key)) { e.preventDefault(); this.next(); }
+    else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); this.prev(); }
+    else if (e.key === "Home") this.show(0, 0);
+    else if (e.key === "End") this.show(this.slides.length - 1, 0);
+    else if (e.key === "f") document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  }
+  next() {
+    if (this.step < this.slides[this.i].steps) this.show(this.i, this.step + 1);
+    else if (this.i < this.slides.length - 1) this.show(this.i + 1, 0);
+  }
+  prev() {
+    if (this.step > 0) this.show(this.i, this.step - 1);
+    else if (this.i > 0) this.show(this.i - 1, this.slides[this.i - 1].steps);
+  }
+  fromHash() {
+    const n = parseInt(location.hash.slice(1), 10);
+    if (n >= 1 && n <= this.slides.length && n - 1 !== this.i) { this.show(n - 1, 0); return true; }
+    if (n >= 1 && n <= this.slides.length) { this.show(n - 1, this.step); return true; }
+    return false;
+  }
+  show(i, step) {
+    const changed = i !== this.i || !this.slides[i].classList.contains("active");
+    this.i = i; this.step = step;
+    this.slides.forEach((s, k) => s.classList.toggle("active", k === i));
+    const s = this.slides[i];
+    s.querySelectorAll("[data-f]").forEach((e) => e.classList.toggle("on", +e.dataset.f <= step));
+    if (changed) this.animateBars(s);
+    document.getElementById("progress").style.transform = `scaleX(${(i + 1) / this.slides.length})`;
+    document.getElementById("counter").textContent = `${i + 1} / ${this.slides.length}`;
+    document.title = `${s.dataset.title} · trailrunner`;
+    history.replaceState(null, "", "#" + (i + 1));
+  }
+  animateBars(s) {
+    // Horizontal bars grow from their left edge, vertical ones from the baseline.
+    s.querySelectorAll(".grow-bar, .grow-bar-v").forEach((b, k) => {
+      const vertical = b.classList.contains("grow-bar-v");
+      b.style.transformBox = "fill-box";
+      b.style.transformOrigin = vertical ? "bottom" : "left";
+      b.style.transition = "none";
+      b.style.transform = vertical ? "scaleY(0)" : "scaleX(0)";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        b.style.transition = `transform .9s cubic-bezier(0.16,1,0.3,1) ${0.15 + k * 0.08}s`;
+        b.style.transform = "none";
+      }));
+    });
+  }
+}
+
+topo(); gasBars(); contribBars(); rfBars(); trailGraph();
+new Deck();
+</script>
+</body>
+</html>
