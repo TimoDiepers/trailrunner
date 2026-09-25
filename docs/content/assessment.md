@@ -37,14 +37,15 @@ A [`Method`](../api/assessment.md) holds characterization factors keyed by
 ```python
 from trailrunner import LocationHierarchy
 from trailrunner.assessment import Method
+from trailrunner.core.units import KG
 
 GWP100 = Method(
     rows=[
-        {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": "kg", "location": "GLO", "cf": 1.0},
-        {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": "kg", "location": "GLO", "cf": 29.8},
-        {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": "kg", "location": "GLO", "cf": 273.0},
+        {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": KG, "location": "GLO", "cf": 1.0},
+        {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": KG, "location": "GLO", "cf": 29.8},
+        {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": KG, "location": "GLO", "cf": 273.0},
     ],
-    unit="kg CO2-eq",
+    unit=KG,  # of CO2-equivalent: the indicator is in the method's name, not its unit
     name="IPCC AR6 GWP100",
     hierarchy=LocationHierarchy({"DK": "RER", "RER": "GLO"}),
 )
@@ -59,10 +60,10 @@ with field units under `resources[].schema.fields`.
 | Column | Meaning |
 | --- | --- |
 | `flow_iri` | the elementary flow this factor characterizes |
-| `flow_unit` | the unit the factor applies to, matched by string equality with no conversion |
+| `flow_unit` | the unit IRI the factor applies to. An exchange in another unit of the same quantity kind is converted exactly; a row naming a unit the vocabulary does not confirm (`"kg"`) is refused on load with [`UnknownUnit`](../api/errors.md) |
 | `location` | *optional.* Where the factor holds, widened through the `LocationHierarchy` like a parameter row |
-| `time` | *optional.* A year, for factors that change over time |
-| `cf` | the factor. Its declared `unit.name` is the method's score unit |
+| `time` | *optional.* A period, for factors that change over time, read in the column's `timeStandard` (refused with [`MissingTimeStandard`](../api/errors.md) without one). A row answers every flow whose time lies inside it |
+| `cf` | the factor. Its declared `unit.name`, a unit IRI, is the method's score unit |
 
 The method's `name` comes from the datapackage's `name`. The
 [CLI tutorial](getting_started/cli.md#5-get-a-score-method) has a complete pyarrow script
@@ -86,8 +87,8 @@ asked for: a method states its factors where they hold, and a regional factor th
 dated is still that region's factor. If a year should win over a region, write the
 regional row for that year.
 
-**Years match exactly.** A lookup for 2031 against a 2030 row misses and falls through to
-an undated row. Factors aren't interpolated: a parameter between two measured years is a
+**Periods match by containment.** A 2030 row answers a flow dated `2030-06-15`; a lookup
+for 2031 against a 2030 row misses and falls through to an undated row. Factors aren't interpolated: a parameter between two measured years is a
 fair estimate, but a factor is a convention for a given horizon, and interpolating between
 two conventions gives neither.
 
@@ -104,7 +105,7 @@ print(assessment.summary())
 ```
 
 ```text
-543.908 kg CO2-eq
+543.908 kg
 method: IPCC AR6 GWP100
 8 uncharacterized flows on 6 nodes (not in the score, and not zero)
 12 unresolved

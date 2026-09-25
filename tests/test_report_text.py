@@ -2,35 +2,37 @@ from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.result import Result
 from trailrunner.orchestration.log import Log
 from trailrunner.orchestration.report import Report
+from trailrunner.core.units import KG, MJ
+from trailrunner.core.time import in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
-CO2 = Flow(iri="https://vocab.sentier.dev/flows/co2-fossil", location="CH", time=2030)
+CO2 = Flow(iri="https://vocab.sentier.dev/flows/co2-fossil", location="CH", **in_year(2030))
 
 
 def built_report() -> Report:
     """Root -> heat -> an unresolved gas demand, with one biosphere flow."""
     log = Log()
     root_demand = Demand(
-        flow=Flow(iri=CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg"
+        flow=Flow(iri=CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG
     )
-    heat_demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=5000.0, unit="MJ")
-    gas_demand = Demand(flow=Flow(iri=GAS, location="CH", time=2030), amount=125.0, unit="kg")
+    heat_demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=5000.0, unit=MJ)
+    gas_demand = Demand(flow=Flow(iri=GAS, location="CH", **in_year(2030)), amount=125.0, unit=KG)
 
     root = log.write(
         root_demand,
         Result(
-            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit="kg")],
+            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit=KG)],
             technosphere=[heat_demand],
-            biosphere=[Exchange(flow=CO2, amount=12.0, unit="kg")],
+            biosphere=[Exchange(flow=CO2, amount=12.0, unit=KG)],
         ),
         model="DirectAirCapture",
         resolution={"tier": "model", "model": "DirectAirCapture"},
     )
     log.write(
         heat_demand,
-        Result(production=[Exchange(flow=heat_demand.flow, amount=5000.0, unit="MJ")]),
+        Result(production=[Exchange(flow=heat_demand.flow, amount=5000.0, unit=MJ)]),
         depth=1,
         parent=root,
         model="GasBoiler",
@@ -101,10 +103,10 @@ def test_tree_tags_a_unit_process_borrow_as_incomplete():
     """basis=unit_process means the upstream is missing, not just deferred --
     the tree must say so distinctly from a cumulative (complete) borrow."""
     log = Log()
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
     log.write(
         demand,
-        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)]),
         resolution={
             "tier": "background",
             "kind": "linear_background",
@@ -120,10 +122,10 @@ def test_tree_tags_a_unit_process_borrow_as_incomplete():
 
 def test_tree_tags_a_cumulative_borrow_as_complete_and_distinctly():
     log = Log()
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
     log.write(
         demand,
-        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)]),
         resolution={
             "tier": "background",
             "kind": "linear_background",
@@ -141,10 +143,10 @@ def test_an_unrecognised_tier_is_never_labelled_an_exact_match():
     """tree() and proxies must agree: whatever summary() counts as a proxy,
     tree() must not print as a model."""
     log = Log()
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=1.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=1.0, unit=MJ)
     log.write(
         demand,
-        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="MJ")]),
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=MJ)]),
         model="Mystery",
         resolution={"tier": "linear_background"},
     )
@@ -158,15 +160,15 @@ def test_summary_breaks_incomplete_borrows_out_of_the_proxy_count():
     """summary() is the one-line trust check; an incomplete borrow must be
     visible there, not only in report.proxies or report.tree()."""
     log = Log()
-    unit_process_demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    unit_process_demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
     cumulative_demand = Demand(
         flow=Flow(iri="https://vocab.sentier.dev/products/clinker", location="GLO"),
         amount=1.0,
-        unit="kg",
+        unit=KG,
     )
     log.write(
         unit_process_demand,
-        Result(production=[Exchange(flow=unit_process_demand.flow, amount=1.0, unit="kg")]),
+        Result(production=[Exchange(flow=unit_process_demand.flow, amount=1.0, unit=KG)]),
         resolution={
             "tier": "background",
             "kind": "linear_background",
@@ -177,7 +179,7 @@ def test_summary_breaks_incomplete_borrows_out_of_the_proxy_count():
     )
     log.write(
         cumulative_demand,
-        Result(production=[Exchange(flow=cumulative_demand.flow, amount=1.0, unit="kg")]),
+        Result(production=[Exchange(flow=cumulative_demand.flow, amount=1.0, unit=KG)]),
         resolution={
             "tier": "background",
             "kind": "linear_background",
@@ -198,10 +200,10 @@ def test_summary_says_nothing_extra_when_no_proxy_is_incomplete():
 def test_a_resolution_without_a_tier_is_treated_as_an_exact_match():
     """The absent-tier default is 'model' in both views, not just one."""
     log = Log()
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=1.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=1.0, unit=MJ)
     log.write(
         demand,
-        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="MJ")]),
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=MJ)]),
         model="Boiler",
         resolution={"model": "Boiler"},
     )
@@ -217,10 +219,10 @@ def test_tree_and_summary_agree_on_an_unrecognised_basis():
     ``summary()`` counted the same node as incomplete -- two views of one
     node disagreeing."""
     log = Log()
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
     log.write(
         demand,
-        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)]),
         resolution={
             "tier": "background",
             "kind": "linear_background",
@@ -279,3 +281,20 @@ def test_a_label_lookup_that_raises_does_not_break_the_tree():
 
 def test_no_labels_prints_exactly_what_it_printed_before():
     assert built_report().tree(labels=None) == built_report().tree()
+
+
+def test_tree_prints_unit_symbols_not_iris():
+    from trailrunner.core.flow import Demand, Flow
+    from trailrunner.core.units import KWH
+    from trailrunner.orchestration.log import Log
+    from trailrunner.orchestration.report import Report
+    from trailrunner.core.result import Result
+    from trailrunner.core.flow import Exchange
+
+    log = Log()
+    demand = Demand(flow=Flow(iri="https://example.org/power"), amount=2.0, unit=KWH)
+    log.write(demand, Result(production=[Exchange(flow=demand.flow, amount=2.0, unit=KWH)]),
+              depth=0, parent=None, model="Plant", resolution={"tier": "model"})
+    tree = Report.from_log(log).tree()
+    assert "2 kWh power" in tree
+    assert "units/unit" not in tree

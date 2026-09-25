@@ -8,6 +8,7 @@ from trailrunner.core.flow import Demand
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import Settings
+from trailrunner.core.units import KG, VOCAB, UnitCatalog, default_catalog
 from trailrunner.orchestration.glossary import Glossary
 
 PRODUCTION_RELATIVE_TOLERANCE = 1e-9
@@ -28,7 +29,12 @@ class Runner:
     behind the same interface without the Orchestrator changing.
     """
 
-    def __init__(self, glossary: Glossary | None = None, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        glossary: Glossary | None = None,
+        settings: Settings | None = None,
+        units: UnitCatalog | None = None,
+    ) -> None:
         # `None` is a real case since phase 2: a ResolutionChain with no
         # ModelProvider has no Glossary to expose, and the Orchestrator always
         # passes `model=offer.model` into apply(), so the Runner never consults
@@ -36,6 +42,7 @@ class Runner:
         # mismatch for the next reader to trip over.
         self.glossary = glossary
         self.settings = settings if settings is not None else Settings()
+        self.units = units if units is not None else default_catalog()
 
     def apply(self, demand: Demand, model: Model | None = None) -> Result:
         if model is None:
@@ -55,19 +62,25 @@ class Runner:
             )
 
         result = model.apply(demand)
-        self.validate(demand, result, model=model)
+        self.validate(demand, result, model=model, units=self.units)
 
         if rule == "substitution":
             return substitute(demand, result, type(model).__name__)
         return allocate(demand, result, rule, type(model).__name__)
 
     @staticmethod
-    def validate(demand: Demand, result: Result, model: Model | None = None) -> None:
+    def validate(
+        demand: Demand,
+        result: Result,
+        model: Model | None = None,
+        units: UnitCatalog | None = None,
+    ) -> None:
         """Check a Result against the Model contract.
 
-        Four rules, in the order a model author would want to hear about them:
-        every exchange carries a unit; production has the same sign as the
-        demand, and covers it in magnitude; the demanded product is among
+        Five rules, in the order a model author would want to hear about them:
+        every exchange carries a unit, and that unit — and every context
+        condition's — is a vocabulary unit; production has the same sign as
+        the demand, and covers it in magnitude; the demanded product is among
         them, in the demanded unit; and the summed production of that
         product *covers* the demanded amount. The sign rule is not "amounts
         are positive" because a substitution credit *is* a negative demand —
@@ -84,6 +97,27 @@ class Runner:
         if not isinstance(result, Result):
             raise ValidationError(f"{origin} returned {type(result).__name__}, expected Result")
 
+        catalog = units if units is not None else default_catalog()
+
+        def check(unit: str, where: str) -> None:
+            known = catalog.known(unit)
+            if known is True:
+                return
+            hint = (
+                "; it may simply not be cached -- run dev/warm_unit_cache.py, or "
+                "pass Orchestrator(units=UnitCatalog(client=default_client()))"
+                if known is None
+                else ""
+            )
+            raise ValidationError(
+                f"{origin} {where} in {unit!r}, which is not a unit of the "
+                f"vocabulary ({VOCAB}); units are IRIs such as {KG}{hint}"
+            )
+
+        check(demand.unit, f"was asked for {demand.flow.iri}")
+        for entry in demand.flow.context:
+            check(entry.unit, f"was asked for {demand.flow.iri} with {entry.name!r}")
+
         sign = 1.0 if demand.amount >= 0 else -1.0
 
         # One pass over every exchange. The unit rule is checked before the
@@ -95,6 +129,9 @@ class Runner:
         ):
             if not exchange.unit:
                 raise ValidationError(f"{origin} returned {exchange.flow.iri} without a unit")
+            check(exchange.unit, f"returned {exchange.flow.iri}")
+            for entry in exchange.flow.context:
+                check(entry.unit, f"returned {exchange.flow.iri} with {entry.name!r}")
             if index < produced and exchange.amount * sign <= 0:
                 raise ValidationError(
                     f"{origin} produced {exchange.amount} of {exchange.flow.iri} "

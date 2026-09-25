@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from trailrunner.core.flow import Flow
+from trailrunner.core.units import symbol
 from trailrunner.orchestration.log import (
     ATTRIBUTION_KEY,
     Log,
@@ -167,6 +168,8 @@ class Report:
         exists to prevent.
         """
         tier = node.resolution.get("tier", "model")
+        conversion = node.resolution.get("conversion")
+        suffix = f"; {conversion}" if conversion else ""
         if tier == "background":
             basis = node.resolution.get("basis")
             label = f"background: {basis}" if basis else "background"
@@ -176,9 +179,9 @@ class Report:
         if tier == "generalising":
             relaxations = node.resolution.get("relaxations") or []
             joined = "; ".join(str(relaxation) for relaxation in relaxations)
-            return f"[proxy: {joined}]" if relaxations else "[proxy]"
+            return f"[proxy: {joined}{suffix}]" if relaxations else f"[proxy{suffix}]"
         if tier == "model":
-            return f"[model: {node.model}]" if node.model else "[model]"
+            return f"[model: {node.model}{suffix}]" if node.model else f"[model{suffix}]"
         # An unrecognised tier must never read as an exact match: this is what
         # keeps tree() and proxies (anything whose tier isn't "model") in
         # agreement, even for a tier a later phase's provider chain invents.
@@ -211,7 +214,9 @@ class Report:
         lines: list[str] = []
 
         def line(depth: int, amount: float, unit: str, flow: Flow, tag: str) -> None:
-            lines.append(f"{indent * depth}{amount:g} {unit} {name(flow.iri)}{_where(flow)}  {tag}")
+            lines.append(
+                f"{indent * depth}{amount:g} {symbol(unit)} {name(flow.iri)}{_where(flow)}  {tag}"
+            )
 
         def walk(node: NodeRecord, depth: int) -> None:
             line(depth, node.demand.amount, node.demand.unit, node.demand.flow, self._tag(node))

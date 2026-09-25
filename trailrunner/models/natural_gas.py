@@ -10,9 +10,10 @@ never once asked, because it produces *transport* (tkm) and nothing in the
 chain demanded transport.
 
 ``NaturalGasSupply`` is the missing hop, and its only job is unit and
-geography bookkeeping: MJ of delivered gas become Nm3 at the wellhead
-through an energy content, and Nm3 become tkm of pipeline through a density
-and a route length. Both of those demands are placed at the *origin*, not at
+geography bookkeeping: MJ of delivered gas become m3 at the wellhead
+through an energy content, and m3 (at normal conditions) become tonnes,
+carried over the route length the supply states as the transport demand's
+``distance``. Both of those demands are placed at the *origin*, not at
 the consumer, which is what makes the pipeline model's own tier split do
 anything: Danish gas comes down the Norwegian shelf (low-leakage tier) and
 European gas comes a great deal further from Russia (high-leakage tier), and
@@ -28,16 +29,18 @@ chain terminates in a resource rather than in a cutoff, and its parameters
 say so.
 """
 
-from trailrunner.core.errors import ValidationError
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
+from trailrunner.core.units import KILOMETRE, M3, MJ, PA, TONNE
 from trailrunner.models.natural_gas_pipeline_transport import (
+    DISTANCE,
     NATURAL_GAS_AT_PRODUCTION,
     TRANSPORT,
 )
 from trailrunner.params.coverage import ContextRange, Coverage
+from trailrunner.core.time import when, year_range
 
 NATURAL_GAS = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020"  # "Natural gas, liquefied or in the gaseous state"
 """Same IRI as ``electricity.NATURAL_GAS`` and ``cement.NATURAL_GAS``.
@@ -57,34 +60,25 @@ correct answer for a resource under a climate method, and visible rather
 than dropped.
 """
 
-MJ = "MJ"
-"""The unit this model reasons in.
-
-Energy content is MJ/Nm3, so a demand in kg or Nm3 would be divided by a
-factor that does not apply to it. It is rejected instead.
-"""
-
-NM3 = "Nm3"
-"""Likewise for extraction: the emission factors below are per Nm3."""
-
 KG_PER_TONNE = 1000.0
 
-PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
-BAR = "http://qudt.org/vocab/unit/BAR"
-"""The QUDT quantity kind and unit the delivery pressure is declared in.
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
+"""The quantity kind the delivery pressure is declared as, in the sentier
+vocabulary (derived from QUDT).
 
-IRIs rather than ``"pressure"`` and ``"bar"``: a context condition matches
-only on the exact name and unit, so two models written by two people agree on
-a pressure only if they name the same concept. Spelled out here rather than
-imported from ``cement``, for the same reason ``NATURAL_GAS`` is.
+An IRI rather than ``"pressure"``: a context condition matches only on the
+exact name and unit, so two models written by two people agree on a pressure
+only if they name the same concept. Spelled out here rather than imported
+from ``cement``, for the same reason ``NATURAL_GAS`` is.
 """
 
-DELIVERY_PRESSURE_BAR = 5.0
+DELIVERY_PRESSURE_PA = 5e5
 """Pressure the gas leaves this model at: a medium-pressure distribution grid.
 
-Declared in ``coverage`` rather than read from a parameter row, because it
-decides *whether* the model answers, and that has to be known before any row
-is looked up. A demand naming a different pressure is not answered here
+5 bar, in Pa because that is the vocabulary's pressure unit. Declared in
+``coverage`` rather than read from a parameter row, because it decides
+*whether* the model answers, and that has to be known before any row is
+looked up. A demand naming a different pressure is not answered here
 exactly; one naming none is.
 """
 
@@ -97,14 +91,18 @@ class NaturalGasSupply(Model):
     pipeline, the flaring to the field -- so this model contributes no
     biosphere flows at all, only the two demands that carry the gas from
     where it is to where it was asked for.
+
+    Energy content is MJ/Nm3, so the model is handed MJ: ``Coverage.units``
+    converts a kWh demand and refuses a kg one.
     """
 
     produces = [NATURAL_GAS]
     coverage = Coverage(
-        time_range=(2000, 2050),
+        time_range=year_range(2000, 2050),
         context=(
-            ContextRange(PRESSURE, BAR, DELIVERY_PRESSURE_BAR, DELIVERY_PRESSURE_BAR),
+            ContextRange(PRESSURE, PA, DELIVERY_PRESSURE_PA, DELIVERY_PRESSURE_PA),
         ),
+        units=frozenset({MJ}),
     )
 
     supports = ALLOCATION_RULES
@@ -117,25 +115,18 @@ class NaturalGasSupply(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        if demand.unit != MJ:
-            raise ValidationError(
-                f"{type(self).__name__} was asked for {demand.unit!r} of "
-                f"{demand.flow.iri}; it converts energy to volume through an "
-                f"MJ/Nm3 energy content and only {MJ} can be read that way"
-            )
-
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         origin = row["origin"]
 
-        volume_nm3 = demand.amount / float(row["energy_content_mj_per_nm3"])
-        tonnes = volume_nm3 * float(row["gas_density_kg_per_nm3"]) / KG_PER_TONNE
-        tkm = tonnes * float(row["transport_distance_km"])
+        volume_m3 = demand.amount / float(row["energy_content_mj_per_nm3"])
+        tonnes = volume_m3 * float(row["gas_density_kg_per_nm3"]) / KG_PER_TONNE
+        km = float(row["transport_distance_km"])
 
         # At the origin, not at the consumer: a route's leakage tier is a
         # property of where the pipeline runs, and asking for transport
         # "in Denmark" would hand the Norwegian leg to whatever Danish row
         # happened to exist -- or to no row at all.
-        there = dict(location=origin, time=demand.flow.time)
+        there = dict(location=origin, **when(demand.flow))
 
         return Result(
             production=[
@@ -144,13 +135,21 @@ class NaturalGasSupply(Model):
             technosphere=[
                 Demand(
                     flow=Flow(iri=NATURAL_GAS_AT_PRODUCTION, **there),
-                    amount=volume_nm3,
-                    unit=NM3,
+                    amount=volume_m3,
+                    unit=M3,
                 ),
-                Demand(flow=Flow(iri=TRANSPORT, **there), amount=tkm, unit="tkm"),
+                Demand(
+                    flow=Flow(
+                        iri=TRANSPORT,
+                        context=(Property(DISTANCE, km, KILOMETRE),),
+                        **there,
+                    ),
+                    amount=tonnes,
+                    unit=TONNE,
+                ),
             ],
             provenance=dict(row.provenance)
-            | {"origin": origin, "volume_nm3": volume_nm3, "transport_tkm": tkm},
+            | {"origin": origin, "volume_m3": volume_m3, "transport_tonnes": tonnes, "transport_km": km},
         )
 
 
@@ -165,21 +164,14 @@ class NaturalGasExtraction(Model):
     """
 
     produces = [NATURAL_GAS_AT_PRODUCTION]
-    coverage = Coverage(time_range=(2000, 2050))
+    coverage = Coverage(time_range=year_range(2000, 2050), units=frozenset({M3}))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional. See NaturalGasSupply."""
 
     def apply(self, demand: Demand) -> Result:
-        if demand.unit != NM3:
-            raise ValidationError(
-                f"{type(self).__name__} was asked for {demand.unit!r} of "
-                f"{demand.flow.iri}; its factors are per {NM3} and only "
-                f"{NM3} can be read that way"
-            )
-
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
-        here = dict(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
+        here = dict(location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[
@@ -194,7 +186,7 @@ class NaturalGasExtraction(Model):
                 Exchange(
                     flow=Flow(iri=NATURAL_GAS_IN_GROUND, **here),
                     amount=demand.amount * float(row["extracted_nm3_per_nm3"]),
-                    unit=NM3,
+                    unit=M3,
                 ),
             ],
             provenance=dict(row.provenance),

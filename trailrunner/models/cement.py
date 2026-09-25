@@ -15,13 +15,15 @@ library had to learn about measurement for that to work.
 
 from dataclasses import replace
 
-from trailrunner.attribution import amortize
+from trailrunner.attribution import amortize, output_over_a_year
 from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
+from trailrunner.core.units import KG, PA
+from trailrunner.core.time import in_year, when, year_of, year_range
 
 # Real BONSAI vocabulary concepts, verified live against
 # https://vocab.sentier.dev on 2026-09-24 and cached by
@@ -50,11 +52,11 @@ CEMENT_KILN = "https://vocab.sentier.dev/products/cement-kiln"
 # assessment/dynamic.py and assessment/static.py already characterize.
 # Writing it anywhere else would drop it silently out of every score.
 CO2_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
-# The burner pressure the kiln asks its gas at, as a QUDT quantity kind in a
-# QUDT unit. A supplier answers it exactly only if it declares the same two
-# IRIs -- see natural_gas.PRESSURE.
-PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
-BAR = "http://qudt.org/vocab/unit/BAR"
+# The burner pressure the kiln asks its gas at, named by the sentier
+# vocabulary's (QUDT-derived) quantity kind and given in Pa. A supplier answers
+# it exactly only if it declares the same name and unit -- see
+# natural_gas.PRESSURE.
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
 
 CLINKER_CALCINATION_CO2 = 0.53  # kg CO2 per kg clinker, from CaCO3 -> CaO + CO2
 LIMESTONE_PER_CLINKER = 1.5  # kg raw limestone per kg clinker
@@ -93,13 +95,13 @@ class CementPlant(Model):
     Pass a ``Fleet`` to also account for the kilns doing the calcining.
     Without one the model answers operation only, no capital.
 
-    Pass ``burner_pressure`` (bar) to ask for the kiln's gas at that
+    Pass ``burner_pressure`` (Pa) to ask for the kiln's gas at that
     pressure. Without one the gas demand names no pressure, and any supplier
     answers it.
     """
 
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2026, 2050))
+    coverage = Coverage(time_range=year_range(2026, 2050), units=frozenset({KG}))
     fleet: Fleet | None = None
     burner_pressure: float | None = None
 
@@ -127,7 +129,7 @@ class CementPlant(Model):
             self.burner_pressure = burner_pressure
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         penalty = moisture_penalty(row["moisture"], row["temperature"])
 
         clinker = row["clinker_factor"] * demand.amount
@@ -139,14 +141,14 @@ class CementPlant(Model):
         construction, fleet_provenance = self._construction(demand)
 
         def here(iri: str) -> Flow:
-            return Flow(iri=iri, location=demand.flow.location, time=demand.flow.time)
+            return Flow(iri=iri, location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[
                 Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)
             ],
             technosphere=[
-                Demand(flow=here(LIMESTONE), amount=limestone, unit="kg"),
+                Demand(flow=here(LIMESTONE), amount=limestone, unit=KG),
                 Demand(
                     flow=self._gas(here(NATURAL_GAS)),
                     amount=fuel,
@@ -167,10 +169,10 @@ class CementPlant(Model):
                 Exchange(
                     flow=here(CO2_FOSSIL),
                     amount=CLINKER_CALCINATION_CO2 * clinker,
-                    unit="kg",
+                    unit=KG,
                 ),
                 Exchange(
-                    flow=here(CO2_FOSSIL), amount=GAS_CO2_PER_MJ * fuel, unit="kg"
+                    flow=here(CO2_FOSSIL), amount=GAS_CO2_PER_MJ * fuel, unit=KG
                 ),
             ],
             provenance={**row.provenance, "source": "modelled", **fleet_provenance},
@@ -180,13 +182,14 @@ class CementPlant(Model):
         """The kiln's gas, at the burner's pressure if the plant names one."""
         if self.burner_pressure is None:
             return flow
-        return replace(flow, context=(Property(PRESSURE, self.burner_pressure, BAR),))
+        return replace(flow, context=(Property(PRESSURE, self.burner_pressure, PA),))
 
     def _construction(self, demand: Demand) -> tuple[list[Demand], dict]:
         """One construction demand per operating kiln, in that kiln's build year.
 
         The demanded cement is what decides how much of the fleet is claimed:
-        ``share_of_fleet = amount / total_capacity``. Each kiln carries that
+        ``share_of_fleet = amount / total_output``, where ``total_output`` is the
+        fleet's capacity over one year, converted into the demand's unit. Each kiln carries that
         share of its own capacity -- ``capacity_i * share_of_fleet`` -- as the
         ``demanded_output`` handed to :func:`amortize`, which spreads the
         kiln's capital (its own capacity, standing in for what it took to
@@ -194,10 +197,11 @@ class CementPlant(Model):
         ``self.settings.attribution.capital``. Under the default rule,
         ``per_output``, this reduces to::
 
-            construction_i = amount * capacity_i / (total_capacity * lifetime_i)
+            construction_i = capacity_i * amount / (total_output * lifetime_i)
 
-        which, with one lifetime across the fleet, sums to ``amount /
-        lifetime`` -- one lifetime's worth of cement buys one fleet.
+        which, with one lifetime across the fleet, sums to the capacity that
+        makes ``amount / lifetime`` a year -- one lifetime's worth of cement
+        buys one fleet.
 
         Under ``first_life`` the answer is zero for every kiln whose build
         year is not the demanded year, so a study year with no construction in
@@ -210,26 +214,36 @@ class CementPlant(Model):
             return [], {}
 
         selection = self.fleet.operating(
-            location=demand.flow.location, time=demand.flow.time
+            location=demand.flow.location, time=year_of(demand.flow)
         )
         capacity_column = self.fleet.capacity_column
         lifetime_column = self.fleet.lifetime_column
         unit = selection.unit_of(capacity_column)
         rule = self.settings.attribution.capital
 
+        # Capacity is a rate in its own unit (t/yr); the demand is an amount
+        # (kg). Each kiln's year of output, in the demand's unit, is what the
+        # demand is a share of. The fleet's own total_capacity stays in the
+        # capacity unit; the conversion happens here, in the model.
+        annual = [
+            output_over_a_year(float(kiln[capacity_column]), unit, demand.unit)
+            for kiln in selection.plants
+        ]
+        total_output = sum(annual)
+
         construction = []
-        for kiln in selection.plants:
+        for kiln, annual_output in zip(selection.plants, annual):
             capacity = float(kiln[capacity_column])
             lifetime = float(kiln[lifetime_column])
             build_year = int(kiln["build_year"])
             amount = amortize(
-                capacity,
+                capacity,  # the capital, in the capacity unit the demand is made in
                 rule=rule,
-                demanded_output=capacity * demand.amount / selection.total_capacity,
-                annual_output=capacity,
-                lifetime_output=capacity * lifetime,
+                demanded_output=annual_output * demand.amount / total_output,
+                annual_output=annual_output,
+                lifetime_output=annual_output * lifetime,
                 lifetime_years=lifetime,
-                demand_year=demand.flow.time,
+                demand_year=year_of(demand.flow),
                 build_year=build_year,
             )
             construction.append(
@@ -240,7 +254,7 @@ class CementPlant(Model):
                     flow=Flow(
                         iri=CEMENT_KILN,
                         location=kiln.get("location", demand.flow.location),
-                        time=build_year,
+                        **in_year(build_year),
                     ),
                     amount=amount,
                     unit=unit,
@@ -249,7 +263,7 @@ class CementPlant(Model):
 
         provenance = {
             **selection.provenance,
-            "share_of_fleet": demand.amount / selection.total_capacity,
+            "share_of_fleet": demand.amount / total_output,
             "capital_rule": rule,
         }
         return construction, provenance
@@ -275,7 +289,7 @@ class MeteredCementPlant(Model):
     """
 
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2018, 2025))
+    coverage = Coverage(time_range=year_range(2018, 2025), units=frozenset({KG}))
 
     supports = ALLOCATION_RULES
     """Monofunctional, like :class:`CementPlant`, and for the same reason."""
@@ -283,11 +297,11 @@ class MeteredCementPlant(Model):
     REFERENCE_OUTPUT = 1000.0  # kg of cement the metered row is normalised to
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         scale = demand.amount / self.REFERENCE_OUTPUT
 
         def here(iri: str) -> Flow:
-            return Flow(iri=iri, location=demand.flow.location, time=demand.flow.time)
+            return Flow(iri=iri, location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[

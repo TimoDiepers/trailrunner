@@ -21,6 +21,8 @@ from typing import Protocol
 from trailrunner.core.flow import Demand, Property
 from trailrunner.core.model import Model
 from trailrunner.core.settings import ProxySettings, context_condition
+from trailrunner.core.time import interval, midpoint_year
+from trailrunner.core.units import symbol
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution.chain import Offer, describe
 from trailrunner.resolution.models import ModelProvider
@@ -80,16 +82,22 @@ class GeneralisingProvider:
                 inner_offer = self.inner.offer(candidate, exclude=exclude)
                 if inner_offer is None:
                     continue
+                resolution = {
+                    "model": type(inner_offer.model).__name__,
+                    "relaxations": notes,
+                    "asked": describe(demand),
+                    "answered": describe(candidate),
+                }
+                conversion = inner_offer.resolution.get("conversion")
+                if conversion is not None:
+                    resolution["conversion"] = conversion
                 return Offer(
                     model=inner_offer.model,
-                    demand=candidate,
+                    # The inner offer's demand, not the candidate: it is the
+                    # candidate already converted into the model's unit.
+                    demand=inner_offer.demand,
                     tier="generalising",
-                    resolution={
-                        "model": type(inner_offer.model).__name__,
-                        "relaxations": notes,
-                        "asked": describe(demand),
-                        "answered": describe(candidate),
-                    },
+                    resolution=resolution,
                 )
         return None
 
@@ -203,29 +211,36 @@ class GeneralisingProvider:
             yield replace(demand, flow=flow), f"location: {original} -> {location}", step
 
     def _time_candidates(self, demand: Demand, budget: int) -> Iterator[tuple[Demand, str, int]]:
-        """Snap to the nearest year a declaring model covers, within tolerance.
+        """Snap to the nearest period a declaring model covers, within tolerance.
 
-        Asks the registry rather than guessing: the only years worth trying are
-        the ones some model actually claims.
+        Asks the registry rather than guessing: the only periods worth trying
+        are the edges of ranges some model actually declares -- the nearer
+        edge of each. Distance is between period midpoints in decimal years,
+        which for year data is exactly the old ``abs(year - original)``. A
+        range that already covers the time offers nothing, as clamping a year
+        into its own range never moved it.
         """
-        original = demand.flow.time
-        if original is None:
+        original = demand.flow
+        if original.time is None:
             return
-        years: list[int] = []
-        for model in self.inner.glossary.declared_models(demand.flow):
+        here = midpoint_year(interval(original.time, original.time_standard))
+        found: dict[tuple[str, str], float] = {}
+        for model in self.inner.glossary.declared_models(original):
             window = getattr(model.coverage, "time_range", None) if model.coverage else None
-            if window is None:
+            if window is None or window.contains(original.time, original.time_standard):
                 continue
-            earliest, latest = window
-            years.append(min(max(original, earliest), latest))
-        candidates = (
-            year
-            for year in sorted(set(years), key=lambda candidate: abs(candidate - original))
-            if abs(year - original) <= self.settings.time_tolerance and year != original
-        )
-        for step, year in enumerate(islice(candidates, budget), 1):
-            flow = replace(demand.flow, time=year)
-            yield replace(demand, flow=flow), f"time: {original} -> {year}", step
+            distance, value = min(
+                (abs(midpoint_year(interval(edge, window.standard)) - here), edge)
+                for edge in window.edges()
+            )
+            key = (value, window.standard)
+            if distance > self.settings.time_tolerance or key == (original.time, original.time_standard):
+                continue
+            found[key] = min(found.get(key, distance), distance)
+        ranked = sorted(found.items(), key=lambda item: (item[1], item[0]))
+        for step, ((value, standard), _distance) in enumerate(islice(ranked, budget), 1):
+            flow = replace(original, time=value, time_standard=standard)
+            yield replace(demand, flow=flow), f"time: {original.time} -> {value}", step
 
     def _context_candidates(
         self, demand: Demand, budget: int, only: str | None = None
@@ -239,12 +254,16 @@ class GeneralisingProvider:
 
         The same move as ``_time_candidates``, one condition at a time: ask
         the registry which ranges exist, snap into each, keep what lies within
-        ``context_tolerance``. The tolerance is ``(below, above)`` so that a
-        condition with a safe side -- gas at a higher pressure can be
+        ``context_tolerance``. The tolerance is ``(below, above, unit)`` so
+        that a condition with a safe side -- gas at a higher pressure can be
         throttled, gas at a lower one cannot be boosted -- is only ever moved
-        to that side. A condition with no tolerance, or declared by a model in
-        another unit, is not moved at all.
+        to that side. A condition with no tolerance, or declared in a unit of
+        another quantity kind, is not moved at all. The comparison and the
+        snap both happen in the tolerance's own unit, because that is what
+        "0.0 below, 1e5 above" is written in; the result is converted back
+        into the unit the demander asked in before it is written to the flow.
         """
+        catalog = self.inner.units
         found: dict[tuple[str, float], tuple[float, Property]] = {}
         for asked in demand.flow.context:
             if only is not None and asked.name != only:
@@ -252,18 +271,27 @@ class GeneralisingProvider:
             tolerance = self.settings.context_tolerance.get(asked.name)
             if tolerance is None:
                 continue
-            below, above = tolerance
+            below, above, unit = tolerance
+            asked_value = catalog.try_convert(asked.value, asked.unit, unit)
+            if asked_value is None:
+                continue
             for model in self.inner.glossary.declared_models(demand.flow):
                 if model.coverage is None:
                     continue
                 declared = model.coverage.context_range(asked.name)
-                if declared is None or declared.unit != asked.unit:
+                if declared is None:
                     continue
-                value = min(max(asked.value, declared.minimum), declared.maximum)
-                shift = value - asked.value
+                low = catalog.try_convert(declared.minimum, declared.unit, unit)
+                high = catalog.try_convert(declared.maximum, declared.unit, unit)
+                if low is None or high is None:
+                    continue
+                value = min(max(asked_value, low), high)
+                shift = value - asked_value
                 if shift == 0 or not -below <= shift <= above:
                     continue
-                found.setdefault((asked.name, value), (abs(shift), asked))
+                # Written back in the unit the demander asked in.
+                snapped = catalog.convert(value, unit, asked.unit)
+                found.setdefault((asked.name, snapped), (abs(shift), asked))
         ranked = sorted(found.items(), key=lambda item: (item[1][0], item[0]))
         for step, ((name, value), (_distance, asked)) in enumerate(islice(ranked, budget), 1):
             context = tuple(
@@ -271,9 +299,11 @@ class GeneralisingProvider:
                 for entry in demand.flow.context
             )
             flow = replace(demand.flow, context=context)
-            # Full name and unit, unlike the product note: a condition named by
-            # IRI must read as one, or it looks like the free-text name it isn't.
-            note = f"context: {name} {asked.value:g} {asked.unit} -> {value:g} {asked.unit}"
+            # The name in full, unlike the product note: a condition named by
+            # IRI must read as one, or it looks like the free-text name it
+            # isn't. The unit is a vocabulary unit, so its symbol is exact.
+            shown = symbol(asked.unit)
+            note = f"context: {name} {asked.value:g} {shown} -> {value:g} {shown}"
             yield replace(demand, flow=flow), note, step
 
     def _product_candidates(

@@ -57,19 +57,21 @@ MODELS = [
     # for a past year reaches the meter, one for a future year reaches the
     # calculation, and Glossary.resolve does the choosing.
     #
-    # The kiln's burners take gas at 4 bar and NaturalGasSupply delivers at 5,
-    # so tier 1 alone leaves the kiln's gas a coverage_excluded cutoff. Allow
-    # pressure to be met higher and tier 2 answers it, on the record: on the
-    # CLI `--context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1`,
-    # in Python ProxySettings(context_tolerance={natural_gas.PRESSURE: (0.0, 1.0)}). The gas plant's gas names no pressure and needs none.
-    CementPlant(params=_cement_params, burner_pressure=4.0),
+    # The kiln's burners take gas at 4e5 Pa (4 bar) and NaturalGasSupply
+    # delivers at 5e5 Pa, so tier 1 alone leaves the kiln's gas a
+    # coverage_excluded cutoff. Allow pressure to be met higher and tier 2
+    # answers it, on the record: on the CLI
+    # `--context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"`,
+    # in Python ProxySettings(context_tolerance={natural_gas.PRESSURE: (0.0, 1e5, PA)}).
+    # The gas plant's gas names no pressure and needs none.
+    CementPlant(params=_cement_params, burner_pressure=4e5),
     MeteredCementPlant(params=_cement_metered_params),
     GridElectricity(params=_grid_params),
     GasPower(params=_gas_params),
     # The gas chain: the kiln and the gas plant both burn fi_12020, so
     # NaturalGasSupply answers that, converts it to wellhead volume and route
     # length, and hands the two on to the field and to the pipeline model --
-    # which was registered here long before anything demanded tkm from it.
+    # which was registered here long before anything asked it to move gas.
     NaturalGasSupply(params=_gas_supply_params),
     NaturalGasOffshorePipelineTransport(params=_pipeline_params),
     NaturalGasExtraction(params=_gas_extraction_params),

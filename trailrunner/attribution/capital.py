@@ -7,7 +7,40 @@ answers live here rather than in each model, so that every model gives the
 same one.
 """
 
+from trailrunner.core.errors import ValidationError
+from trailrunner.core.units import UnitCatalog, default_catalog, symbol
+
 CAPITAL_RULES = ("per_output", "per_year", "first_life")
+
+
+def output_over_a_year(
+    capacity: float,
+    capacity_unit: str,
+    demand_unit: str,
+    units: UnitCatalog | None = None,
+) -> float:
+    """A plant's capacity as one year of output, in the demand's unit.
+
+    A fleet states capacity as a rate (``TONNE_PER_YEAR``) and a demand is an
+    amount (``KG``). The share of a fleet a demand claims is only meaningful
+    once both are in the same unit, so the model converts here, per plant,
+    and refuses a pair the vocabulary cannot relate -- a capacity in m3/yr
+    against a demand in kg would need a density nobody stated.
+
+    ``units`` is the catalog to convert with; ``None`` keeps the previous
+    behaviour of the bundled default. Existing callers (the models) pass
+    nothing new here -- a model that wants a different catalog can pass one
+    once it needs to.
+    """
+    catalog = units if units is not None else default_catalog()
+    output = catalog.over_a_year(capacity, capacity_unit, demand_unit)
+    if output is None:
+        raise ValidationError(
+            f"cannot read a capacity in {symbol(capacity_unit)} ({capacity_unit}) as a "
+            f"yearly output in {symbol(demand_unit)} ({demand_unit}); state the fleet's "
+            "capacity as the demand's unit per unit of time"
+        )
+    return output
 
 
 def amortize(

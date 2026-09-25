@@ -6,6 +6,7 @@ from typing import Any
 
 from trailrunner.assessment.method import Method
 from trailrunner.core.flow import Flow
+from trailrunner.core.units import symbol
 from trailrunner.orchestration.report import Report
 
 
@@ -69,7 +70,7 @@ class Assessment:
         them. Returns the block rather than printing it.
         """
         lines = [
-            f"{self.score:g} {self.unit}".strip(),
+            f"{self.score:g} {symbol(self.unit)}".strip(),
             f"method: {self.method}",
         ]
         count = len(self.uncharacterized)

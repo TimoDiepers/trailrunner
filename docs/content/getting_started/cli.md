@@ -23,10 +23,12 @@ uv run trailrunner run --help
 
 ```text
 usage: trailrunner run [-h] --amount AMOUNT --unit UNIT [--location LOCATION]
-                       [--year YEAR] --models MODELS [--method METHOD]
-                       [--dynamic DYNAMIC] [--horizon HORIZON]
-                       [--allocation ALLOCATION] [--capital CAPITAL]
-                       [--context-tolerance NAME=BELOW:ABOVE]
+                       [--time TIME] [--time-standard TIME_STANDARD]
+                       [--context NAME=VALUE UNIT] --models MODELS
+                       [--method METHOD] [--dynamic DYNAMIC]
+                       [--horizon HORIZON] [--allocation ALLOCATION]
+                       [--capital CAPITAL]
+                       [--context-tolerance NAME=BELOW:ABOVE UNIT]
                        [--proxy-order ORDER] [--max-depth MAX_DEPTH]
                        [--max-nodes MAX_NODES] [--out OUT]
                        iri
@@ -38,8 +40,25 @@ Three things are required:
 - **`--amount` and `--unit`**, how much of it,
 - **`--models`**, a `.py` file that defines a list called `MODELS`.
 
-`--location` and `--year` place the demand. Every model downstream receives them on its
+**`--unit`** takes an IRI, a vocabulary id (`KiloGM`) or a symbol (`kg`) -- whichever is
+convenient -- and is resolved through the same catalog everything else in trailrunner
+uses. An unknown unit stops the run with exit code `2` before anything runs.
+
+`--location` and `--time` place the demand. Every model downstream receives them on its
 own demands, so they decide which parameter rows are read and which models are valid.
+`--time` is a string in a time standard -- `2030` (a year), `2030-06` (a month),
+`2030-06-15` (a day) or `2030-06-15T08:00:00Z` (an instant) -- and the standard is
+inferred from its shape unless `--time-standard` names the XSD datatype IRI explicitly.
+Whichever way it was read, the CLI prints it, because a time is never read silently:
+
+```text
+time 2030-06-15 read as xsd:date
+```
+
+**`--context`** states a named condition beyond place and time, such as the pressure gas
+is wanted at: `--context "pressure=4e5 Pa"`, repeatable for more than one condition. See
+[section 4](#4-when-a-supplier-almost-matches-context-tolerance) for how a model's
+coverage matches it, and `--context-tolerance` for letting a near match through.
 
 ## 2. Run the shipped cement chain
 
@@ -51,25 +70,26 @@ Portland cement (BONSAI `fi_37440`) in Denmark in 2030:
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"
 ```
 
 ```text
+time 2030 read as xsd:gYear
 11 nodes, 11 inventory entries
 12 unresolved (no_model_found: 12)
 1 proxy
 attribution: allocation=none, capital=per_output
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
-    68.75 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
-    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [model: NaturalGasOffshorePipelineTransport]
-      0.0130625 Nm3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
+    68.75 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
+    0.0505312 t natural-gas-transport-offshore-pipeline-long-distance @NO/2030 (distance=1000 km)  [model: NaturalGasOffshorePipelineTransport]
+      0.0130625 m3 natural-gas-at-production @NO/2030  [model: NaturalGasExtraction]
       8.99456e-08 unit pipeline-natural-gas-long-distance-high-capacity-offshore @NO/2030  [cutoff: no_model_found]
       16.5404 MJ natural-gas-burned-in-gas-turbine @NO/2030  [cutoff: no_model_found]
-      5.86162e-06 tkm transport-freight-lorry-16t-32t @NO/2030  [cutoff: no_model_found]
+      5.86163e-09 t transport-freight-lorry-16t-32t @NO/2030 (distance=1000 km)  [cutoff: no_model_found]
       5.86162e-05 kg disposal-used-mineral-oil-10-percent-water-hazardous-waste-incineration @NO/2030  [cutoff: no_model_found]
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]
     8.46561 kWh electricity-natural-gas @DK/2030  [model: GasPower]
@@ -88,9 +108,10 @@ How to read it:
 - **Every tree line** is one node: the amount demanded, the product (the last segment of
   its IRI), `@location/year`, any context in parentheses, and in brackets how it was
   answered.
-- **The kiln's gas is a proxy.** The kiln's burners ask for gas at 4 bar, the only
-  supplier delivers at 5, and `--context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1` accepts that.
-  [Section 4](#4-when-a-supplier-almost-matches-context-tolerance) explains the flag.
+- **The kiln's gas is a proxy.** The kiln's burners ask for gas at 4e5 Pa (4 bar), the only
+  supplier delivers at 5e5 Pa (5 bar), and `--context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"`
+  accepts that. [Section 4](#4-when-a-supplier-almost-matches-context-tolerance) explains
+  the flag.
 - **The gas moved.** `NaturalGasSupply` places extraction and pipeline transport in `NO`,
   the gas's origin, not at the Danish consumer, and every model below it works with that.
 - **Cutoffs hang where they happened.** Limestone (`fi_15200`) and lime (`fi_37420`) are
@@ -106,12 +127,13 @@ Ask for 2020 and the meter answers:
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2020 \
+    --amount 1000 --unit kg --location DK --time 2020 \
     --models examples/showcase_models.py \
-    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"
 ```
 
 ```text
+time 2020 read as xsd:gYear
 11 nodes, 11 inventory entries
 11 unresolved (no_model_found: 11)
 0 proxies
@@ -137,93 +159,98 @@ declares in its `Coverage` which values it can deliver. Both sides are in Python
 the match is.
 
 By default it is exact. In the shipped chain the kiln's burners ask for gas at
-**4 bar** and `NaturalGasSupply` delivers at **5 bar**, both as `http://qudt.org/vocab/quantitykind/Pressure` in `http://qudt.org/vocab/unit/BAR`, so without any flag the kiln's gas
-is not answered:
+**4e5 Pa** (4 bar) and `NaturalGasSupply` delivers at **5e5 Pa** (5 bar), both as the
+quantity kind `https://vocab.sentier.dev/units/quantity-kind/Pressure`, so without any flag the kiln's gas is not answered:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [cutoff: coverage_excluded]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [cutoff: coverage_excluded]
 ```
 
 `coverage_excluded` rather than `no_model_found`: a supplier exists, and its coverage is
 what refused.
 
-### Accept a nearby value: `--context-tolerance NAME=BELOW:ABOVE`
+### Accept a nearby value: `--context-tolerance "NAME=BELOW:ABOVE UNIT"`
 
 ```bash
---context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1
+--context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"
 ```
 
-reads as: the condition `http://qudt.org/vocab/quantitykind/Pressure` (the [QUDT](https://qudt.org) quantity kind *pressure*)
-may be met **up to 0 bar lower and up to 1 bar higher** than asked. The name is the IRI
-the models use, written in full; `pressure` would not match it.
-Both numbers are in the unit the demand uses; nothing is converted, and a supplier
-declaring another unit is never matched. Two numbers instead of one because most
-conditions have a safe side: gas at a higher pressure can be throttled down at the burner,
-gas at a lower one can't be pushed up there.
+reads as: the condition `https://vocab.sentier.dev/units/quantity-kind/Pressure` (the quantity kind *pressure* in the
+[sentier vocabulary](https://vocab.sentier.dev), derived from QUDT) may be met **up to 0 Pa
+lower and up to 1e5 Pa higher** than asked. The name is the IRI the models use, written in
+full; `pressure` would not match it, and the CLI warns when a tolerated condition is
+declared by no model. The unit is resolved through the same catalog as everything else --
+a symbol (`Pa`), a vocabulary id (`PA`) or the full IRI all work -- and a condition may be
+asked in *any* unit of the same quantity kind: a demand in another pressure unit against a
+tolerance in Pa is converted exactly. Two numbers instead of one because most conditions
+have a safe side: gas at a higher pressure can be throttled down at the burner, gas at a
+lower one can't be pushed up there.
 
-With the flag, the demand is moved to 5 bar, answered by `NaturalGasSupply`, and the tree
+With the flag, the demand is moved to 5e5 Pa, answered by `NaturalGasSupply`, and the tree
 says so:
 
 ```text
-  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
 ```
 
 The parentheses show what was asked; the brackets show what was conceded. The summary
-counts it as `1 proxy`. A 6-bar demand would not be answered with `0:1`, because
-5 is below 6.
+counts it as `1 proxy`. A 6e5 Pa (6 bar) demand would not be answered with
+`$P=0:1e5 Pa`, because 5e5 is below 6e5.
 
-Repeat the flag once per condition. A condition given
-twice, or a malformed value, stops the run with exit code `2` before anything runs.
+Repeat the flag for each condition, e.g.
+`--context-tolerance "$P=0:1e5 Pa" --context-tolerance "$T=0:10 K"`, with `$P`
+and `$T` holding the condition IRIs (see below). A
+condition given twice, a malformed value, or a unit the catalog does not know stops the
+run with exit code `2` before anything runs.
 
 ### Several conditions: `--proxy-order`
 
 By default, tolerances are tried **one condition at a time**. That's deliberate: moving
 two conditions together is a bigger concession, and trailrunner makes you ask for it. To
-see the difference, put this in `burner_models.py`: a burner that asks for gas at 4 bar
-*and* 280 K, and a grid that delivers 5 bar at 288 K.
+see the difference, put this in `burner_models.py`: a burner that asks for gas at 4e5 Pa
+(4 bar) *and* 280 K, and a grid that delivers 5e5 Pa (5 bar) at 288 K.
 
-This time the conditions and their units are not free text but
-[QUDT](https://qudt.org) IRIs: the quantity kinds `Pressure` and
-`ThermodynamicTemperature`, in the units `BAR` and `K`. A condition matches only when the
-demand and the coverage name the **same IRI in the same unit IRI**, so "pressure" in one
-model and "Pressure" in another can't be confused, and a reader can look up exactly what
-was meant.
+This time the conditions are not free text but IRIs: the quantity kinds `Pressure` and
+`Temperature` of the [sentier vocabulary](https://vocab.sentier.dev) (derived from QUDT),
+in its units Pa and K. A condition matches only when the demand and the coverage name the
+**same IRI**, so "pressure" in one model and "Pressure" in another can't be confused, and a
+reader can look up exactly what was meant.
 
 ```python title="burner_models.py"
 from trailrunner import ContextRange, Coverage, Demand, Exchange, Flow, Model, Property, Result
+from trailrunner.core.time import when
+from trailrunner.core.units import KELVIN, KG, MJ, PA
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
-PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
-TEMPERATURE = "http://qudt.org/vocab/quantitykind/ThermodynamicTemperature"
-BAR = "http://qudt.org/vocab/unit/BAR"
-KELVIN = "http://qudt.org/vocab/unit/K"
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
+TEMPERATURE = "https://vocab.sentier.dev/units/quantity-kind/Temperature"
 
 
 class Burner(Model):
-    """Asks for its gas at 4 bar and 280 K."""
+    """Asks for its gas at 4e5 Pa and 280 K."""
 
     produces = [HEAT]
 
     def apply(self, demand: Demand) -> Result:
         gas = demand.amount / 0.9
-        where = dict(location=demand.flow.location, time=demand.flow.time)
-        wanted = (Property(PRESSURE, 4.0, BAR), Property(TEMPERATURE, 280.0, KELVIN))
+        where = dict(location=demand.flow.location, **when(demand.flow))
+        wanted = (Property(PRESSURE, 4e5, PA), Property(TEMPERATURE, 280.0, KELVIN))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            technosphere=[Demand(flow=Flow(iri=GAS, context=wanted, **where), amount=gas, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit="kg")],
+            technosphere=[Demand(flow=Flow(iri=GAS, context=wanted, **where), amount=gas, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit=KG)],
         )
 
 
 class GasGrid(Model):
-    """Delivers at 5 bar and 288 K, and nothing else."""
+    """Delivers at 5e5 Pa and 288 K, and nothing else."""
 
     produces = [GAS]
     coverage = Coverage(context=(
-        ContextRange(PRESSURE, BAR, 5.0, 5.0),
+        ContextRange(PRESSURE, PA, 5e5, 5e5),
         ContextRange(TEMPERATURE, KELVIN, 288.0, 288.0),
     ))
 
@@ -238,8 +265,8 @@ On the command line a condition is named by the same IRI. Shell variables keep t
 commands readable:
 
 ```bash
-P=http://qudt.org/vocab/quantitykind/Pressure
-T=http://qudt.org/vocab/quantitykind/ThermodynamicTemperature
+P=https://vocab.sentier.dev/units/quantity-kind/Pressure
+T=https://vocab.sentier.dev/units/quantity-kind/Temperature
 ```
 
 Both conditions are off, and both are within tolerance, yet two tolerances alone don't
@@ -247,17 +274,18 @@ answer it:
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
-    --amount 100 --unit MJ --location CH --year 2030 \
+    --amount 100 --unit MJ --location CH --time 2030 \
     --models burner_models.py \
-    --context-tolerance $P=0:1 --context-tolerance $T=0:10
+    --context-tolerance "$P=0:1e5 Pa" --context-tolerance "$T=0:10 K"
 ```
 
 ```text
+time 2030 read as xsd:gYear
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR, http://qudt.org/vocab/quantitykind/ThermodynamicTemperature=280 http://qudt.org/vocab/unit/K)  [cutoff: coverage_excluded]
+  111.111 MJ natural-gas @CH/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa, https://vocab.sentier.dev/units/quantity-kind/Temperature=280 K)  [cutoff: coverage_excluded]
 ```
 
-The tree prints every condition and unit as its full IRI, so it is always clear which
+The tree prints every condition as its full IRI, so it is always clear which
 concept was asked for. Moving pressure alone leaves the temperature wrong, and the other
 way round. `--proxy-order` says which relaxations to try and in what order: entries are
 separated by commas and tried left to right, and `+` joins conditions that move
@@ -265,26 +293,27 @@ separated by commas and tried left to right, and `+` joins conditions that move
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
-    --amount 100 --unit MJ --location CH --year 2030 \
+    --amount 100 --unit MJ --location CH --time 2030 \
     --models burner_models.py \
-    --context-tolerance $P=0:1 --context-tolerance $T=0:10 \
+    --context-tolerance "$P=0:1e5 Pa" --context-tolerance "$T=0:10 K" \
     --proxy-order context.$P,context.$T,context.$P+context.$T
 ```
 
 ```text
+time 2030 read as xsd:gYear
 2 nodes, 1 inventory entry
 0 unresolved
 1 proxy
 attribution: allocation=none, capital=per_output
 
 100 MJ heat @CH/2030  [model: Burner]
-  111.111 MJ natural-gas @CH/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR, http://qudt.org/vocab/quantitykind/ThermodynamicTemperature=280 http://qudt.org/vocab/unit/K)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR; context: http://qudt.org/vocab/quantitykind/ThermodynamicTemperature 280 http://qudt.org/vocab/unit/K -> 288 http://qudt.org/vocab/unit/K]
+  111.111 MJ natural-gas @CH/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa, https://vocab.sentier.dev/units/quantity-kind/Temperature=280 K)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa; context: https://vocab.sentier.dev/units/quantity-kind/Temperature 280 K -> 288 K]
 ```
 
 That order reads: try pressure alone, then temperature alone, and only if neither works,
 both together. Leave out the last entry and the run won't combine them. Each condition
-still has to stay within its own tolerance: with `$T=0:5`, 280 K can't reach 288 K and the
-demand stays a cutoff, whatever the order says.
+still has to stay within its own tolerance: with `"$T=0:5 K"`, 280 K can't reach 288 K and
+the demand stays a cutoff, whatever the order says.
 
 | `--proxy-order` | tries |
 | --- | --- |
@@ -294,11 +323,11 @@ demand stays a cutoff, whatever the order says.
 | `context.$P+context.$T` | only both together |
 | `context.$P,context.$P+context.$T` | pressure alone, then both |
 
-Names are matched exactly, never guessed. Write `pressure=0:1` against these models and
+Names are matched exactly, never guessed. Write `"pressure=0:1e5 Pa"` against these models and
 nothing relaxes; the CLI says so, and points at the IRI you probably meant:
 
 ```text
-warning: no model declares a context condition named 'pressure', so its tolerance relaxes nothing; did you mean http://qudt.org/vocab/quantitykind/Pressure?
+warning: no model declares a context condition named 'pressure', so its tolerance relaxes nothing; did you mean https://vocab.sentier.dev/units/quantity-kind/Pressure?
 ```
 
 The shipped cement chain uses the same `Pressure` IRI, which is why its commands spell it
@@ -314,8 +343,10 @@ Python, which takes the same order.
 ## 5. Get a score: `--method`
 
 A characterization method is a parquet file with one row per factor: `flow_iri`,
-`flow_unit`, an optional `location`, and `cf`. The `cf` column declares the score's unit
-in the embedded Data Package metadata. [Assessment](../assessment.md#the-method-parquet-layout)
+`flow_unit` (a unit IRI), an optional `location`, and `cf`. The `cf` column declares the
+score's unit in the embedded Data Package metadata. Units are vocabulary IRIs here too: the
+score is in kilograms of CO<sub>2</sub>-equivalent, so its unit is `KiloGM` and the
+indicator is in the method's name. [Assessment](../assessment.md#the-method-parquet-layout)
 has the full layout. This script writes a three-gas IPCC AR6 GWP100 with pyarrow alone:
 
 ```python title="make_gwp100.py"
@@ -324,10 +355,12 @@ import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+KG = "https://vocab.sentier.dev/units/unit/KiloGM"  # trailrunner.core.units.KG
+
 rows = [
-    {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": "kg", "location": "GLO", "cf": 1.0},
-    {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": "kg", "location": "GLO", "cf": 29.8},
-    {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": "kg", "location": "GLO", "cf": 273.0},
+    {"flow_iri": "https://vocab.sentier.dev/flows/co2-fossil", "flow_unit": KG, "location": "GLO", "cf": 1.0},
+    {"flow_iri": "https://vocab.sentier.dev/flows/ch4-fossil", "flow_unit": KG, "location": "GLO", "cf": 29.8},
+    {"flow_iri": "https://vocab.sentier.dev/flows/n2o", "flow_unit": KG, "location": "GLO", "cf": 273.0},
 ]
 
 datapackage = {
@@ -338,7 +371,7 @@ datapackage = {
             {"name": "flow_iri", "type": "string"},
             {"name": "flow_unit", "type": "string"},
             {"name": "location", "type": "string"},
-            {"name": "cf", "type": "number", "unit": {"name": "kg CO2-eq"}},  # the score unit
+            {"name": "cf", "type": "number", "unit": {"name": KG}},  # the score unit
         ]},
     }],
 }
@@ -352,23 +385,24 @@ pq.write_table(table, "gwp100.parquet")
 uv run python make_gwp100.py
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1 \
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa" \
     --method gwp100.parquet
 ```
 
 After the tree, the CLI prints the assessment:
 
 ```text
-543.908 kg CO2-eq
+543.908 kg
 method: IPCC AR6 GWP100
 8 uncharacterized flows on 6 nodes (not in the score, and not zero)
 12 unresolved
 1 proxy
 ```
 
-Factors written for `GLO` apply to Danish and Norwegian flows, because every location
+The score reads `kg`: kilograms of CO<sub>2</sub>-equivalent, the indicator being the
+method named on the next line. Factors written for `GLO` apply to Danish and Norwegian flows, because every location
 lookup ends at the hierarchy's root. The last three lines are what makes the number
 honest:
 
@@ -384,7 +418,7 @@ Converting an existing Brightway method instead of writing one by hand is covere
 
 ## 6. Get a curve: `--dynamic`
 
-Every flow carries its year, so the inventory is already a time series. `--dynamic` runs
+Every flow carries its time, so the inventory is already a time series. `--dynamic` runs
 [`assess_dynamic()`](../assessment.md#assess_dynamic-a-time-explicit-reading) on it. This
 needs the `dynamic` extra:
 
@@ -392,9 +426,9 @@ needs the `dynamic` extra:
 uv sync --extra dev --extra dynamic
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1 \
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa" \
     --dynamic radiative_forcing --horizon 100
 ```
 
@@ -405,8 +439,8 @@ wrong-unit, undated and beyond-horizon exchanges.
 `--dynamic GWP` puts the same curve in CO<sub>2</sub>-equivalents:
 
 ```text
-GWP over 100 years: 543.881 kg CO2eq
-543.881 kg CO2eq
+GWP over 100 years: 543.881 kg
+543.881 kg
 metric: GWP, horizon: 100 years
 horizon anchored at: 2030-01-01
 18 uncharacterized exchanges
@@ -455,12 +489,13 @@ solved. `--max-depth` (default 10) limits how deep a branch goes. `--max-nodes` 
 ```bash
 uv run trailrunner run \
     https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440 \
-    --amount 1000 --unit kg --location DK --year 2030 \
+    --amount 1000 --unit kg --location DK --time 2030 \
     --models examples/showcase_models.py \
-    --context-tolerance http://qudt.org/vocab/quantitykind/Pressure=0:1 --max-depth 2
+    --context-tolerance "https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa" --max-depth 2
 ```
 
 ```text
+time 2030 read as xsd:gYear
 3 nodes, 1 inventory entry
 7 unresolved (max_depth: 5, no_model_found: 2)
 1 proxy
@@ -468,9 +503,9 @@ attribution: allocation=none, capital=per_output
 traversal was truncated: max_depth or max_nodes was reached
 
 1000 kg fi_37440 @DK/2030  [model: CementPlant]
-  2475 MJ fi_12020 @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
-    68.75 Nm3 natural-gas-at-production @NO/2030  [cutoff: max_depth]
-    50.5312 tkm natural-gas-transport-offshore-pipeline-long-distance @NO/2030  [cutoff: max_depth]
+  2475 MJ fi_12020 @DK/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
+    68.75 m3 natural-gas-at-production @NO/2030  [cutoff: max_depth]
+    0.0505312 t natural-gas-transport-offshore-pipeline-long-distance @NO/2030 (distance=1000 km)  [cutoff: max_depth]
   100 kWh fi_17100 @DK/2030  [model: GridElectricity]
     8.46561 kWh electricity-natural-gas @DK/2030  [cutoff: max_depth]
   ...
@@ -507,6 +542,8 @@ is a complete two-model chain, a boiler burning gas and the gas supply behind it
 
 ```python title="my_models.py"
 from trailrunner import Demand, Exchange, Flow, Model, Result
+from trailrunner.core.time import when
+from trailrunner.core.units import KG, MJ
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
@@ -519,11 +556,11 @@ class Boiler(Model):
 
     def apply(self, demand: Demand) -> Result:
         gas = demand.amount / 0.9  # MJ of gas per MJ of heat
-        where = dict(location=demand.flow.location, time=demand.flow.time)
+        where = dict(location=demand.flow.location, **when(demand.flow))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            technosphere=[Demand(flow=Flow(iri=GAS, **where), amount=gas, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit="kg")],
+            technosphere=[Demand(flow=Flow(iri=GAS, **where), amount=gas, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=CO2, **where), amount=0.056 * gas, unit=KG)],
         )
 
 
@@ -531,10 +568,10 @@ class GasSupply(Model):
     produces = [GAS]
 
     def apply(self, demand: Demand) -> Result:
-        where = dict(location=demand.flow.location, time=demand.flow.time)
+        where = dict(location=demand.flow.location, **when(demand.flow))
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            biosphere=[Exchange(flow=Flow(iri=CH4, **where), amount=0.0002 * demand.amount, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CH4, **where), amount=0.0002 * demand.amount, unit=KG)],
         )
 
 
@@ -545,7 +582,7 @@ Run all of it at once: traversal, score, curve and log.
 
 ```bash
 uv run trailrunner run https://vocab.sentier.dev/products/heat \
-    --amount 100 --unit MJ --location CH --year 2030 \
+    --amount 100 --unit MJ --location CH --time 2030 \
     --models my_models.py \
     --method gwp100.parquet \
     --dynamic radiative_forcing \
@@ -553,6 +590,7 @@ uv run trailrunner run https://vocab.sentier.dev/products/heat \
 ```
 
 ```text
+time 2030 read as xsd:gYear
 2 nodes, 2 inventory entries
 0 unresolved
 0 proxies
@@ -561,7 +599,7 @@ attribution: allocation=none, capital=per_output
 100 MJ heat @CH/2030  [model: Boiler]
   111.111 MJ natural-gas @CH/2030  [model: GasSupply]
 
-6.88444 kg CO2-eq
+6.88444 kg
 method: IPCC AR6 GWP100
 0 uncharacterized flows
 0 unresolved

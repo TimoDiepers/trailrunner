@@ -30,12 +30,14 @@ For a first run, hand the rows over directly, units included:
 
 ```python
 from trailrunner import LocationHierarchy, ParameterSet
+from trailrunner.core.time import GYEAR
+from trailrunner.core.units import DEG_C, KWH, MJ, UNITLESS
 
 params = ParameterSet(
     rows=[
         {
             "location": "CH",
-            "time": 2030,
+            "time": "2030",
             "heat_demand": 5.0,
             "electricity_demand": 0.4,
             "temperature": 10.0,
@@ -43,11 +45,12 @@ params = ParameterSet(
         },
     ],
     units={
-        "heat_demand": "MJ",
-        "electricity_demand": "kWh",
-        "temperature": "degC",
-        "humidity": "dimensionless",
+        "heat_demand": MJ,
+        "electricity_demand": KWH,
+        "temperature": DEG_C,
+        "humidity": UNITLESS,
     },
+    time_standard=GYEAR,
     hierarchy=LocationHierarchy({"CH": "RER", "RER": "GLO"}),
 )
 ```
@@ -72,10 +75,12 @@ glossary = Glossary([DirectAirCapture(params=params)])
 
 ```python
 from trailrunner import Demand, Flow, Orchestrator
+from trailrunner.core.time import in_year
+from trailrunner.core.units import KG
 from trailrunner.models.dac import CO2_CAPTURED
 
 report = Orchestrator(glossary).calculate(
-    Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", time=2030), amount=1000.0, unit="kg")
+    Demand(flow=Flow(iri=CO2_CAPTURED, location="CH", **in_year(2030)), amount=1000.0, unit=KG)
 )
 ```
 
@@ -112,8 +117,10 @@ walked. Each line shows the demand, the last segment of its IRI (`fi_1730_9` is 
 ## 5. Read the inventory
 
 ```python
+from trailrunner.core.units import symbol
+
 for (flow, unit), amount in report.inventory.items():
-    print(f"{amount:>10.2f} {unit}  {flow.iri}  {flow.location} {flow.time}")
+    print(f"{amount:>10.2f} {symbol(unit)}  {flow.iri}  {flow.location} {flow.time}")
 ```
 
 ```text
@@ -121,7 +128,8 @@ for (flow, unit), amount in report.inventory.items():
 ```
 
 Negative, because the CO<sub>2</sub> is taken *out* of the air. The key is a `(Flow, unit)`
-pair, and a `Flow` keeps its location and year, so emissions at different places or times
+pair (the unit is a vocabulary IRI; `symbol` prints it the way a person reads it), and a
+`Flow` keeps its location and time, so emissions at different places or times
 stay apart.
 
 ## 6. Look at what is missing
@@ -131,7 +139,7 @@ inventory. They are not silently zero. They are listed:
 
 ```python
 for record in report.unresolved:
-    print(f"{record.reason}: {record.demand.amount:.1f} {record.demand.unit} "
+    print(f"{record.reason}: {record.demand.amount:.1f} {symbol(record.demand.unit)} "
           f"of {record.demand.flow.iri}")
 ```
 
@@ -162,7 +170,7 @@ for node_id, provenance in report.provenance.items():
 
 ```text
 0 {'location_requested': 'CH', 'location_used': 'CH', 'location_fallback': False,
-   'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
+   'time_requested': '2030', 'time_used': '2030', 'time_interpolated': False}
 ```
 
 Ask for a year that is not in the table, say 2025 against rows for 2020 and 2030, and

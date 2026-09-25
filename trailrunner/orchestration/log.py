@@ -7,8 +7,9 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from trailrunner.core.flow import Demand
+from trailrunner.core.flow import Demand, Flow
 from trailrunner.core.result import Result
+from trailrunner.core.time import interval
 
 LOG_SCHEMA = pa.schema(
     [
@@ -26,12 +27,20 @@ LOG_SCHEMA = pa.schema(
         ("depth", pa.int64()),
         ("demand_iri", pa.string()),
         ("demand_location", pa.string()),
-        ("demand_time", pa.int64()),
+        ("demand_time", pa.string()),
+        ("demand_time_standard", pa.string()),
+        ("demand_time_start", pa.timestamp("us", tz="UTC")),
+        ("demand_time_end", pa.timestamp("us", tz="UTC")),
+        ("demand_context", pa.string()),
         ("demand_amount", pa.float64()),
         ("demand_unit", pa.string()),
         ("flow_iri", pa.string()),
         ("flow_location", pa.string()),
-        ("flow_time", pa.int64()),
+        ("flow_time", pa.string()),
+        ("flow_time_standard", pa.string()),
+        ("flow_time_start", pa.timestamp("us", tz="UTC")),
+        ("flow_time_end", pa.timestamp("us", tz="UTC")),
+        ("flow_context", pa.string()),
         ("amount", pa.float64()),
         ("unit", pa.string()),
         ("reason", pa.string()),
@@ -107,6 +116,25 @@ class UnresolvedRecord:
 class EdgeRecord:
     parent: int
     child: int
+
+
+def _identity(prefix: str, flow: Flow) -> dict:
+    """Time as written, its standard, its interval, and the context: a node's whole identity.
+
+    The interval is there so the file can be filtered by date without
+    re-implementing the time standards; the context so that two nodes for gas
+    at different pressures are not two identical rows.
+    """
+    start = end = None
+    if flow.time is not None:
+        start, end = interval(flow.time, flow.time_standard)
+    return {
+        f"{prefix}_time": flow.time,
+        f"{prefix}_time_standard": flow.time_standard,
+        f"{prefix}_time_start": start,
+        f"{prefix}_time_end": end,
+        f"{prefix}_context": flow.describe_context() or None,
+    }
 
 
 def _flatten(base: dict, kind: str, record: dict) -> list[dict]:
@@ -230,7 +258,7 @@ class Log:
                 "depth": node.depth,
                 "demand_iri": node.demand.flow.iri,
                 "demand_location": node.demand.flow.location,
-                "demand_time": node.demand.flow.time,
+                **_identity("demand", node.demand.flow),
                 "demand_amount": node.demand.amount,
                 "demand_unit": node.demand.unit,
                 "model": node.model,
@@ -242,7 +270,7 @@ class Log:
                         "kind": "biosphere",
                         "flow_iri": exchange.flow.iri,
                         "flow_location": exchange.flow.location,
-                        "flow_time": exchange.flow.time,
+                        **_identity("flow", exchange.flow),
                         "amount": exchange.amount,
                         "unit": exchange.unit,
                     }
@@ -277,7 +305,7 @@ class Log:
                     "depth": record.depth,
                     "demand_iri": record.demand.flow.iri,
                     "demand_location": record.demand.flow.location,
-                    "demand_time": record.demand.flow.time,
+                    **_identity("demand", record.demand.flow),
                     "demand_amount": record.demand.amount,
                     "demand_unit": record.demand.unit,
                     "reason": record.reason,

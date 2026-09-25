@@ -10,10 +10,12 @@ from typing import Any
 
 import pyarrow.parquet as pq
 
-from trailrunner.core.errors import MissingUnit, ParameterNotFound
+from trailrunner.core.errors import MissingTimeStandard, MissingUnit, ParameterNotFound
+from trailrunner.core.time import GYEAR, contains, interval, midpoint_year
 from trailrunner.params.location import LocationHierarchy
 
 DATAPACKAGE_KEY = b"datapackage.json"
+TIME_STANDARD_KEY = "timeStandard"
 
 _REQUIRED = object()
 """Sentinel: ``unit_of`` raises unless the caller passes an explicit default."""
@@ -99,14 +101,31 @@ def _read_field_metadata(schema) -> tuple[dict[str, str], dict[str, str]]:
     return units, iris
 
 
+def read_time_standards(schema) -> dict[str, str]:
+    """Per-column time standards (``"timeStandard"`` on a field) from the datapackage."""
+    raw = (schema.metadata or {}).get(DATAPACKAGE_KEY)
+    if raw is None:
+        return {}
+    standards = {}
+    for resource in json.loads(raw.decode("utf-8")).get("resources", []):
+        container = resource.get("schema") or resource
+        for field in container.get("fields", []):
+            if field.get("name") and field.get(TIME_STANDARD_KEY):
+                standards[field["name"]] = field[TIME_STANDARD_KEY]
+    return standards
+
+
 class ParameterSet:
     """Row lookup by location and time, widening until something matches.
 
     Resolution order: exact ``(location, time)``; then the location hierarchy;
-    then linear interpolation between bracketing years. Every widening step is
-    written into the returned row's ``provenance`` so the report can state
-    which parameters were actually used. Nothing is substituted silently, and
-    nothing is extrapolated beyond the data.
+    then linear interpolation between the bracketing rows, placed at their
+    periods' midpoints in decimal years (so year rows interpolate exactly as
+    integer years did). A row whose period contains the asked time answers it
+    directly. Every widening step is written into the returned row's
+    ``provenance`` so the report can state which parameters were actually
+    used. Nothing is substituted silently, and nothing is extrapolated beyond
+    the data.
     """
 
     def __init__(
@@ -118,8 +137,30 @@ class ParameterSet:
         location_column: str = "location",
         time_column: str = "time",
         source: str | None = None,
+        time_standard: str | None = None,
     ) -> None:
         self._rows = [dict(row) for row in rows]
+        self._time_standard = time_standard
+        dated = [row for row in self._rows if row.get(time_column) is not None]
+        if dated and time_standard is None:
+            raise MissingTimeStandard(
+                f"{source or 'these rows'} carry times in {time_column!r} but no time "
+                f"standard; declare one (e.g. {GYEAR})"
+            )
+        # Parsed once here, not mid-traversal: a bad row fails immediately,
+        # with the file and column named, and every later lookup
+        # (_row_for_time) reuses the result instead of re-parsing it.
+        self._intervals: dict[int, Any] = {}
+        for row in dated:
+            value = row[time_column]
+            try:
+                self._intervals[id(row)] = interval(value, time_standard)
+            except ValueError as error:
+                raise ValueError(
+                    f"{source or 'these rows'}: column {time_column!r} has {value!r} "
+                    f"({error}); times are strings in the declared standard, e.g. "
+                    "'2030' — cast the column to string"
+                ) from None
         self._units = dict(units or {})
         self._iris = dict(iris or {})
         self._hierarchy = hierarchy or LocationHierarchy()
@@ -137,6 +178,14 @@ class ParameterSet:
     ) -> "ParameterSet":
         table = pq.read_table(path)
         units, iris = _read_field_metadata(table.schema)
+        standard = read_time_standards(table.schema).get(time_column)
+        if time_column in table.schema.names and standard is None:
+            raise MissingTimeStandard(
+                f"column {time_column!r} in {path} declares no time standard; add "
+                f'"timeStandard": "{GYEAR}" (or another registered standard) to its '
+                "field in the embedded datapackage, and make sure the column holds "
+                "strings (e.g. '2030'), not integers"
+            )
         return cls(
             table.to_pylist(),
             units=units,
@@ -145,14 +194,27 @@ class ParameterSet:
             location_column=location_column,
             time_column=time_column,
             source=str(path),
+            time_standard=standard,
         )
 
-    def at(self, location: str | None = None, time: int | None = None) -> ParameterRow:
+    def at(
+        self,
+        location: str | None = None,
+        time: str | None = None,
+        time_standard: str | None = None,
+    ) -> ParameterRow:
+        if time is not None and not isinstance(time, str):
+            raise TypeError(
+                f"ParameterSet.at(time=...) takes a string in a standard, not {time!r}; "
+                f"write params.at(location=..., **in_year({time})) or **when(demand.flow)"
+            )
+        if (time is None) != (time_standard is None):
+            raise ValueError("time and time_standard are passed together or not at all")
         for candidate in self._hierarchy.chain(location):
             rows = self._rows_for_location(candidate)
             if not rows:
                 continue
-            resolved = self._row_for_time(rows, time)
+            resolved = self._row_for_time(rows, time, time_standard)
             if resolved is None:
                 continue
             values, time_provenance = resolved
@@ -183,6 +245,7 @@ class ParameterSet:
             )
         raise ParameterNotFound(
             f"no parameter row for location={location!r} time={time!r} "
+            f"time_standard={time_standard!r} "
             f"(tried {self._hierarchy.chain(location)})"
         )
 
@@ -192,37 +255,39 @@ class ParameterSet:
         return [row for row in self._rows if row.get(self._location_column) == candidate]
 
     def _row_for_time(
-        self, rows: list[dict[str, Any]], time: int | None
+        self, rows: list[dict[str, Any]], time: str | None, standard: str | None
     ) -> tuple[dict[str, Any], dict[str, Any]] | None:
         if time is None:
             first = rows[0]
             return first, {"time_used": first.get(self._time_column), "time_interpolated": False}
 
-        exact = [row for row in rows if row.get(self._time_column) == time]
-        if exact:
-            return exact[0], {"time_used": time, "time_interpolated": False}
+        asked = interval(time, standard)
+        dated = [row for row in rows if row.get(self._time_column) is not None]
+        for row in dated:
+            if contains(self._intervals[id(row)], asked):
+                return row, {"time_used": row[self._time_column], "time_interpolated": False}
 
-        below = [r for r in rows if isinstance(r.get(self._time_column), Real) and r[self._time_column] < time]
-        above = [r for r in rows if isinstance(r.get(self._time_column), Real) and r[self._time_column] > time]
+        here = midpoint_year(asked)
+        placed = [(midpoint_year(self._intervals[id(row)]), row) for row in dated]
+        below = [pair for pair in placed if pair[0] < here]
+        above = [pair for pair in placed if pair[0] > here]
         if not below or not above:
             return None
-
-        lower = max(below, key=lambda r: r[self._time_column])
-        upper = min(above, key=lambda r: r[self._time_column])
+        lower = max(below, key=lambda pair: pair[0])
+        upper = min(above, key=lambda pair: pair[0])
+        fraction = (here - lower[0]) / (upper[0] - lower[0])
         return (
-            self._interpolate(lower, upper, time),
+            self._interpolate(lower[1], upper[1], time, fraction),
             {
                 "time_used": time,
                 "time_interpolated": True,
-                "time_bracket": (lower[self._time_column], upper[self._time_column]),
+                "time_bracket": (lower[1][self._time_column], upper[1][self._time_column]),
             },
         )
 
     def _interpolate(
-        self, lower: dict[str, Any], upper: dict[str, Any], time: int
+        self, lower: dict[str, Any], upper: dict[str, Any], time: str, fraction: float
     ) -> dict[str, Any]:
-        span = upper[self._time_column] - lower[self._time_column]
-        fraction = (time - lower[self._time_column]) / span
         interpolated = dict(lower)
         for column, low_value in lower.items():
             if column == self._time_column:

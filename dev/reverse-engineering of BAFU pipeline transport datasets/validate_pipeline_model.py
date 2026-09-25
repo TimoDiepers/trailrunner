@@ -9,12 +9,14 @@ values this model is trying to explain.
 import csv
 from pathlib import Path
 
-from trailrunner.core.flow import Demand, Flow
+from trailrunner.core.flow import Demand, Flow, Property
+from trailrunner.core.units import KILOMETRE, TONNE
 from trailrunner.params.parameter_set import ParameterSet
 
 from trailrunner.models.natural_gas_pipeline_transport import (
     BUTANE,
     CARBON_DIOXIDE_FOSSIL,
+    DISTANCE,
     DOCUMENTED_LOCATIONS,
     ETHANE,
     FREIGHT_LORRY,
@@ -85,7 +87,11 @@ def run_model():
     model = NaturalGasOffshorePipelineTransport(params=params)
     results = {}
     for loc in ALL_LOCATIONS:
-        demand = Demand(flow=Flow(iri=TRANSPORT, location=loc, time=2025), amount=1.0, unit="tkm")
+        demand = Demand(
+            flow=Flow(iri=TRANSPORT, location=loc, time=2025, context=(Property(DISTANCE, 1.0, KILOMETRE),)),
+            amount=1.0,
+            unit=TONNE,
+        )
         result = model.apply(demand)
         by_iri = {e.flow.iri: e.amount for e in result.technosphere}
         by_iri.update({e.flow.iri: e.amount for e in result.biosphere})

@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from trailrunner.core.flow import Demand
 from trailrunner.core.settings import Settings
+from trailrunner.core.units import UnitCatalog
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.log import ATTRIBUTION_KEY, Log
 from trailrunner.orchestration.queue import Queue, QueueItem
@@ -35,13 +36,14 @@ class Orchestrator:
         max_nodes: int = 1000,
         priority: Callable[[Demand], float] | None = None,
         settings: Settings | None = None,
+        units: UnitCatalog | None = None,
     ) -> None:
         # A bare Glossary is still a valid argument: it is the one-tier chain,
         # and every v1 caller passes one.
         self.chain = (
             resolver
             if isinstance(resolver, ResolutionChain)
-            else ResolutionChain([ModelProvider(resolver)])
+            else ResolutionChain([ModelProvider(resolver, units=units)])
         )
         self.glossary = self.chain.glossary
         # self.glossary can be None here (a chain with no ModelProvider). That
@@ -49,7 +51,11 @@ class Orchestrator:
         # model=offer.model into runner.apply below, so the Runner never
         # consults its own glossary.
         self.settings = settings if settings is not None else Settings()
-        self.runner = runner if runner is not None else Runner(self.glossary, settings=self.settings)
+        self.runner = (
+            runner
+            if runner is not None
+            else Runner(self.glossary, settings=self.settings, units=units)
+        )
         self.max_depth = max_depth
         self.max_nodes = max_nodes
         self.priority = priority

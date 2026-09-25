@@ -9,6 +9,8 @@ from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import BackgroundPack, BackgroundProvider
 from trailrunner.resolution.chain import ResolutionChain
+from trailrunner.core.units import KG, TONNE
+from trailrunner.core.time import in_year
 
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 STEEL = "https://vocab.sentier.dev/products/steel"
@@ -24,21 +26,21 @@ def pack_file(tmp_path):
         # A unit-process row: only the direct exchanges of "natural gas, at
         # consumer" are known here, so its own upstream (extraction,
         # processing, pipeline) is missing from the inventory.
-        {"product_iri": GAS, "product_unit": "kg", "location": "GLO",
+        {"product_iri": GAS, "product_unit": KG, "location": "GLO",
          "dataset": "natural gas, at consumer", "source": "ede67f01-b29c-3537-8678-5c36efd1bad2",
-         "basis": "unit_process", "flow_iri": CO2, "flow_unit": "kg", "amount": 0.4},
-        {"product_iri": GAS, "product_unit": "kg", "location": "GLO",
+         "basis": "unit_process", "flow_iri": CO2, "flow_unit": KG, "amount": 0.4},
+        {"product_iri": GAS, "product_unit": KG, "location": "GLO",
          "dataset": "natural gas, at consumer", "source": "ede67f01-b29c-3537-8678-5c36efd1bad2",
-         "basis": "unit_process", "flow_iri": CH4, "flow_unit": "kg", "amount": 0.01},
-        {"product_iri": STEEL, "product_unit": "kg", "location": "RER",
+         "basis": "unit_process", "flow_iri": CH4, "flow_unit": KG, "amount": 0.01},
+        {"product_iri": STEEL, "product_unit": KG, "location": "RER",
          "dataset": "steel, low-alloyed", "source": "b9430f24-d0b9-3422-a5ad-f874acbbef18",
-         "basis": "unit_process", "flow_iri": CO2, "flow_unit": "kg", "amount": 1.9},
+         "basis": "unit_process", "flow_iri": CO2, "flow_unit": KG, "amount": 1.9},
         # A cumulative row: this one behaves as though it came from
         # ``lca.inventory`` -- the whole upstream is already in these
         # exchanges, so the subtree is honestly complete.
-        {"product_iri": CLINKER, "product_unit": "kg", "location": "GLO",
+        {"product_iri": CLINKER, "product_unit": KG, "location": "GLO",
          "dataset": "clinker, at plant (cumulative)", "source": "137152eb-d111-382a-9eae-3e592047418d",
-         "basis": "cumulative", "flow_iri": CO2, "flow_unit": "kg", "amount": 0.85},
+         "basis": "cumulative", "flow_iri": CO2, "flow_unit": KG, "amount": 0.85},
     ]
     pq.write_table(pa.Table.from_pylist(rows), path)
     return path
@@ -49,13 +51,13 @@ def provider(path, hierarchy=None):
 
 
 def test_a_pack_row_answers_the_demand(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit=KG)
     offer = provider(pack_file).offer(demand)
     assert offer.tier == "background"
 
 
 def test_biosphere_scales_linearly_with_the_demand(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit=KG)
     offer = provider(pack_file).offer(demand)
     result = offer.model.apply(demand)
     amounts = {exchange.flow.iri: exchange.amount for exchange in result.biosphere}
@@ -64,7 +66,7 @@ def test_biosphere_scales_linearly_with_the_demand(pack_file):
 
 
 def test_the_result_produces_the_demanded_flow_and_terminates(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit=KG)
     result = provider(pack_file).offer(demand).model.apply(demand)
     assert result.production[0].flow == demand.flow
     assert result.production[0].amount == 10.0
@@ -72,7 +74,7 @@ def test_the_result_produces_the_demanded_flow_and_terminates(pack_file):
 
 
 def test_the_borrowed_subtree_says_it_is_matrix_lca(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit=KG)
     offer = provider(pack_file).offer(demand)
     assert offer.resolution["tier"] == "background"
     assert offer.resolution["kind"] == "linear_background"
@@ -80,37 +82,37 @@ def test_the_borrowed_subtree_says_it_is_matrix_lca(pack_file):
 
 
 def test_the_biosphere_flows_carry_the_demands_time(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO", time=2030), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO", **in_year(2030)), amount=1.0, unit=KG)
     result = provider(pack_file).offer(demand).model.apply(demand)
-    assert all(exchange.flow.time == 2030 for exchange in result.biosphere)
+    assert all(exchange.flow.time == "2030" for exchange in result.biosphere)
 
 
 def test_location_falls_back_up_the_hierarchy(pack_file):
-    demand = Demand(flow=Flow(iri=STEEL, location="CH"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=STEEL, location="CH"), amount=1.0, unit=KG)
     offer = provider(pack_file, LocationHierarchy({"CH": "RER", "RER": "GLO"})).offer(demand)
     assert offer.resolution["location_used"] == "RER"
 
 
 def test_a_product_not_in_the_pack_is_declined(pack_file):
     demand = Demand(flow=Flow(iri="https://vocab.sentier.dev/products/unobtainium"),
-                    amount=1.0, unit="kg")
+                    amount=1.0, unit=KG)
     assert provider(pack_file).offer(demand) is None
 
 
 def test_a_different_unit_is_declined(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="tonne")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=TONNE)
     assert provider(pack_file).offer(demand) is None
 
 
 def test_the_background_tier_never_explains(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
     assert provider(pack_file).explain(demand) is None
 
 
 def test_a_unit_process_row_is_flagged_incomplete(pack_file):
     """A unit-process borrow has no matrix behind it: the biosphere shown is
     only the dataset's own direct exchanges, so its upstream is missing."""
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
     offer = provider(pack_file).offer(demand)
     assert offer.resolution["basis"] == "unit_process"
     assert offer.resolution["complete"] is False
@@ -119,14 +121,14 @@ def test_a_unit_process_row_is_flagged_incomplete(pack_file):
 def test_a_cumulative_row_is_flagged_complete(pack_file):
     """A cumulative borrow is the whole upstream already, exactly what a
     Brightway-backed provider would hand back from ``lca.inventory``."""
-    demand = Demand(flow=Flow(iri=CLINKER, location="GLO"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=CLINKER, location="GLO"), amount=1.0, unit=KG)
     offer = provider(pack_file).offer(demand)
     assert offer.resolution["basis"] == "cumulative"
     assert offer.resolution["complete"] is True
 
 
 def test_the_source_dataset_is_traceable_in_the_resolution(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
     offer = provider(pack_file).offer(demand)
     assert offer.resolution["source"] == "ede67f01-b29c-3537-8678-5c36efd1bad2"
 
@@ -135,8 +137,8 @@ def test_both_bases_terminate_with_no_technosphere_children(pack_file):
     """Complete or not, a borrowed subtree never pushes further demands: a
     unit-process row has no matrix to resolve its inputs with, and a
     cumulative row has already netted them into its biosphere."""
-    unit_process_demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit="kg")
-    cumulative_demand = Demand(flow=Flow(iri=CLINKER, location="GLO"), amount=1.0, unit="kg")
+    unit_process_demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=1.0, unit=KG)
+    cumulative_demand = Demand(flow=Flow(iri=CLINKER, location="GLO"), amount=1.0, unit=KG)
     provider_ = provider(pack_file)
     assert provider_.offer(unit_process_demand).model.apply(unit_process_demand).technosphere == []
     assert provider_.offer(cumulative_demand).model.apply(cumulative_demand).technosphere == []
@@ -144,9 +146,9 @@ def test_both_bases_terminate_with_no_technosphere_children(pack_file):
 
 def _row(**overrides):
     row = {
-        "product_iri": GAS, "product_unit": "kg", "location": "GLO",
+        "product_iri": GAS, "product_unit": KG, "location": "GLO",
         "dataset": "natural gas, at consumer", "source": "ede67f01",
-        "basis": "unit_process", "flow_iri": CO2, "flow_unit": "kg", "amount": 0.4,
+        "basis": "unit_process", "flow_iri": CO2, "flow_unit": KG, "amount": 0.4,
     }
     row.update(overrides)
     return row
@@ -183,7 +185,7 @@ def test_the_same_dataset_at_two_locations_is_not_a_duplicate(tmp_path):
         _row(location="CH"),
     ])
     pack = BackgroundPack.from_parquet(path)
-    demand = Demand(flow=Flow(iri=GAS, location="CH"), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="CH"), amount=1.0, unit=KG)
     assert pack.lookup(demand) is not None
 
 
@@ -199,7 +201,7 @@ def test_an_unknown_basis_is_refused_on_load(tmp_path):
 def test_every_background_resolution_speaks_the_shared_vocabulary(pack_file):
     """``tier``, ``model``, ``asked`` and ``answered`` mean here what they
     mean in tiers 1 and 2 -- tier 3 used to carry no ``model`` at all."""
-    demand = Demand(flow=Flow(iri=GAS, location="GLO", time=2030), amount=1.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO", **in_year(2030)), amount=1.0, unit=KG)
     resolution = provider(pack_file).offer(demand).resolution
     assert resolution["tier"] == "background"
     assert resolution["model"] == "BackgroundDataset"
@@ -215,13 +217,13 @@ def test_a_borrowed_row_is_compatible_with_every_allocation_rule(pack_file):
     that into a refusal: any run under any other rule died at the first
     borrowed node, on the very grounds that make the borrow compatible.
     """
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit=KG)
     model = provider(pack_file).offer(demand).model
     assert model.supports == ALLOCATION_RULES
 
 
 def test_a_borrowed_row_traverses_under_a_partitioning_rule(pack_file):
-    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit="kg")
+    demand = Demand(flow=Flow(iri=GAS, location="GLO"), amount=10.0, unit=KG)
     settings = Settings(attribution=AttributionSettings(allocation="economic"))
     chain = ResolutionChain([BackgroundProvider(BackgroundPack.from_parquet(pack_file))])
     report = Orchestrator(chain, settings=settings).calculate(demand)

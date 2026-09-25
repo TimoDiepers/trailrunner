@@ -7,11 +7,13 @@ from trailrunner.core.result import Result
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import Coverage
 from trailrunner.resolution import ModelProvider, Offer, ResolutionChain
+from trailrunner.core.units import KG, MJ
+from trailrunner.core.time import in_year, year_range
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
 
-DEMAND = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit="MJ")
+DEMAND = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=10.0, unit=MJ)
 
 
 class Boiler(Model):
@@ -44,7 +46,7 @@ def test_model_provider_offers_an_exact_match():
 
 
 def test_model_provider_declines_what_it_does_not_produce():
-    gas_demand = Demand(flow=Flow(iri=GAS), amount=1.0, unit="kg")
+    gas_demand = Demand(flow=Flow(iri=GAS), amount=1.0, unit=KG)
     assert ModelProvider(Glossary([Boiler()])).offer(gas_demand) is None
 
 
@@ -73,7 +75,7 @@ def test_chain_returns_none_when_every_tier_declines():
 def test_explain_reports_a_coverage_miss_from_tier_one():
     class Dated(Model):
         produces = [HEAT]
-        coverage = Coverage(time_range=(2040, 2050))
+        coverage = Coverage(time_range=year_range(2040, 2050))
 
         def apply(self, demand):
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -160,7 +162,7 @@ def test_no_model_found_is_reachable_with_a_generalising_tier_in_the_chain():
     unmodelled = Demand(
         flow=Flow(iri="https://vocab.sentier.dev/products/unobtainium"),
         amount=1.0,
-        unit="kg",
+        unit=KG,
     )
     assert chain.offer(unmodelled) is None
     reason, _detail = chain.explain(unmodelled)

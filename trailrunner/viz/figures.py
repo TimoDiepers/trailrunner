@@ -10,6 +10,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from trailrunner.core.units import symbol
+
 # Colour by tier, not by magnitude: a reader needs to see which parts of the
 # chain were modelled and which were borrowed before they look at any number.
 TIER_COLOURS = {
@@ -138,7 +140,7 @@ def curve(dynamic):
         go.Scatter(
             x=dynamic.curve["date"],
             y=dynamic.curve["amount"],
-            name=f"cumulative ({dynamic.cumulative_unit})",
+            name=f"cumulative ({symbol(dynamic.cumulative_unit)})",
             mode="lines",
             yaxis="y2",
         )
@@ -147,13 +149,15 @@ def curve(dynamic):
     # dimensions: W/m2 in a year against W*yr/m2 accumulated. One axis for both
     # is the mislabel this phase's predecessor had to fix.
     figure.update_layout(
-        yaxis2=dict(overlaying="y", side="right", title=dict(text=dynamic.cumulative_unit))
+        yaxis2=dict(
+            overlaying="y", side="right", title=dict(text=symbol(dynamic.cumulative_unit))
+        )
     )
     _layout(
         figure,
         f"{dynamic.metric} over {dynamic.horizon} years",
         xaxis="year",
-        yaxis=dynamic.unit,
+        yaxis=symbol(dynamic.unit),
     )
     return figure
 
@@ -193,7 +197,7 @@ def contributions(
     pairs.sort(key=lambda pair: abs(pair[1]), reverse=True)
     pairs = pairs[:top]
     figure = go.Figure(go.Bar(x=[name for name, _ in pairs], y=[value for _, value in pairs]))
-    _layout(figure, f"Contributions by {axis}", xaxis=axis, yaxis=assessment.unit)
+    _layout(figure, f"Contributions by {axis}", xaxis=axis, yaxis=symbol(assessment.unit))
     return figure
 
 

@@ -10,6 +10,7 @@ from trailrunner.orchestration.report import Report  # noqa: E402
 from trailrunner.viz import contributions, sankey, save  # noqa: E402
 
 from .conftest import CO2_IRI  # noqa: E402
+from trailrunner.core.units import KG, MJ
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
@@ -17,21 +18,21 @@ HEAT = "https://vocab.sentier.dev/products/heat"
 
 def two_level_report() -> Report:
     log = Log()
-    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
-    heat_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit="MJ")
+    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit=KG)
+    heat_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit=MJ)
     root = log.write(
         root_demand,
         Result(
-            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit="kg")],
+            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit=KG)],
             technosphere=[heat_demand],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit=KG)],
         ),
         model="DirectAirCapture",
         resolution={"tier": "model", "model": "DirectAirCapture"},
     )
     log.write(
         heat_demand,
-        Result(production=[Exchange(flow=heat_demand.flow, amount=5000.0, unit="MJ")]),
+        Result(production=[Exchange(flow=heat_demand.flow, amount=5000.0, unit=MJ)]),
         depth=1,
         parent=root,
         model="GasBoiler",

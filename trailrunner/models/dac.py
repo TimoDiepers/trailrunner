@@ -13,13 +13,15 @@ plant was actually built** — so the construction inputs land in their own year
 and, once a model answers them, meet whatever background those years carry.
 """
 
-from trailrunner.attribution import amortize
+from trailrunner.attribution import amortize, output_over_a_year
 from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
 from trailrunner.params.fleet import Fleet
+from trailrunner.core.time import in_year, when, year_of, year_range
+from trailrunner.core.units import KG
 
 # Real BONSAI vocabulary concepts (verified live against
 # https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
@@ -74,7 +76,7 @@ class DirectAirCapture(Model):
     """
 
     produces = [CO2_CAPTURED]
-    coverage = Coverage(time_range=(2020, 2050))
+    coverage = Coverage(time_range=year_range(2020, 2050), units=frozenset({KG}))
     fleet: Fleet | None = None
 
     supports = ALLOCATION_RULES
@@ -94,12 +96,12 @@ class DirectAirCapture(Model):
             self.fleet = fleet
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         penalty = ambient_penalty(row["temperature"], row["humidity"])
 
         heat = row["heat_demand"] * penalty * demand.amount
         electricity = row["electricity_demand"] * penalty * demand.amount
-        upstream = Flow(iri=HEAT, location=demand.flow.location, time=demand.flow.time)
+        upstream = Flow(iri=HEAT, location=demand.flow.location, **when(demand.flow))
 
         construction, fleet_provenance = self._construction(demand)
 
@@ -113,7 +115,7 @@ class DirectAirCapture(Model):
                     flow=Flow(
                         iri=ELECTRICITY,
                         location=demand.flow.location,
-                        time=demand.flow.time,
+                        **when(demand.flow),
                     ),
                     amount=electricity,
                     unit=row.unit_of("electricity_demand"),
@@ -125,7 +127,7 @@ class DirectAirCapture(Model):
                     flow=Flow(
                         iri=CO2_AIR,
                         location=demand.flow.location,
-                        time=demand.flow.time,
+                        **when(demand.flow),
                     ),
                     amount=-demand.amount,
                     unit=demand.unit,
@@ -138,7 +140,8 @@ class DirectAirCapture(Model):
         """One construction demand per operating plant, in that plant's build year.
 
         The demanded capture is what decides how much of the fleet is claimed:
-        ``share_of_fleet = amount / total_capacity``. Each plant carries that
+        ``share_of_fleet = amount / total_output``, where ``total_output`` is the
+        fleet's capacity over one year, converted into the demand's unit. Each plant carries that
         share of its own capacity — ``capacity_i * share_of_fleet`` — as the
         ``demanded_output`` handed to :func:`amortize`, which spreads the
         plant's capital (its own capacity, standing in for what it took to
@@ -146,10 +149,11 @@ class DirectAirCapture(Model):
         ``self.settings.attribution.capital``. Under the default rule,
         ``per_output``, this reduces to::
 
-            construction_i = amount * capacity_i / (total_capacity * lifetime_i)
+            construction_i = capacity_i * amount / (total_output * lifetime_i)
 
-        which, with one lifetime across the fleet, sums to ``amount /
-        lifetime`` — one lifetime's worth of capture buys one fleet.
+        which, with one lifetime across the fleet, sums to the capacity that
+        makes ``amount / lifetime`` a year — one lifetime's worth of capture
+        buys one fleet.
 
         Under ``first_life`` the answer is zero for every plant whose build
         year is not the demanded year, so a study year with no construction in
@@ -162,26 +166,36 @@ class DirectAirCapture(Model):
             return [], {}
 
         selection = self.fleet.operating(
-            location=demand.flow.location, time=demand.flow.time
+            location=demand.flow.location, time=year_of(demand.flow)
         )
         capacity_column = self.fleet.capacity_column
         lifetime_column = self.fleet.lifetime_column
         unit = selection.unit_of(capacity_column)
         rule = self.settings.attribution.capital
 
+        # Capacity is a rate in its own unit (t/yr); the demand is an amount
+        # (kg). Each plant's year of output, in the demand's unit, is what the
+        # demand is a share of. The fleet's own total_capacity stays in the
+        # capacity unit; the conversion happens here, in the model.
+        annual = [
+            output_over_a_year(float(plant[capacity_column]), unit, demand.unit)
+            for plant in selection.plants
+        ]
+        total_output = sum(annual)
+
         construction = []
-        for plant in selection.plants:
+        for plant, annual_output in zip(selection.plants, annual):
             capacity = float(plant[capacity_column])
             lifetime = float(plant[lifetime_column])
             build_year = int(plant["build_year"])
             amount = amortize(
-                capacity,
+                capacity,  # the capital, in the capacity unit the demand is made in
                 rule=rule,
-                demanded_output=capacity * demand.amount / selection.total_capacity,
-                annual_output=capacity,
-                lifetime_output=capacity * lifetime,
+                demanded_output=annual_output * demand.amount / total_output,
+                annual_output=annual_output,
+                lifetime_output=annual_output * lifetime,
                 lifetime_years=lifetime,
-                demand_year=demand.flow.time,
+                demand_year=year_of(demand.flow),
                 build_year=build_year,
             )
             construction.append(
@@ -192,7 +206,7 @@ class DirectAirCapture(Model):
                     flow=Flow(
                         iri=DAC_PLANT,
                         location=plant.get("location", demand.flow.location),
-                        time=build_year,
+                        **in_year(build_year),
                     ),
                     amount=amount,
                     unit=unit,
@@ -201,7 +215,7 @@ class DirectAirCapture(Model):
 
         provenance = {
             **selection.provenance,
-            "share_of_fleet": demand.amount / selection.total_capacity,
+            "share_of_fleet": demand.amount / total_output,
             "capital_rule": rule,
         }
         return construction, provenance

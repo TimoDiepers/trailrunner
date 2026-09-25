@@ -9,8 +9,11 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from trailrunner.core.flow import Demand, Flow
+from trailrunner.core.errors import TrailrunnerError, UnknownUnit
+from trailrunner.core.flow import Demand, Flow, Property
 from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
+from trailrunner.core.time import infer_standard, short
+from trailrunner.core.units import UnitCatalog, default_catalog, symbol
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, ResolutionChain
@@ -29,28 +32,51 @@ def load_models(path: Path) -> list:
     return list(models)
 
 
-def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, float]]:
-    """``["pressure=0:1"]`` -> ``{"pressure": (0.0, 1.0)}``: below, then above.
+def parse_context_tolerance(values: list[str] | None) -> dict[str, tuple[float, float, str]]:
+    """``["pressure=0:1e5 Pa"]`` -> ``{"pressure": (0.0, 1e5, PA)}``: below, above, unit.
 
-    A condition given twice is refused rather than the last one winning: two
+    The unit is resolved through ``default_catalog()``, so it may be written
+    as a symbol (``Pa``), a vocabulary id (``PA``) or the full IRI. A
+    condition given twice is refused rather than the last one winning: two
     tolerances for one condition is a typo, not a preference.
     """
-    tolerance: dict[str, tuple[float, float]] = {}
+    tolerance: dict[str, tuple[float, float, str]] = {}
     for value in values or []:
-        name, sep, bounds = value.partition("=")
+        name, sep, rest = value.partition("=")
+        bounds, _, unit_text = rest.partition(" ")
         below, colon, above = bounds.partition(":")
         if name in tolerance:
             raise ValueError(f"context tolerance for {name!r} is given more than once")
+        malformed = ValueError(
+            f"{value!r} is not a context tolerance; write NAME=BELOW:ABOVE UNIT, "
+            "e.g. pressure=0:1e5 Pa"
+        )
+        if not (name and sep and colon and unit_text):
+            raise malformed
         try:
-            if not (name and sep and colon):
-                raise ValueError
-            tolerance[name] = (float(below), float(above))
+            below_bound, above_bound = float(below), float(above)
         except ValueError:
-            raise ValueError(
-                f"{value!r} is not a context tolerance; write NAME=BELOW:ABOVE, "
-                "e.g. pressure=0:1"
-            ) from None
+            raise malformed from None
+        try:
+            unit = default_catalog().resolve(unit_text)
+        except UnknownUnit as exc:
+            raise ValueError(f"{value!r} is not a context tolerance: {exc}") from None
+        tolerance[name] = (below_bound, above_bound, unit)
     return tolerance
+
+
+def _condition(text: str, catalog: UnitCatalog) -> Property:
+    """``"pressure=4e5 Pa"`` -> ``Property("pressure", 400000.0, PA)``."""
+    name, separator, rest = text.partition("=")
+    parts = rest.split(None, 1)
+    malformed = ValueError(f'{text!r} is not a condition; write "NAME=VALUE UNIT", e.g. "pressure=4e5 Pa"')
+    if not separator or not name.strip() or len(parts) != 2:
+        raise malformed
+    try:
+        value = float(parts[0])
+    except ValueError:
+        raise malformed from None
+    return Property(name.strip(), value, catalog.resolve(parts[1].strip()))
 
 
 def parse_proxy_order(value: str | None) -> tuple[str | tuple[str, ...], ...]:
@@ -80,7 +106,8 @@ def undeclared_conditions(tolerance: dict, models: list) -> list[str]:
     """One message per tolerated condition that no model's coverage declares.
 
     Such a tolerance can never move anything, and the usual cause is writing
-    ``pressure`` where the models say ``http://qudt.org/vocab/quantitykind/Pressure``:
+    ``pressure`` where the models say
+    ``https://vocab.sentier.dev/units/quantity-kind/Pressure``:
     conditions match by exact name, so the run would quietly relax nothing.
     A warning, not an error, because a models file may legitimately not
     declare every condition a shared command line mentions.
@@ -115,9 +142,17 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="traverse a demand and report")
     run.add_argument("iri", help="product IRI to demand")
     run.add_argument("--amount", type=float, required=True)
-    run.add_argument("--unit", required=True)
+    run.add_argument("--unit", required=True, help="a unit IRI, vocabulary id (KiloGM) or symbol (kg)")
     run.add_argument("--location", default=None)
-    run.add_argument("--year", type=int, default=None)
+    run.add_argument("--time", default=None, help="2030, 2030-06, 2030-06-15 or 2030-06-15T08:00:00Z")
+    run.add_argument(
+        "--time-standard", default=None,
+        help="the IRI --time is written in; inferred from its form when omitted",
+    )
+    run.add_argument(
+        "--context", action="append", default=[], metavar="NAME=VALUE UNIT",
+        help='a condition on the demand, e.g. "pressure=4e5 Pa"; repeatable',
+    )
     run.add_argument("--models", required=True, help="a .py file exposing MODELS")
     run.add_argument("--method", default=None, help="a method parquet; prints a score")
     run.add_argument("--dynamic", default=None, help="a dynamic metric, e.g. radiative_forcing")
@@ -127,9 +162,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--context-tolerance",
         action="append",
-        metavar="NAME=BELOW:ABOVE",
+        metavar="NAME=BELOW:ABOVE UNIT",
         help="let a context condition be met this far below/above what was asked, "
-        "e.g. http://qudt.org/vocab/quantitykind/Pressure=0:1; repeatable",
+        "in the unit named (symbol, vocabulary id or IRI), e.g. "
+        '"https://vocab.sentier.dev/units/quantity-kind/Pressure=0:1e5 Pa"; repeatable',
     )
     run.add_argument(
         "--proxy-order",
@@ -173,11 +209,39 @@ def main(argv: list[str] | None = None) -> int:
     for warning in undeclared_conditions(context_tolerance, models):
         print(f"warning: {warning}", file=sys.stderr)
 
-    demand = Demand(
-        flow=Flow(iri=args.iri, location=args.location, time=args.year),
-        amount=args.amount,
-        unit=args.unit,
-    )
+    catalog = UnitCatalog()
+    try:
+        unit = catalog.resolve(args.unit)
+        standard = None
+        if args.time is not None:
+            standard = args.time_standard or infer_standard(args.time)
+        context = tuple(_condition(text, catalog) for text in args.context)
+        flow = Flow(
+            iri=args.iri, location=args.location,
+            time=args.time, time_standard=standard, context=context,
+        )
+    except (UnknownUnit, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if standard is not None:
+        # Inferred or not, the reading is printed: a time is never read silently.
+        print(f"time {args.time} read as {short(standard)}")
+    demand = Demand(flow=flow, amount=args.amount, unit=unit)
+
+    method = None
+    if args.method:
+        from trailrunner.assessment import Method
+
+        # Read before the run, so a method file naming a unit the vocabulary
+        # does not confirm (UnknownUnit) or a time with no standard
+        # (MissingTimeStandard) is a message and exit 2, not a traceback after
+        # the traversal has already been paid for.
+        try:
+            method = Method.from_parquet(args.method)
+        except TrailrunnerError as exc:
+            print(f"{args.method}: {exc}", file=sys.stderr)
+            return 2
+
     tier1 = ModelProvider(Glossary(models))
     providers = [tier1]
     if context_tolerance:
@@ -194,10 +258,10 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(report.tree())
 
-    if args.method:
-        from trailrunner.assessment import Method, assess
+    if method is not None:
+        from trailrunner.assessment import assess
 
-        assessment = assess(report, Method.from_parquet(args.method))
+        assessment = assess(report, method)
         print()
         print(assessment.summary())
 
@@ -210,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         # for radiative forcing those are different dimensions.
         print(
             f"{dynamic.metric} over {dynamic.horizon} years: "
-            f"{dynamic.total:g} {dynamic.cumulative_unit}"
+            f"{dynamic.total:g} {symbol(dynamic.cumulative_unit)}"
         )
         # The gaps travel with the number, the same way the static path's do.
         print(dynamic.summary())

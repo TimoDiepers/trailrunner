@@ -141,8 +141,13 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from trailrunner.core.units import KG, KWH, M3, MJ
+
 CORPUS = Path(__file__).parent / "BAFU ecospold" / "raw" / "ecoSpold files"
 OUT_PATH = Path(__file__).parent.parent / "examples" / "background_pack.parquet"
+
+ECOSPOLD_UNITS = {"kg": KG, "MJ": MJ, "kWh": KWH, "m3": M3}
+"""EcoSpold 1 unit strings -> vocabulary IRIs. A unit outside this map fails the build."""
 
 # EcoSpold exchange name -> (vocabulary IRI, expected unit). Only flows the
 # author is confident about; see the module docstring.
@@ -160,10 +165,9 @@ PRODUCTS = "https://vocab.sentier.dev/products/"
 # These match trailrunner/models/electricity.py's ELECTRICITY and
 # NATURAL_GAS constants -- the plain PRODUCTS + "electricity"/"natural-gas"
 # IRIs below were invented, not vocabulary concepts. Every other
-# ``PRODUCTS + "..."`` entry in DATASETS (hard-coal, copper,
-# transport-freight-rail, transport-natural-gas-pipeline-long-distance,
-# clinker, pig-iron, steel-low-alloyed, aluminium-primary) has not been
-# checked against the vocabulary and keeps its invented IRI unchanged.
+# ``PRODUCTS + "..."`` entry in DATASETS (hard-coal, copper, clinker,
+# pig-iron, steel-low-alloyed, aluminium-primary) has not been checked
+# against the vocabulary and keeps its invented IRI unchanged.
 BONSAI = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/"
 ELECTRICITY_IRI = BONSAI + "fi_17100"  # "electricity"
 NATURAL_GAS_IRI = BONSAI + "fi_12020"  # "Natural gas, liquefied or in the gaseous state"
@@ -213,18 +217,9 @@ DATASETS: list[dict[str, Any]] = [
         "expected_location": "RER",
         "product_iri": PRODUCTS + "copper",
     },
-    {
-        "file": "process_aacc6120-0e68-3835-8303-5ae37d62c030.xml",
-        "expected_name": "Transport, freight, rail",
-        "expected_location": "RER",
-        "product_iri": PRODUCTS + "transport-freight-rail",
-    },
-    {
-        "file": "process_a4273d5b-5258-343d-9462-8369960dc122.xml",
-        "expected_name": "Transport, natural gas, pipeline, long distance",
-        "expected_location": "RER",
-        "product_iri": PRODUCTS + "transport-natural-gas-pipeline-long-distance",
-    },
+    # transport-freight-rail and transport-natural-gas-pipeline-long-distance
+    # are not expressible with vocabulary units (no tonne-kilometre), and
+    # nothing demands them.
     {
         # Substitutes for "cement": the plain "Cement, unspecified, at
         # plant" dataset is checked below (see EXCLUDED) and turns out to be
@@ -480,13 +475,13 @@ def build_rows() -> tuple[list[dict[str, Any]], set[str], list[dict[str, str]]]:
             rows.append(
                 {
                     "product_iri": entry["product_iri"],
-                    "product_unit": identity["unit"],
+                    "product_unit": ECOSPOLD_UNITS[identity["unit"]],
                     "location": identity["location"],
                     "dataset": identity["name"],
                     "source": source,
                     "basis": "unit_process",
                     "flow_iri": flow_iri,
-                    "flow_unit": expected_unit,
+                    "flow_unit": ECOSPOLD_UNITS[expected_unit],
                     "amount": mean_value,
                 }
             )

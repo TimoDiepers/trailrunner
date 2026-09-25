@@ -65,6 +65,8 @@ from datetime import datetime
 from typing import Any
 
 from trailrunner.core.flow import Flow
+from trailrunner.core.time import interval
+from trailrunner.core.units import KG, W_PER_M2, symbol
 from trailrunner.orchestration.report import Report
 
 CO2_FOSSIL = "https://vocab.sentier.dev/flows/co2-fossil"
@@ -93,28 +95,32 @@ accepts them, not because this module wires them up.
 """
 
 METRIC_UNITS = {
-    "radiative_forcing": "W/m2",
-    "prospective_radiative_forcing": "W/m2",
-    "GWP": "kg CO2eq",
-    "pGWP": "kg CO2eq",
-    "pGTP": "kg CO2eq",
+    "radiative_forcing": W_PER_M2,
+    "prospective_radiative_forcing": W_PER_M2,
+    "GWP": KG,
+    "pGWP": KG,
+    "pGTP": KG,
 }
 """The unit of ``series`` — the *marginal* quantity, per year."""
 
 CUMULATIVE_METRIC_UNITS = {
+    # No vocabulary unit for W·yr/m2: a display label for a cumulative
+    # result, never an exchange unit, so it stays a label.
     "radiative_forcing": "W·yr/m2",
     "prospective_radiative_forcing": "W·yr/m2",
-    "GWP": "kg CO2eq",
-    "pGWP": "kg CO2eq",
-    "pGTP": "kg CO2eq",
+    "GWP": KG,
+    "pGWP": KG,
+    "pGTP": KG,
 }
 """The unit of ``curve`` and ``total`` — the cumulative sum of ``series``.
 
 For the radiative-forcing metrics that sum is an integral over time, so it is
 W·yr/m2 and not W/m2. For the GWP metrics the marginal series is already in
-kg CO2eq per year and its cumulative sum is kg CO2eq, so the two units
-coincide — which is exactly why a single ``unit`` field looked right for long
-enough to ship.
+kg of CO2-equivalent per year and its cumulative sum is kg of CO2-equivalent,
+so the two units coincide — which is exactly why a single ``unit`` field
+looked right for long enough to ship. The "CO2-equivalent" is what the GWP
+metric characterizes an emission into, not a property of the unit ``KG``
+itself; the unit is a plain kilogram, same as any mass.
 """
 
 
@@ -143,7 +149,9 @@ def default_functions() -> dict[tuple[str, str], Callable]:
     The unit is half the key because the IPCC AR6 functions are defined per
     kilogram (their radiative efficiencies are ``radiative_efficiency_kg``).
     Applying one to an amount denominated in anything else is not a rounding
-    error, it is a factor of 1000, so ``"kg"`` is stated rather than assumed.
+    error, it is a factor of 1000, so ``KG`` is stated rather than assumed.
+    The key matches on that IRI exactly and nothing is converted to reach
+    it, unlike static ``Method``, which tries a flow's other units too.
 
     **Two sign conventions meet in this table, so each removal flow is paired
     with the function that matches how it is written down.**
@@ -168,14 +176,14 @@ def default_functions() -> dict[tuple[str, str], Callable]:
     """
     ipcc = _require("dynamic_characterization.ipcc_ar6")
     return {
-        (CO2_FOSSIL, "kg"): ipcc.characterize_co2,
+        (CO2_FOSSIL, KG): ipcc.characterize_co2,
         # Negative-amount convention: see the docstring above.
-        (CO2_AIR, "kg"): ipcc.characterize_co2,
+        (CO2_AIR, KG): ipcc.characterize_co2,
         # Positive-amount convention: characterize_co2_uptake negates.
-        (CO2_BIOGENIC_UPTAKE, "kg"): ipcc.characterize_co2_uptake,
-        (CH4_FOSSIL, "kg"): ipcc.characterize_ch4,
-        (N2O, "kg"): ipcc.characterize_n2o,
-        (CO, "kg"): ipcc.characterize_co,
+        (CO2_BIOGENIC_UPTAKE, KG): ipcc.characterize_co2_uptake,
+        (CH4_FOSSIL, KG): ipcc.characterize_ch4,
+        (N2O, KG): ipcc.characterize_n2o,
+        (CO, KG): ipcc.characterize_co,
     }
 
 
@@ -264,7 +272,7 @@ class DynamicAssessment:
             else "none (no dated emission)"
         )
         lines = [
-            f"{self.total:g} {self.cumulative_unit}".strip(),
+            f"{self.total:g} {symbol(self.cumulative_unit)}".strip(),
             f"metric: {self.metric}, horizon: {self.horizon} years",
             f"horizon anchored at: {anchor}",
         ]
@@ -339,13 +347,21 @@ def _lost_exchanges(
     return lost
 
 
+def _date(flow: Flow) -> datetime:
+    """Where on the axis an exchange sits: the start of its period, as naive UTC.
+
+    A year becomes 1 January, exactly as when time was an int; a finer time
+    lands where it says.
+    """
+    return interval(flow.time, flow.time_standard)[0].replace(tzinfo=None)
+
+
 def inventory_dataframe(report: Report) -> Any:
     """The report's biosphere exchanges as the four columns the library wants.
 
-    ``Flow.time`` is a year and ``characterize`` wants a timestamp, so year Y
-    becomes ``datetime(Y, 1, 1)``. That is an assumption, not a fact — a finer
-    ``Flow.time`` would change it — and it lives in this one function so the
-    change would be one edit.
+    ``characterize`` wants a timestamp, so an exchange is placed at the start
+    of its period (``_date``): year Y becomes ``datetime(Y, 1, 1)`` as before,
+    and a finer ``Flow.time`` lands where it says.
 
     Exchanges with no ``flow.time`` are **silently left out**: there is no
     place on the axis to put them and this function returns a frame, not a
@@ -358,7 +374,7 @@ def inventory_dataframe(report: Report) -> Any:
     pandas = _require("pandas")
     rows = [
         {
-            "date": datetime(exchange.flow.time, 1, 1),
+            "date": _date(exchange.flow),
             "amount": exchange.amount,
             "flow": exchange.flow.iri,
             "activity": _activity(node),
@@ -469,7 +485,7 @@ def assess_dynamic(
                     "characterized in one call — assess them separately"
                 )
             used[exchange.flow.iri] = (exchange.unit, function)
-            date = datetime(exchange.flow.time, 1, 1)
+            date = _date(exchange.flow)
             entered.setdefault((exchange.flow.iri, activity), []).append((date, record))
             rows.append(
                 {

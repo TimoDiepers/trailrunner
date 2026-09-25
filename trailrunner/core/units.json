@@ -1,0 +1,21 @@
+{
+  "https://vocab.sentier.dev/units/unit/DEG_C": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Temperature", "symbol": "Cel"},
+  "https://vocab.sentier.dev/units/unit/GM": {"multiplier": 0.001, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Mass", "symbol": "g"},
+  "https://vocab.sentier.dev/units/unit/J": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Energy", "symbol": "J"},
+  "https://vocab.sentier.dev/units/unit/K": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Temperature", "symbol": "K"},
+  "https://vocab.sentier.dev/units/unit/KiloGM": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Mass", "symbol": "kg"},
+  "https://vocab.sentier.dev/units/unit/KiloM": {"multiplier": 1000.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Length", "symbol": "km"},
+  "https://vocab.sentier.dev/units/unit/KiloW-HR": {"multiplier": 3600000.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Energy", "symbol": "kW.h"},
+  "https://vocab.sentier.dev/units/unit/M": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Length", "symbol": "m"},
+  "https://vocab.sentier.dev/units/unit/M2": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Area", "symbol": "m2"},
+  "https://vocab.sentier.dev/units/unit/M3": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Volume", "symbol": "m3"},
+  "https://vocab.sentier.dev/units/unit/MegaJ": {"multiplier": 1000000.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Energy", "symbol": "MJ"},
+  "https://vocab.sentier.dev/units/unit/NUM": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Population", "symbol": "{#}"},
+  "https://vocab.sentier.dev/units/unit/PA": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Pressure", "symbol": "Pa"},
+  "https://vocab.sentier.dev/units/unit/PERCENT": {"multiplier": 0.01, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/DimensionlessRatio", "symbol": "%"},
+  "https://vocab.sentier.dev/units/unit/TONNE": {"multiplier": 1000.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Mass", "symbol": "t"},
+  "https://vocab.sentier.dev/units/unit/TONNE-PER-YR": {"multiplier": 3.168808781402895e-05, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/MassPerTime", "symbol": "t.a-1"},
+  "https://vocab.sentier.dev/units/unit/UNITLESS": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/LogOctanolWaterPartitionCoefficient", "symbol": null},
+  "https://vocab.sentier.dev/units/unit/W-PER-M2": {"multiplier": 1.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Irradiance", "symbol": "W.m-2"},
+  "https://vocab.sentier.dev/units/unit/YR": {"multiplier": 31557600.0, "offset": 0.0, "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Time", "symbol": "a"}
+}

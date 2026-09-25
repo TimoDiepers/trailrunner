@@ -4,6 +4,7 @@ from trailrunner.core.flow import Demand, Exchange, Flow
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import Settings
+from trailrunner.core.units import KG, MJ
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
@@ -11,7 +12,7 @@ CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 
 
 def test_result_defaults_to_empty_lists():
-    result = Result(production=[Exchange(flow=Flow(iri=CAPTURED), amount=1.0, unit="kg")])
+    result = Result(production=[Exchange(flow=Flow(iri=CAPTURED), amount=1.0, unit=KG)])
     assert result.technosphere == []
     assert result.biosphere == []
     assert result.provenance == {}
@@ -20,7 +21,7 @@ def test_result_defaults_to_empty_lists():
 def test_result_default_lists_are_not_shared_between_instances():
     first = Result(production=[])
     second = Result(production=[])
-    first.technosphere.append(Demand(flow=Flow(iri=HEAT), amount=1.0, unit="MJ"))
+    first.technosphere.append(Demand(flow=Flow(iri=HEAT), amount=1.0, unit=MJ))
     assert second.technosphere == []
 
 
@@ -38,7 +39,7 @@ def test_settings_defaults_to_empty():
 def test_model_base_apply_raises_not_implemented():
     model = Model()
     with pytest.raises(NotImplementedError):
-        model.apply(Demand(flow=Flow(iri=CAPTURED), amount=1.0, unit="kg"))
+        model.apply(Demand(flow=Flow(iri=CAPTURED), amount=1.0, unit=KG))
 
 
 def test_model_subclass_declares_products_and_returns_a_result():
@@ -48,11 +49,11 @@ def test_model_subclass_declares_products_and_returns_a_result():
         def apply(self, demand: Demand) -> Result:
             return Result(
                 production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-                biosphere=[Exchange(flow=Flow(iri=CO2), amount=0.1 * demand.amount, unit="kg")],
+                biosphere=[Exchange(flow=Flow(iri=CO2), amount=0.1 * demand.amount, unit=KG)],
             )
 
     model = Trivial()
-    result = model.apply(Demand(flow=Flow(iri=CAPTURED, location="CH"), amount=10.0, unit="kg"))
+    result = model.apply(Demand(flow=Flow(iri=CAPTURED, location="CH"), amount=10.0, unit=KG))
     assert Trivial.produces == [CAPTURED]
     assert result.production[0].amount == 10.0
     assert result.biosphere[0].amount == pytest.approx(1.0)

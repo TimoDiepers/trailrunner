@@ -1,23 +1,25 @@
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.result import Result
 from trailrunner.orchestration.log import Log
+from trailrunner.core.units import KG, MJ, PA
+from trailrunner.core.time import DATE, in_year
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
 CO2 = "https://vocab.sentier.dev/flows/co2-fossil"
 
 
-def a_demand(iri=CAPTURED, amount=1000.0, unit="kg") -> Demand:
-    return Demand(flow=Flow(iri=iri, location="CH", time=2030), amount=amount, unit=unit)
+def a_demand(iri=CAPTURED, amount=1000.0, unit=KG) -> Demand:
+    return Demand(flow=Flow(iri=iri, location="CH", **in_year(2030)), amount=amount, unit=unit)
 
 
 def a_result(demand: Demand) -> Result:
     return Result(
         production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", time=2030), amount=12.0, unit="kg")],
+        biosphere=[Exchange(flow=Flow(iri=CO2, location="CH", **in_year(2030)), amount=12.0, unit=KG)],
         provenance={"location_used": "RER", "location_fallback": True},
     )
 
@@ -57,7 +59,7 @@ def test_root_node_creates_no_edge():
 
 def test_unresolved_demands_are_recorded_with_a_reason():
     log = Log()
-    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_model_found", depth=1, parent=0)
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit=MJ), reason="no_model_found", depth=1, parent=0)
     record = log.unresolved_records[0]
     assert record.reason == "no_model_found"
     assert record.demand.flow.iri == HEAT
@@ -86,7 +88,7 @@ def test_to_parquet_writes_one_row_per_biosphere_exchange(tmp_path):
     assert row["node"] == 0
     assert row["flow_iri"] == CO2
     assert row["amount"] == 12.0
-    assert row["unit"] == "kg"
+    assert row["unit"] == KG
     assert row["demand_iri"] == CAPTURED
 
 
@@ -104,7 +106,7 @@ def test_to_parquet_writes_the_provenance_of_every_node(tmp_path):
 def test_to_parquet_keeps_a_node_that_emitted_nothing(tmp_path):
     log = Log()
     demand = a_demand()
-    log.write(demand, Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]))
+    log.write(demand, Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)]))
     path = tmp_path / "log.parquet"
     log.to_parquet(path)
     rows = rows_of_kind(path, "node")
@@ -116,7 +118,7 @@ def test_to_parquet_keeps_a_node_that_emitted_nothing(tmp_path):
 def test_to_parquet_writes_the_unresolved_leaves(tmp_path):
     """Two runs differing only in their cutoffs must differ on disk."""
     log = Log()
-    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_model_found", depth=1, parent=0)
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit=MJ), reason="no_model_found", depth=1, parent=0)
     path = tmp_path / "log.parquet"
     log.to_parquet(path)
     rows = rows_of_kind(path, "unresolved")
@@ -131,7 +133,7 @@ def test_a_complete_run_round_trips(tmp_path):
     log = Log()
     demand = a_demand()
     node = log.write(demand, a_result(demand))
-    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit="MJ"), reason="no_model_found", parent=node)
+    log.unresolved(a_demand(iri=HEAT, amount=5.0, unit=MJ), reason="no_model_found", parent=node)
     path = tmp_path / "log.parquet"
     log.to_parquet(path)
     kinds = [row["kind"] for row in pq.read_table(path).to_pylist()]
@@ -245,7 +247,7 @@ def test_the_attribution_record_is_flattened_not_a_python_repr(tmp_path):
     log.write(
         demand,
         Result(
-            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
             provenance={
                 "location_used": "RER",
                 "attribution": {
@@ -279,7 +281,7 @@ def test_the_attribution_record_does_not_double_as_the_models_provenance(tmp_pat
     log.write(
         demand,
         Result(
-            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
             provenance={"location_used": "RER", "attribution": {"allocation": "none"}},
         ),
     )
@@ -294,7 +296,7 @@ def test_the_node_record_carries_the_attribution_beside_the_resolution():
     node_id = log.write(
         demand,
         Result(
-            production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")],
+            production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)],
             provenance={"attribution": {"allocation": "substitution", "share": 1.0}},
         ),
     )
@@ -315,7 +317,7 @@ def test_a_nested_record_is_flattened_key_by_key(tmp_path):
     demand = a_demand()
     log.write(
         demand,
-        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit="kg")]),
+        Result(production=[Exchange(flow=demand.flow, amount=1.0, unit=KG)]),
         resolution={"tier": "background", "window": {"earliest": 2020, "latest": 2030}},
     )
     path = tmp_path / "log.parquet"
@@ -326,3 +328,37 @@ def test_a_nested_record_is_flattened_key_by_key(tmp_path):
         "window.earliest": "2020",
         "window.latest": "2030",
     }
+
+
+def test_the_parquet_carries_time_standard_interval_and_context(tmp_path):
+    from datetime import UTC, datetime
+
+    flow = Flow(
+        iri="https://example.org/gas",
+        time="2030-06-15",
+        time_standard=DATE,
+        context=(Property("pressure", 4e5, PA),),
+    )
+    log = Log()
+    demand = Demand(flow=flow, amount=1.0, unit=KG)
+    log.write(
+        demand,
+        Result(
+            production=[Exchange(flow=flow, amount=1.0, unit=KG)],
+            biosphere=[Exchange(flow=flow, amount=2.0, unit=KG)],
+        ),
+        depth=0,
+        parent=None,
+        model="M",
+        resolution={"tier": "model"},
+    )
+    path = tmp_path / "log.parquet"
+    log.to_parquet(path)
+    row = [r for r in pq.read_table(path).to_pylist() if r["kind"] == "biosphere"][0]
+    assert row["demand_time"] == "2030-06-15"
+    assert row["demand_time_standard"] == DATE
+    assert row["demand_time_start"] == datetime(2030, 6, 15, tzinfo=UTC)
+    assert row["demand_time_end"] == datetime(2030, 6, 16, tzinfo=UTC)
+    assert row["demand_context"] == "pressure=400000 Pa"
+    assert row["flow_time_start"] == datetime(2030, 6, 15, tzinfo=UTC)
+    assert row["flow_context"] == "pressure=400000 Pa"

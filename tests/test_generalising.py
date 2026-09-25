@@ -12,6 +12,8 @@ from trailrunner.orchestration.glossary import Glossary
 from trailrunner.params.coverage import ContextRange, Coverage
 from trailrunner.params.location import LocationHierarchy
 from trailrunner.resolution import GeneralisingProvider, ModelProvider, PystTaxonomy, StaticTaxonomy
+from trailrunner.core.time import DATE, GYEAR, in_year, year_range
+from trailrunner.core.units import KELVIN, KG, KILOMETRE, METRE, MJ, NUM, PA, TONNE
 
 HEAT = "https://vocab.sentier.dev/products/heat"
 GREEN_TRUCK = "https://vocab.sentier.dev/products/truck-green"
@@ -31,7 +33,7 @@ class RegionalBoiler(Model):
 
 class DatedBoiler(Model):
     produces = [HEAT]
-    coverage = Coverage(time_range=(2035, 2050))
+    coverage = Coverage(time_range=year_range(2035, 2050))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -61,47 +63,47 @@ def provider(models, settings=None, taxonomy=None):
 
 
 def test_location_is_widened_up_the_hierarchy():
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     offer = provider([RegionalBoiler()]).offer(demand)
     assert isinstance(offer.model, RegionalBoiler)
     assert offer.demand.flow.location == "RER"
 
 
 def test_the_relaxation_is_recorded_in_the_offer():
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     offer = provider([RegionalBoiler()]).offer(demand)
     assert offer.tier == "generalising"
     assert offer.resolution["relaxations"] == ["location: CH -> RER"]
 
 
 def test_the_amount_and_unit_survive_the_relaxation():
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     offer = provider([RegionalBoiler()]).offer(demand)
     assert offer.demand.amount == 10.0
-    assert offer.demand.unit == "MJ"
+    assert offer.demand.unit == MJ
 
 
 def test_location_budget_is_respected():
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     settings = ProxySettings(order=("location",), max_steps={"location": 0})
     assert provider([RegionalBoiler()], settings=settings).offer(demand) is None
 
 
 def test_time_is_snapped_to_a_covered_year_within_tolerance():
-    demand = Demand(flow=Flow(iri=HEAT, time=2032), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, **in_year(2032)), amount=10.0, unit=MJ)
     offer = provider([DatedBoiler()]).offer(demand)
-    assert offer.demand.flow.time == 2035
+    assert offer.demand.flow.time == "2035"
     assert offer.resolution["relaxations"] == ["time: 2032 -> 2035"]
 
 
 def test_time_outside_the_tolerance_is_not_snapped():
-    demand = Demand(flow=Flow(iri=HEAT, time=2020), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, **in_year(2020)), amount=10.0, unit=MJ)
     assert provider([DatedBoiler()]).offer(demand) is None
 
 
 def test_product_is_widened_through_the_taxonomy():
     taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK]})
-    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit=NUM)
     offer = provider([GenericTruck()], taxonomy=taxonomy).offer(demand)
     assert isinstance(offer.model, GenericTruck)
     assert offer.resolution["relaxations"] == ["product: truck-green -> truck"]
@@ -112,7 +114,7 @@ def test_the_product_note_is_short_and_the_full_pair_is_still_recorded():
     each IRI; the full pair a reader traces a number with stays in the
     resolution, and so in ``report.proxies`` and the log parquet."""
     taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK]})
-    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit=NUM)
     offer = provider([GenericTruck()], taxonomy=taxonomy).offer(demand)
     note = offer.resolution["relaxations"][0]
     assert "https://" not in note
@@ -122,13 +124,13 @@ def test_the_product_note_is_short_and_the_full_pair_is_still_recorded():
 
 
 def test_product_relaxation_needs_a_taxonomy():
-    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit=NUM)
     assert provider([GenericTruck()], taxonomy=None).offer(demand) is None
 
 
 def test_dimensions_are_tried_in_the_declared_order():
     """Location first finds the regional boiler; time first finds the dated one."""
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2032), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2032)), amount=10.0, unit=MJ)
     location_first = provider(
         [RegionalBoiler(), DatedBoiler()],
         settings=ProxySettings(order=("location", "time")),
@@ -149,7 +151,7 @@ def test_an_exact_match_is_left_to_tier_one():
         def apply(self, demand):
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     assert provider([ExactBoiler()]).offer(demand) is not None  # it would answer
     # but in a real chain ModelProvider is asked first and wins:
     from trailrunner.resolution import ResolutionChain
@@ -159,7 +161,7 @@ def test_an_exact_match_is_left_to_tier_one():
 
 
 def test_explain_says_generalisation_was_tried():
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     reason, detail = provider([]).explain(demand)
     assert reason == "generalisation_exhausted"
     assert "location" in detail
@@ -172,14 +174,14 @@ def test_explain_is_silent_when_no_candidate_could_be_generated():
     manufacture a candidate. Silence here is what lets the chain fall through
     to its own ``no_model_found``."""
     demand = Demand(flow=Flow(iri="https://vocab.sentier.dev/products/unobtainium"),
-                    amount=1.0, unit="kg")
+                    amount=1.0, unit=KG)
     assert provider([]).explain(demand) is None
 
 
 def test_explain_counts_the_candidates_it_actually_generated():
     """Not the budget it was allowed. CH -> RER -> GLO offers two candidates
     against a location budget of three, and the detail says two."""
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     settings = ProxySettings(order=("location",), max_steps={"location": 3})
     _reason, detail = provider([], settings=settings).explain(demand)
     assert "location(2)" in detail
@@ -188,14 +190,14 @@ def test_explain_counts_the_candidates_it_actually_generated():
 def test_explain_ignores_a_dimension_with_nothing_to_try():
     """A budget for the product dimension with no taxonomy behind it is not a
     thing that was tried, and must not be reported as one."""
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     _reason, detail = provider([], taxonomy=None).explain(demand)
     assert "product" not in detail
     assert "time" not in detail
 
 
 def test_explain_is_silent_when_no_budget_was_available():
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     settings = ProxySettings(order=(), max_steps={})
     assert provider([], settings=settings).explain(demand) is None
 
@@ -218,7 +220,7 @@ def test_budget_counts_attempts_not_successes():
         def apply(self, demand):
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
 
     one_step = ProxySettings(order=("location",), max_steps={"location": 1})
     assert provider([GloOnlyBoiler()], settings=one_step).offer(demand) is None
@@ -252,7 +254,7 @@ def test_ambiguous_match_reached_through_relaxation_is_not_swallowed():
         def apply(self, demand):
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
-    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH"), amount=10.0, unit=MJ)
     with pytest.raises(AmbiguousModelMatch):
         provider([BoilerA(), BoilerB()]).offer(demand)
 
@@ -264,7 +266,7 @@ def test_the_product_walk_climbs_more_than_one_level():
     levels deep, and a single-level walk could never reach past the first.
     """
     taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
-    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit=NUM)
     settings = ProxySettings(order=("product",), max_steps={"product": 2})
     offer = provider([GenericVehicle()], settings=settings, taxonomy=taxonomy).offer(demand)
     assert isinstance(offer.model, GenericVehicle)
@@ -274,7 +276,7 @@ def test_the_product_walk_climbs_more_than_one_level():
 
 def test_the_product_budget_stops_the_walk_at_the_level_it_says():
     taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
-    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit=NUM)
     settings = ProxySettings(order=("product",), max_steps={"product": 1})
     assert provider([GenericVehicle()], settings=settings, taxonomy=taxonomy).offer(demand) is None
 
@@ -283,7 +285,7 @@ def test_the_nearer_concept_is_tried_before_the_wider_one():
     """Breadth-first: every concept one level up is tried before any concept
     two levels up, so the most specific model still standing wins."""
     taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [VEHICLE]})
-    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit=NUM)
     settings = ProxySettings(order=("product",), max_steps={"product": 2})
     offer = provider(
         [GenericTruck(), GenericVehicle()], settings=settings, taxonomy=taxonomy
@@ -294,7 +296,7 @@ def test_the_nearer_concept_is_tried_before_the_wider_one():
 def test_a_cycle_in_the_taxonomy_does_not_hang_the_walk():
     """A vocabulary is not guaranteed acyclic, and this walks it in a loop."""
     taxonomy = StaticTaxonomy({GREEN_TRUCK: [TRUCK], TRUCK: [GREEN_TRUCK]})
-    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit="unit")
+    demand = Demand(flow=Flow(iri=GREEN_TRUCK), amount=1.0, unit=NUM)
     settings = ProxySettings(order=("product",), max_steps={"product": 5})
     assert provider([], settings=settings, taxonomy=taxonomy).offer(demand) is None
 
@@ -303,7 +305,7 @@ def test_every_tier_two_resolution_speaks_the_shared_vocabulary():
     """``tier``, ``model``, ``asked`` and ``answered`` mean the same thing in
     every tier, and ``asked`` describes the demand rather than restating an
     IRI that did not change."""
-    demand = Demand(flow=Flow(iri=HEAT, location="CH", time=2030), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2030)), amount=10.0, unit=MJ)
     resolution = provider([RegionalBoiler()]).offer(demand).resolution
     assert resolution["tier"] == "generalising"
     assert resolution["model"] == "RegionalBoiler"
@@ -320,7 +322,7 @@ def test_a_relaxed_demand_still_carries_the_exclusion():
     the self-substitution loop again, one hop later and wearing a proxy label.
     """
     boiler = RegionalBoiler()
-    swiss_heat = Demand(flow=Flow(iri=HEAT, location="CH"), amount=1.0, unit="MJ")
+    swiss_heat = Demand(flow=Flow(iri=HEAT, location="CH"), amount=1.0, unit=MJ)
 
     offer = provider([boiler]).offer(swiss_heat)
     assert offer.model is boiler
@@ -332,7 +334,7 @@ class RegionalDatedBoiler(Model):
     """Answers only a demand that is both regional and late enough: no single
     relaxation of a Swiss 2032 demand reaches it."""
     produces = [HEAT]
-    coverage = Coverage(locations=frozenset({"RER"}), time_range=(2035, 2050))
+    coverage = Coverage(locations=frozenset({"RER"}), time_range=year_range(2035, 2050))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -340,13 +342,13 @@ class RegionalDatedBoiler(Model):
 
 class GlobalDatedBoiler(Model):
     produces = [HEAT]
-    coverage = Coverage(locations=frozenset({"GLO"}), time_range=(2033, 2050))
+    coverage = Coverage(locations=frozenset({"GLO"}), time_range=year_range(2033, 2050))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
 
-SWISS_2032 = Demand(flow=Flow(iri=HEAT, location="CH", time=2032), amount=10.0, unit="MJ")
+SWISS_2032 = Demand(flow=Flow(iri=HEAT, location="CH", **in_year(2032)), amount=10.0, unit=MJ)
 COMBINED = ProxySettings(
     order=("time", "location", ("location", "time")),
     max_steps={"time": 1, "location": 2},
@@ -362,7 +364,7 @@ def test_a_combined_entry_answers_what_no_single_dimension_can():
     offer = provider([RegionalDatedBoiler()], settings=COMBINED).offer(SWISS_2032)
     assert isinstance(offer.model, RegionalDatedBoiler)
     assert offer.demand.flow.location == "RER"
-    assert offer.demand.flow.time == 2035
+    assert offer.demand.flow.time == "2035"
     assert offer.resolution["relaxations"] == ["location: CH -> RER", "time: 2032 -> 2035"]
     assert offer.resolution["answered"] == f"{HEAT} @RER/2035"
 
@@ -372,7 +374,7 @@ def at(location, year):
 
     class Boiler(Model):
         produces = [HEAT]
-        coverage = Coverage(locations=frozenset({location}), time_range=(year, year))
+        coverage = Coverage(locations=frozenset({location}), time_range=year_range(year, year))
 
         def apply(self, demand):
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -389,7 +391,7 @@ def test_the_combined_search_tries_the_fewest_total_steps_first():
     settings = ProxySettings(order=(("location", "time"),), max_steps={"time": 3, "location": 2})
     offer = provider(models, settings=settings).offer(SWISS_2032)
     assert offer.demand.flow.location == "GLO"
-    assert offer.demand.flow.time == 2033
+    assert offer.demand.flow.time == "2033"
 
 
 def test_a_combined_entry_placed_before_product_beats_the_product_proxy():
@@ -479,7 +481,7 @@ def test_the_committed_offline_cache_lets_a_parent_model_answer_a_child_demand()
             return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
     taxonomy = PystTaxonomy(PYST_CACHE, client=None)
-    demand = Demand(flow=Flow(iri=REAL_HEAT), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=REAL_HEAT), amount=10.0, unit=MJ)
 
     offer = provider([SteamAndHotWaterBoiler()], taxonomy=taxonomy).offer(demand)
 
@@ -508,63 +510,86 @@ GAS = "https://vocab.sentier.dev/products/gas"
 
 class FiveBarGas(Model):
     produces = [GAS]
-    coverage = Coverage(context=(ContextRange("pressure", "bar", 5.0, 5.0),))
+    coverage = Coverage(context=(ContextRange("pressure", PA, 5e5, 5e5),))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
 
-def gas_at(bar, unit="bar"):
+def gas_at(pascal, unit=PA):
     return Demand(
-        flow=Flow(iri=GAS, location="CH", time=2030, context=(Property("pressure", bar, unit),)),
+        flow=Flow(iri=GAS, location="CH", **in_year(2030), context=(Property("pressure", pascal, unit),)),
         amount=10.0,
-        unit="MJ",
+        unit=MJ,
     )
 
 
-PRESSURE_UP_TO_ONE_BAR_HIGHER = ProxySettings(context_tolerance={"pressure": (0.0, 1.0)})
+PRESSURE_UP_TO_ONE_BAR_HIGHER = ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})
 
 
 def test_context_is_moved_to_the_value_a_model_covers():
-    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4.0))
+    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4e5))
     assert isinstance(offer.model, FiveBarGas)
-    assert offer.demand.flow.get_context("pressure") == Property("pressure", 5.0, "bar")
-    assert offer.resolution["relaxations"] == ["context: pressure 4 bar -> 5 bar"]
+    assert offer.demand.flow.get_context("pressure") == Property("pressure", 5e5, PA)
+    assert offer.resolution["relaxations"] == ["context: pressure 400000 Pa -> 500000 Pa"]
 
 
 def test_asked_and_answered_differ_by_the_relaxed_context():
-    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4.0))
-    assert offer.resolution["asked"].endswith("@CH/2030 [pressure=4 bar]")
-    assert offer.resolution["answered"].endswith("@CH/2030 [pressure=5 bar]")
+    offer = provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(4e5))
+    assert offer.resolution["asked"].endswith("@CH/2030 [pressure=400000 Pa]")
+    assert offer.resolution["answered"].endswith("@CH/2030 [pressure=500000 Pa]")
 
 
 def test_context_is_never_moved_to_the_side_the_tolerance_forbids():
     """A 6-bar burner cannot run on 5-bar gas, however close it is."""
-    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(6.0)) is None
+    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(6e5)) is None
 
 
 def test_context_is_not_moved_beyond_the_tolerance():
-    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(3.0)) is None
+    assert provider([FiveBarGas()], settings=PRESSURE_UP_TO_ONE_BAR_HIGHER).offer(gas_at(3e5)) is None
 
 
 def test_context_is_not_relaxed_without_a_tolerance():
-    assert provider([FiveBarGas()]).offer(gas_at(4.0)) is None
+    assert provider([FiveBarGas()]).offer(gas_at(4e5)) is None
 
 
-def test_context_in_another_unit_is_not_relaxed():
-    settings = ProxySettings(context_tolerance={"pressure": (0.0, 100.0)})
-    assert provider([FiveBarGas()], settings=settings).offer(gas_at(60.0, unit="psi")) is None
+def test_context_in_another_quantity_kind_is_not_relaxed():
+    settings = ProxySettings(context_tolerance={"pressure": (0.0, 1e5, PA)})
+    assert provider([FiveBarGas()], settings=settings).offer(gas_at(4.0, unit=KG)) is None
+
+
+HAUL = "https://vocab.sentier.dev/products/haul"
+
+
+class TenKilometreHaul(Model):
+    produces = [HAUL]
+    coverage = Coverage(context=(ContextRange("distance", KILOMETRE, 10.0, 10.0),))
+
+    def apply(self, demand):
+        return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
+
+
+def test_context_tolerance_in_another_unit_than_the_ask():
+    settings = ProxySettings(context_tolerance={"distance": (0.0, 1.0, KILOMETRE)})
+    asked = Demand(
+        flow=Flow(iri=HAUL, context=(Property("distance", 9500.0, METRE),)),
+        amount=1.0,
+        unit=TONNE,
+    )
+    offer = provider([TenKilometreHaul()], settings=settings).offer(asked)
+    assert offer.demand.flow.get_context("distance") == Property("distance", 10000.0, METRE)
+    assert offer.resolution["relaxations"] == ["context: distance 9500 m -> 10000 m"]
 
 
 def test_context_budget_is_respected():
     settings = ProxySettings(
-        max_steps={"context": 0}, context_tolerance={"pressure": (0.0, 1.0)}
+        max_steps={"context": 0}, context_tolerance={"pressure": (0.0, 1e5, PA)}
     )
-    assert provider([FiveBarGas()], settings=settings).offer(gas_at(4.0)) is None
+    assert provider([FiveBarGas()], settings=settings).offer(gas_at(4e5)) is None
 
 
 def test_a_demand_naming_no_pressure_is_answered_exactly():
-    demand = Demand(flow=Flow(iri=GAS, location="CH", time=2030), amount=10.0, unit="MJ")
+    demand = Demand(flow=Flow(iri=GAS, location="CH", **in_year(2030)), amount=10.0, unit=MJ)
     assert ModelProvider(Glossary([FiveBarGas()])).offer(demand).tier == "model"
 
 
@@ -572,8 +597,8 @@ class FiveBarWarmGas(Model):
     produces = [GAS]
     coverage = Coverage(
         context=(
-            ContextRange("pressure", "bar", 5.0, 5.0),
-            ContextRange("temperature", "K", 300.0, 300.0),
+            ContextRange("pressure", PA, 5e5, 5e5),
+            ContextRange("temperature", KELVIN, 300.0, 300.0),
         )
     )
 
@@ -581,17 +606,17 @@ class FiveBarWarmGas(Model):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
 
 
-def gas_at_both(bar, kelvin):
-    context = (Property("pressure", bar, "bar"), Property("temperature", kelvin, "K"))
-    return Demand(flow=Flow(iri=GAS, context=context), amount=10.0, unit="MJ")
+def gas_at_both(pascal, kelvin):
+    context = (Property("pressure", pascal, PA), Property("temperature", kelvin, KELVIN))
+    return Demand(flow=Flow(iri=GAS, context=context), amount=10.0, unit=MJ)
 
 
-BOTH_TOLERATED = {"pressure": (0.0, 1.0), "temperature": (0.0, 10.0)}
+BOTH_TOLERATED = {"pressure": (0.0, 1e5, PA), "temperature": (0.0, 10.0, KELVIN)}
 
 
 def test_plain_context_never_moves_two_conditions_together():
     settings = ProxySettings(context_tolerance=BOTH_TOLERATED, max_steps={"context": 5})
-    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0)) is None
+    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4e5, 295.0)) is None
 
 
 def test_combined_context_conditions_move_together():
@@ -599,19 +624,19 @@ def test_combined_context_conditions_move_together():
         order=(("context.pressure", "context.temperature"),),
         context_tolerance=BOTH_TOLERATED,
     )
-    offer = provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0))
+    offer = provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4e5, 295.0))
     assert offer.resolution["relaxations"] == [
-        "context: pressure 4 bar -> 5 bar",
+        "context: pressure 400000 Pa -> 500000 Pa",
         "context: temperature 295 K -> 300 K",
     ]
-    assert offer.resolution["answered"].endswith("[pressure=5 bar, temperature=300 K]")
+    assert offer.resolution["answered"].endswith("[pressure=500000 Pa, temperature=300 K]")
 
 
 def test_a_single_condition_dimension_moves_only_that_condition():
     settings = ProxySettings(order=("context.temperature",), context_tolerance=BOTH_TOLERATED)
     gas = provider([FiveBarWarmGas()], settings=settings)
-    assert gas.offer(gas_at_both(4.0, 300.0)) is None  # pressure is off, and not named
-    offer = gas.offer(gas_at_both(5.0, 295.0))
+    assert gas.offer(gas_at_both(4e5, 300.0)) is None  # pressure is off, and not named
+    offer = gas.offer(gas_at_both(5e5, 295.0))
     assert offer.resolution["relaxations"] == ["context: temperature 295 K -> 300 K"]
 
 
@@ -625,45 +650,59 @@ def test_the_order_decides_single_before_combined():
         context_tolerance=BOTH_TOLERATED,
     )
     gas = provider([FiveBarWarmGas()], settings=settings)
-    assert gas.offer(gas_at_both(4.0, 300.0)).resolution["relaxations"] == [
-        "context: pressure 4 bar -> 5 bar"
+    assert gas.offer(gas_at_both(4e5, 300.0)).resolution["relaxations"] == [
+        "context: pressure 400000 Pa -> 500000 Pa"
     ]
-    assert len(gas.offer(gas_at_both(4.0, 295.0)).resolution["relaxations"]) == 2
+    assert len(gas.offer(gas_at_both(4e5, 295.0)).resolution["relaxations"]) == 2
 
 
 def test_a_context_condition_combines_with_location():
     class RegionalFiveBarGas(FiveBarGas):
         coverage = Coverage(
             locations=frozenset({"RER"}),
-            context=(ContextRange("pressure", "bar", 5.0, 5.0),),
+            context=(ContextRange("pressure", PA, 5e5, 5e5),),
         )
 
     settings = ProxySettings(
         order=(("location", "context.pressure"),),
-        context_tolerance={"pressure": (0.0, 1.0)},
+        context_tolerance={"pressure": (0.0, 1e5, PA)},
     )
-    offer = provider([RegionalFiveBarGas()], settings=settings).offer(gas_at(4.0))
+    offer = provider([RegionalFiveBarGas()], settings=settings).offer(gas_at(4e5))
     assert offer.resolution["relaxations"] == [
         "location: CH -> RER",
-        "context: pressure 4 bar -> 5 bar",
+        "context: pressure 400000 Pa -> 500000 Pa",
     ]
 
 
 def test_a_combined_context_entry_stays_within_each_tolerance():
     settings = ProxySettings(
         order=(("context.pressure", "context.temperature"),),
-        context_tolerance={"pressure": (0.0, 1.0), "temperature": (0.0, 2.0)},
+        context_tolerance={"pressure": (0.0, 1e5, PA), "temperature": (0.0, 2.0, KELVIN)},
     )
-    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4.0, 295.0)) is None
+    assert provider([FiveBarWarmGas()], settings=settings).offer(gas_at_both(4e5, 295.0)) is None
 
 
-PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
-BAR = "http://qudt.org/vocab/unit/BAR"
+def test_a_day_outside_coverage_snaps_to_the_nearest_covered_year():
+    # DatedBoiler covers 2035..2050; a demand dated the last day of 2034
+    # is about half a year from 2035's midpoint.
+    demand = Demand(flow=Flow(iri=HEAT, time="2034-12-31", time_standard=DATE), amount=1.0, unit=MJ)
+    offer = provider([DatedBoiler()]).offer(demand)
+    assert (offer.demand.flow.time, offer.demand.flow.time_standard) == ("2035", GYEAR)
+    assert offer.resolution["relaxations"] == ["time: 2034-12-31 -> 2035"]
+
+
+def test_a_year_snaps_exactly_as_it_did_with_int_years():
+    demand = Demand(flow=Flow(iri=HEAT, **in_year(2034)), amount=1.0, unit=MJ)
+    offer = provider([DatedBoiler()]).offer(demand)
+    assert offer.resolution["relaxations"] == ["time: 2034 -> 2035"]
+
+
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
 
 
 class FiveBarGasByIri(Model):
     produces = [GAS]
-    coverage = Coverage(context=(ContextRange(PRESSURE, BAR, 5.0, 5.0),))
+    coverage = Coverage(context=(ContextRange(PRESSURE, PA, 5e5, 5e5),))
 
     def apply(self, demand):
         return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -671,19 +710,19 @@ class FiveBarGasByIri(Model):
 
 def test_iri_conditions_match_by_iri_and_are_written_in_full():
     demand = Demand(
-        flow=Flow(iri=GAS, context=(Property(PRESSURE, 4.0, BAR),)), amount=10.0, unit="MJ"
+        flow=Flow(iri=GAS, context=(Property(PRESSURE, 4e5, PA),)), amount=10.0, unit=MJ
     )
     settings = ProxySettings(
-        order=(f"context.{PRESSURE}",), context_tolerance={PRESSURE: (0.0, 1.0)}
+        order=(f"context.{PRESSURE}",), context_tolerance={PRESSURE: (0.0, 1e5, PA)}
     )
     offer = provider([FiveBarGasByIri()], settings=settings).offer(demand)
-    assert offer.resolution["relaxations"] == [f"context: {PRESSURE} 4 {BAR} -> 5 {BAR}"]
-    assert offer.resolution["answered"].endswith(f"[{PRESSURE}=5 {BAR}]")
+    assert offer.resolution["relaxations"] == [f"context: {PRESSURE} 400000 Pa -> 500000 Pa"]
+    assert offer.resolution["answered"].endswith(f"[{PRESSURE}=500000 Pa]")
 
 
 def test_a_short_name_does_not_match_an_iri_condition():
     demand = Demand(
-        flow=Flow(iri=GAS, context=(Property("Pressure", 4.0, "BAR"),)), amount=10.0, unit="MJ"
+        flow=Flow(iri=GAS, context=(Property("Pressure", 4e5, PA),)), amount=10.0, unit=MJ
     )
-    settings = ProxySettings(context_tolerance={"Pressure": (0.0, 1.0)})
+    settings = ProxySettings(context_tolerance={"Pressure": (0.0, 1e5, PA)})
     assert provider([FiveBarGasByIri()], settings=settings).offer(demand) is None

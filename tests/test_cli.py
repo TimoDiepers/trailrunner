@@ -18,6 +18,8 @@ def models_file(tmp_path):
             f'''
             from trailrunner import Demand, Exchange, Flow, Model, Result
             from trailrunner.core.settings import ALLOCATION_RULES
+            from trailrunner.core.time import when
+            from trailrunner.core.units import KG
 
             HEAT = "{HEAT}"
             CO2 = "{CO2}"
@@ -34,8 +36,8 @@ def models_file(tmp_path):
                     return Result(
                         production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
                         biosphere=[Exchange(
-                            flow=Flow(iri=CO2, location=demand.flow.location, time=demand.flow.time),
-                            amount=0.05 * demand.amount, unit="kg")],
+                            flow=Flow(iri=CO2, location=demand.flow.location, **when(demand.flow)),
+                            amount=0.05 * demand.amount, unit=KG)],
                     )
 
             MODELS = [Boiler()]
@@ -48,7 +50,7 @@ def models_file(tmp_path):
 def test_a_run_exits_zero_and_prints_the_summary(models_file, capsys):
     code = main([
         "run", HEAT, "--amount", "100", "--unit", "MJ",
-        "--location", "CH", "--year", "2030", "--models", str(models_file),
+        "--location", "CH", "--time", "2030", "--models", str(models_file),
     ])
     out = capsys.readouterr().out
     assert code == 0
@@ -106,13 +108,41 @@ def test_an_unknown_allocation_is_rejected_before_anything_runs(models_file, cap
 def test_the_method_flag_prints_a_score(models_file, method_parquet_file, capsys):
     code = main([
         "run", HEAT, "--amount", "100", "--unit", "MJ",
-        "--location", "GLO", "--year", "2030", "--models", str(models_file),
+        "--location", "GLO", "--time", "2030", "--models", str(models_file),
         "--method", str(method_parquet_file),
     ])
     out = capsys.readouterr().out
     assert code == 0
     # 100 MJ * 0.05 kg CO2/MJ * 1.0 kg CO2eq/kg
-    assert "5" in out and "kg CO2eq" in out
+    assert "5" in out and "kg" in out
+
+
+def test_a_method_file_with_a_unit_the_vocabulary_does_not_confirm_exits_2(
+    models_file, tmp_path, capsys
+):
+    """A method parquet still saying ``flow_unit: "kg"`` is a message, not a traceback."""
+    from trailrunner.core.units import KG
+
+    from .conftest import CO2_IRI, write_method_parquet
+
+    path = tmp_path / "old.parquet"
+    write_method_parquet(
+        path,
+        [{"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0}],
+        [
+            {"name": "flow_iri", "type": "string", "unit": None, "iri": None},
+            {"name": "flow_unit", "type": "string", "unit": None, "iri": None},
+            {"name": "location", "type": "string", "unit": None, "iri": None},
+            {"name": "cf", "type": "number", "unit": KG, "iri": None},
+        ],
+    )
+    code = main([
+        "run", HEAT, "--amount", "100", "--unit", "MJ",
+        "--models", str(models_file), "--method", str(path),
+    ])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "'kg'" in err
 
 
 def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
@@ -125,7 +155,7 @@ def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
     pytest.importorskip("dynamic_characterization")
     code = main([
         "run", HEAT, "--amount", "100", "--unit", "MJ",
-        "--location", "GLO", "--year", "2030", "--models", str(models_file),
+        "--location", "GLO", "--time", "2030", "--models", str(models_file),
         "--dynamic", "radiative_forcing", "--horizon", "20",
     ])
     out = capsys.readouterr().out
@@ -136,39 +166,54 @@ def test_the_dynamic_flag_reports_the_cumulative_unit(models_file, capsys):
 
 SHOWCASE = Path(__file__).resolve().parent.parent / "examples" / "showcase_models.py"
 CEMENT = "https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"
-PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
-BAR = "http://qudt.org/vocab/unit/BAR"
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
 CEMENT_RUN = [
     "run", CEMENT, "--amount", "1000", "--unit", "kg",
-    "--location", "DK", "--year", "2030", "--models", str(SHOWCASE),
+    "--location", "DK", "--time", "2030", "--models", str(SHOWCASE),
 ]
 
 
 def test_without_a_context_tolerance_the_kilns_4_bar_gas_is_a_coverage_miss(capsys):
     assert main(CEMENT_RUN) == 0
     out = capsys.readouterr().out
-    assert f"fi_12020 @DK/2030 ({PRESSURE}=4 {BAR})  [cutoff: coverage_excluded]" in out
+    assert f"fi_12020 @DK/2030 ({PRESSURE}=400000 Pa)  [cutoff: coverage_excluded]" in out
 
 
 def test_a_context_tolerance_lets_5_bar_gas_answer_it_as_a_proxy(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1e5 Pa"]) == 0
     out = capsys.readouterr().out
-    assert f"[proxy: context: {PRESSURE} 4 {BAR} -> 5 {BAR}]" in out
+    assert f"[proxy: context: {PRESSURE} 400000 Pa -> 500000 Pa]" in out
     assert "1 proxy" in out
 
 
 def test_a_context_tolerance_that_forbids_the_side_leaves_the_cutoff(capsys):
-    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=1:0"]) == 0
+    assert main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=1e5:0 Pa"]) == 0
     out = capsys.readouterr().out
     # Tier 1's reason wins: widening the coverage is what would fix it.
-    assert f"({PRESSURE}=4 {BAR})  [cutoff: coverage_excluded]" in out
+    assert f"({PRESSURE}=400000 Pa)  [cutoff: coverage_excluded]" in out
     assert "0 proxies" in out
 
 
-@pytest.mark.parametrize("bad", ["pressure", "pressure=1", "=0:1", "pressure=a:b", "pressure=-1:0"])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "pressure",
+        "pressure=1 Pa",
+        "=0:1 Pa",
+        "pressure=a:b Pa",
+        "pressure=-1:0 Pa",
+        "pressure=0:1e5",
+    ],
+)
 def test_a_malformed_context_tolerance_is_rejected_before_anything_runs(bad, capsys):
     assert main([*CEMENT_RUN, "--context-tolerance", bad]) == 2
     assert "context tolerance" in capsys.readouterr().err
+
+
+def test_an_unknown_context_tolerance_unit_is_rejected_before_anything_runs(capsys):
+    code = main([*CEMENT_RUN, "--context-tolerance", "pressure=0:1e5 bogus"])
+    assert code == 2
+    assert "'bogus'" in capsys.readouterr().err
 
 
 def test_proxy_order_parses_entries_and_combinations():
@@ -189,7 +234,7 @@ def test_proxy_order_parses_entries_and_combinations():
     ],
 )
 def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, capsys):
-    code = main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1", "--proxy-order", order])
+    code = main([*CEMENT_RUN, "--context-tolerance", f"{PRESSURE}=0:1e5 Pa", "--proxy-order", order])
     assert code == 2
     assert message in capsys.readouterr().err
 
@@ -197,8 +242,8 @@ def test_a_bad_proxy_order_is_rejected_before_anything_runs(order, message, caps
 def test_a_context_tolerance_given_twice_is_rejected(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", f"{PRESSURE}=0:1",
-        "--context-tolerance", f"{PRESSURE}=0:2",
+        "--context-tolerance", f"{PRESSURE}=0:1e5 Pa",
+        "--context-tolerance", f"{PRESSURE}=0:2e5 Pa",
     ])
     assert code == 2
     assert "more than once" in capsys.readouterr().err
@@ -207,11 +252,57 @@ def test_a_context_tolerance_given_twice_is_rejected(capsys):
 def test_a_named_condition_in_the_proxy_order_relaxes_it(capsys):
     code = main([
         *CEMENT_RUN,
-        "--context-tolerance", f"{PRESSURE}=0:1",
+        "--context-tolerance", f"{PRESSURE}=0:1e5 Pa",
         "--proxy-order", f"context.{PRESSURE}",
     ])
     assert code == 0
-    assert f"[proxy: context: {PRESSURE} 4 {BAR} -> 5 {BAR}]" in capsys.readouterr().out
+    assert f"[proxy: context: {PRESSURE} 400000 Pa -> 500000 Pa]" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("unit", ["kg", "KiloGM", "https://vocab.sentier.dev/units/unit/KiloGM"])
+def test_unit_accepts_symbol_id_and_iri(models_file, capsys, unit):
+    assert main(["run", HEAT, "--amount", "1", "--unit", unit, "--models", str(models_file)]) == 0
+
+
+def test_an_unknown_unit_exits_2(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "tkm", "--models", str(models_file)]) == 2
+    assert "tkm" in capsys.readouterr().err
+
+
+def test_time_standard_is_inferred_and_said(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg", "--time", "2030-06-15",
+                 "--models", str(models_file)]) == 0
+    assert "time 2030-06-15 read as xsd:date" in capsys.readouterr().out
+
+
+def test_a_bad_time_exits_2(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg", "--time", "2030-02-30",
+                 "--models", str(models_file)]) == 2
+
+
+def test_context_is_parsed(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg",
+                 "--context", "pressure=4e5 Pa", "--models", str(models_file)]) == 0
+    # describe_context formats with :g: 4e5 prints as 400000, not 4e+05.
+    assert "pressure=400000 Pa" in capsys.readouterr().out
+
+
+def test_a_malformed_context_exits_2(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg",
+                 "--context", "pressure 4", "--models", str(models_file)]) == 2
+
+
+def test_a_non_numeric_context_value_exits_2_naming_the_argument(models_file, capsys):
+    assert main(["run", HEAT, "--amount", "1", "--unit", "kg",
+                 "--context", "pressure=abc Pa", "--models", str(models_file)]) == 2
+    err = capsys.readouterr().err
+    assert "pressure=abc Pa" in err
+    assert "NAME=VALUE UNIT" in err
+
+
+def test_year_is_gone(models_file):
+    with pytest.raises(SystemExit):
+        main(["run", HEAT, "--amount", "1", "--unit", "kg", "--year", "2030", "--models", str(models_file)])
 
 
 def test_a_tolerance_no_model_declares_warns_and_suggests_the_iri(tmp_path, capsys):
@@ -222,8 +313,8 @@ def test_a_tolerance_no_model_declares_warns_and_suggests_the_iri(tmp_path, caps
         class Grid(Model):
             produces = ["gas"]
             coverage = Coverage(context=(ContextRange(
-                "http://qudt.org/vocab/quantitykind/Pressure",
-                "http://qudt.org/vocab/unit/BAR", 5.0, 5.0),))
+                "https://vocab.sentier.dev/units/quantity-kind/Pressure",
+                "https://vocab.sentier.dev/units/unit/PA", 5e5, 5e5),))
 
             def apply(self, demand):
                 return Result(production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)])
@@ -232,9 +323,9 @@ def test_a_tolerance_no_model_declares_warns_and_suggests_the_iri(tmp_path, caps
     '''))
     code = main([
         "run", "gas", "--amount", "1", "--unit", "MJ", "--models", str(path),
-        "--context-tolerance", "pressure=0:1",
+        "--context-tolerance", "pressure=0:1e5 Pa",
     ])
     assert code == 0
     err = capsys.readouterr().err
     assert "no model declares a context condition named 'pressure'" in err
-    assert "did you mean http://qudt.org/vocab/quantitykind/Pressure?" in err
+    assert "did you mean https://vocab.sentier.dev/units/quantity-kind/Pressure?" in err

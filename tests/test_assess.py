@@ -5,6 +5,7 @@ from trailrunner.orchestration.log import Log
 from trailrunner.orchestration.report import Report
 
 from .conftest import CH4_IRI, CO2_IRI
+from trailrunner.core.units import KG, MJ
 
 CAPTURED = "https://vocab.sentier.dev/products/co2-captured"
 HEAT = "https://vocab.sentier.dev/products/heat"
@@ -15,23 +16,23 @@ def two_level_report() -> Report:
     """Root emits 10 kg CO2; its child emits 2 kg CH4 and 1 kg of an
     uncharacterized flow."""
     log = Log()
-    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
-    child_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit="MJ")
+    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit=KG)
+    child_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit=MJ)
     root = log.write(
         root_demand,
         Result(
-            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit="kg")],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit=KG)],
         ),
         model="DirectAirCapture",
     )
     log.write(
         child_demand,
         Result(
-            production=[Exchange(flow=child_demand.flow, amount=5000.0, unit="MJ")],
+            production=[Exchange(flow=child_demand.flow, amount=5000.0, unit=MJ)],
             biosphere=[
-                Exchange(flow=Flow(iri=CH4_IRI, location="GLO"), amount=2.0, unit="kg"),
-                Exchange(flow=Flow(iri=SOX, location="GLO"), amount=1.0, unit="kg"),
+                Exchange(flow=Flow(iri=CH4_IRI, location="GLO"), amount=2.0, unit=KG),
+                Exchange(flow=Flow(iri=SOX, location="GLO"), amount=1.0, unit=KG),
             ],
         ),
         depth=1,
@@ -48,18 +49,18 @@ def test_score_is_the_sum_of_inventory_times_factors(method_parquet_file):
 
 def test_score_carries_the_methods_unit(method_parquet_file):
     assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
-    assert assessment.unit == "kg CO2eq"
+    assert assessment.unit == KG
 
 
 def test_contributions_are_reported_per_flow(method_parquet_file):
     assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
-    assert assessment.by_flow[(Flow(iri=CO2_IRI, location="GLO"), "kg")] == 10.0
+    assert assessment.by_flow[(Flow(iri=CO2_IRI, location="GLO"), KG)] == 10.0
 
 
 def test_a_flow_with_no_factor_is_reported_not_zeroed(method_parquet_file):
     assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
     assert [(flow.iri, unit, amount) for flow, unit, amount in assessment.uncharacterized] == [
-        (SOX, "kg", 1.0)
+        (SOX, KG, 1.0)
     ]
 
 
@@ -77,7 +78,7 @@ def test_cumulative_contribution_of_the_root_is_the_whole_score(method_parquet_f
 
 def test_provenance_records_the_factor_lookups(method_parquet_file):
     assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
-    key = (Flow(iri=CO2_IRI, location="GLO"), "kg")
+    key = (Flow(iri=CO2_IRI, location="GLO"), KG)
     assert assessment.provenance[key]["method"]
 
 
@@ -96,22 +97,22 @@ def branching_report() -> Report:
     `total += cumulative(child)` give the same answer. This is the one
     fixture where they diverge."""
     log = Log()
-    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
-    child_a_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit="MJ")
-    child_b_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=2000.0, unit="MJ")
+    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit=KG)
+    child_a_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit=MJ)
+    child_b_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=2000.0, unit=MJ)
     root = log.write(
         root_demand,
         Result(
-            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit="kg")],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit=KG)],
         ),
         model="DirectAirCapture",
     )
     log.write(
         child_a_demand,
         Result(
-            production=[Exchange(flow=child_a_demand.flow, amount=5000.0, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=CH4_IRI, location="GLO"), amount=2.0, unit="kg")],
+            production=[Exchange(flow=child_a_demand.flow, amount=5000.0, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=CH4_IRI, location="GLO"), amount=2.0, unit=KG)],
         ),
         depth=1,
         parent=root,
@@ -120,8 +121,8 @@ def branching_report() -> Report:
     log.write(
         child_b_demand,
         Result(
-            production=[Exchange(flow=child_b_demand.flow, amount=2000.0, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=5.0, unit="kg")],
+            production=[Exchange(flow=child_b_demand.flow, amount=2000.0, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=5.0, unit=KG)],
         ),
         depth=1,
         parent=root,
@@ -148,30 +149,30 @@ def node_with_only_an_uncharacterized_emission() -> Report:
     """Root emits 10 kg CO2; its child emits only 1 kg of a flow the method
     has no factor for; its other child emits nothing at all."""
     log = Log()
-    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
+    root_demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit=KG)
     root = log.write(
         root_demand,
         Result(
-            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit="kg")],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+            production=[Exchange(flow=root_demand.flow, amount=1000.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit=KG)],
         ),
         model="DirectAirCapture",
     )
-    sox_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit="MJ")
+    sox_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5000.0, unit=MJ)
     log.write(
         sox_demand,
         Result(
-            production=[Exchange(flow=sox_demand.flow, amount=5000.0, unit="MJ")],
-            biosphere=[Exchange(flow=Flow(iri=SOX, location="GLO"), amount=1.0, unit="kg")],
+            production=[Exchange(flow=sox_demand.flow, amount=5000.0, unit=MJ)],
+            biosphere=[Exchange(flow=Flow(iri=SOX, location="GLO"), amount=1.0, unit=KG)],
         ),
         depth=1,
         parent=root,
         model="SmellyBoiler",
     )
-    clean_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=2000.0, unit="MJ")
+    clean_demand = Demand(flow=Flow(iri=HEAT, location="GLO"), amount=2000.0, unit=MJ)
     log.write(
         clean_demand,
-        Result(production=[Exchange(flow=clean_demand.flow, amount=2000.0, unit="MJ")]),
+        Result(production=[Exchange(flow=clean_demand.flow, amount=2000.0, unit=MJ)]),
         depth=1,
         parent=root,
         model="CleanBoiler",
@@ -189,7 +190,7 @@ def test_an_uncharacterized_node_is_distinguishable_from_a_silent_one(method_par
     assert assessment.direct_by_node[1] == 0.0
     assert assessment.direct_by_node[2] == 0.0
     assert assessment.uncharacterized_by_node[1] == [
-        (Flow(iri=SOX, location="GLO"), "kg", 1.0)
+        (Flow(iri=SOX, location="GLO"), KG, 1.0)
     ]
     assert 2 not in assessment.uncharacterized_by_node
 
@@ -198,7 +199,7 @@ def test_a_characterized_node_has_no_uncharacterized_entry(method_parquet_file):
     assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
     assert 0 not in assessment.uncharacterized_by_node
     assert assessment.uncharacterized_by_node[1] == [
-        (Flow(iri=SOX, location="GLO"), "kg", 1.0)
+        (Flow(iri=SOX, location="GLO"), KG, 1.0)
     ]
 
 
@@ -206,17 +207,17 @@ def test_the_inventorys_own_gaps_reach_the_assessment(method_parquet_file):
     """A consumer handed only an ``Assessment`` must be able to tell a complete
     traversal's score from one that hit ``max_nodes`` halfway down."""
     log = Log()
-    demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit="kg")
+    demand = Demand(flow=Flow(iri=CAPTURED, location="GLO"), amount=1000.0, unit=KG)
     log.write(
         demand,
         Result(
-            production=[Exchange(flow=demand.flow, amount=1000.0, unit="kg")],
-            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit="kg")],
+            production=[Exchange(flow=demand.flow, amount=1000.0, unit=KG)],
+            biosphere=[Exchange(flow=Flow(iri=CO2_IRI, location="GLO"), amount=10.0, unit=KG)],
         ),
         model="DirectAirCapture",
     )
     log.unresolved(
-        Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5.0, unit="MJ"),
+        Demand(flow=Flow(iri=HEAT, location="GLO"), amount=5.0, unit=MJ),
         reason="max_depth",
         parent=0,
     )
@@ -230,7 +231,7 @@ def test_the_inventorys_own_gaps_reach_the_assessment(method_parquet_file):
 def test_the_summary_carries_the_score_the_method_and_the_caveats(method_parquet_file):
     assessment = assess(two_level_report(), Method.from_parquet(method_parquet_file))
     summary = assessment.summary()
-    assert "kg CO2eq" in summary
+    assert "kg" in summary
     assert assessment.method in summary
     assert "1 uncharacterized flow" in summary
     assert "0 unresolved" in summary

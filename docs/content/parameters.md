@@ -6,8 +6,8 @@ tags:
 
 # Parameters
 
-A [`ParameterSet`](../api/parameter_set.md) is a table of rows keyed by location and year.
-`at(location, time)` widens the lookup until something matches and records each widening
+A [`ParameterSet`](../api/parameter_set.md) is a table of rows keyed by location and time.
+`at(location, time, time_standard)` widens the lookup until something matches and records each widening
 step in the returned row's provenance. Nothing is substituted silently, and nothing is
 extrapolated beyond the data.
 
@@ -25,7 +25,17 @@ params = ParameterSet.from_parquet(
 The parquet file carries a [Data Package](https://datapackage.org) descriptor in its schema
 metadata under the key `datapackage.json`. For each field, trailrunner reads `unit.name`
 and `rdfType` (or `taxonomyUrl`), which is how `row.unit_of()` and `row.iri_of()` answer
-without the model hard-coding anything. The field list is read from
+without the model hard-coding anything. `unit.name` is a unit IRI from the
+[sentier units vocabulary](https://vocab.sentier.dev/units/) (`trailrunner.core.units.MJ` and
+friends), because a model hands it straight on to the demands it makes. The time column
+carries a `timeStandard`, the IRI of the standard its values are written in:
+
+```json
+{"name": "time", "type": "string", "timeStandard": "http://www.w3.org/2001/XMLSchema#gYear"}
+```
+
+A file whose time column declares no standard is refused when it is read, rather than
+guessed at. The field list is read from
 `resources[].schema.fields`, where Frictionless puts it and trailpack writes it. The flatter
 `resources[].fields` is also accepted, for descriptors assembled by hand.
 
@@ -46,14 +56,18 @@ Useful for tests and first runs. Units and IRIs are passed directly instead of c
 file metadata:
 
 ```python
+from trailrunner.core.time import GYEAR, in_year
+from trailrunner.core.units import MJ
+
 params = ParameterSet(
     rows=[
-        {"location": "CH", "time": 2020, "heat_demand": 6.0},
-        {"location": "CH", "time": 2030, "heat_demand": 5.0},
-        {"location": "RER", "time": 2030, "heat_demand": 7.0},
+        {"location": "CH", "time": "2020", "heat_demand": 6.0},
+        {"location": "CH", "time": "2030", "heat_demand": 5.0},
+        {"location": "RER", "time": "2030", "heat_demand": 7.0},
     ],
-    units={"heat_demand": "MJ"},
+    units={"heat_demand": MJ},
     iris={"heat_demand": "https://vocab.sentier.dev/parameters/heat-demand"},
+    time_standard=GYEAR,
     hierarchy=LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"}),
     source="hand-written parameters",
 )
@@ -64,13 +78,15 @@ file path, so a `MissingUnit` can point at the file.
 
 ## Resolution order
 
-1. **Exact match** on `(location, time)`.
-2. **Time interpolation**, linear, between the two years bracketing the request at that
-   location.
+1. **Exact match** on `(location, time)`. A row matches when its period **contains** the
+   one asked for: a `2030` row (`GYEAR`) answers `2030-06-15` (`DATE`) exactly.
+2. **Time interpolation**, linear, between the two rows bracketing the request at that
+   location, measured between period **midpoints** in decimal years. For year rows and a
+   year request that is the familiar interpolation between two years.
 3. **Location fallback** along the [`LocationHierarchy`](../api/location.md), most specific
    first (`FR → RER → GLO`), repeating 1 and 2 at each level.
 
-A location with no row bracketing the requested year is skipped rather than extrapolated.
+A location with no row bracketing the requested time is skipped rather than extrapolated.
 If the chain runs out, [`ParameterNotFound`](../api/errors.md) is raised, naming what was
 tried.
 
@@ -91,11 +107,11 @@ tried.
 With the in-memory table above:
 
 ```python
-row = params.at(location="CH", time=2025)
+row = params.at(location="CH", **in_year(2025))   # time="2025", time_standard=GYEAR
 
 row["heat_demand"]            # 5.5, halfway between 2020 and 2030
 row.heat_demand               # the same value
-row.unit_of("heat_demand")    # "MJ"
+row.unit_of("heat_demand")    # "https://vocab.sentier.dev/units/unit/MegaJ", an IRI"
 row.iri_of("heat_demand")     # "https://vocab.sentier.dev/parameters/heat-demand"
 row.provenance
 ```
@@ -105,19 +121,19 @@ row.provenance
     "location_requested": "CH",
     "location_used": "CH",
     "location_fallback": False,
-    "time_requested": 2025,
-    "time_used": 2025,
+    "time_requested": "2025",
+    "time_used": "2025",
     "time_interpolated": True,
-    "time_bracket": (2020, 2030),
+    "time_bracket": ("2020", "2030"),
 }
 ```
 
 and a fallback:
 
 ```python
-params.at(location="FR", time=2030).provenance
+params.at(location="FR", **in_year(2030)).provenance
 # {'location_requested': 'FR', 'location_used': 'RER', 'location_fallback': True,
-#  'time_requested': 2030, 'time_used': 2030, 'time_interpolated': False}
+#  'time_requested': '2030', 'time_used': '2030', 'time_interpolated': False}
 ```
 
 `location_used` is the location of the row actually taken. With no location requested
@@ -161,6 +177,7 @@ overridden):
 
 ```python
 from trailrunner import Fleet, LocationHierarchy
+from trailrunner.core.units import TONNE_PER_YEAR, YEAR
 
 fleet = Fleet(
     rows=[
@@ -168,14 +185,14 @@ fleet = Fleet(
         {"plant": "ch-2", "location": "CH", "build_year": 2029, "capacity": 8000.0, "lifetime": 20},
         {"plant": "rer-1", "location": "RER", "build_year": 2024, "capacity": 50000.0, "lifetime": 20},
     ],
-    units={"capacity": "t/year", "lifetime": "year"},
+    units={"capacity": TONNE_PER_YEAR, "lifetime": YEAR},
     hierarchy=LocationHierarchy({"CH": "RER", "FR": "RER", "RER": "GLO"}),
 )
 
-running = fleet.operating(location="CH", time=2030)
+running = fleet.operating(location="CH", time=2030)   # a fleet counts in calendar years
 running.provenance["plants"]     # ['ch-1', 'ch-2']
 running.total_capacity           # 12000.0
-running.unit_of("capacity")      # 't/year'
+running.unit_of("capacity")      # TONNE_PER_YEAR, an IRI
 running.mean_build_year          # 2028.0, weighted by capacity
 
 fleet.operating(location="CH", time=2027).provenance["plants"]   # ['ch-1']
@@ -195,3 +212,9 @@ existence either.
 plant's construction over its output according to the run's
 [capital rule](attribution.md#capital-per_output-per_year-first_life), and demand that
 plant's share **in the plant's own build year**, years before the output it pays for.
+The capacity is a rate (`TONNE_PER_YEAR`) and the demand an amount (`KG`), so before the
+demand is a share of the fleet, each plant's capacity is converted into one year of output
+in the demand's unit (`UnitCatalog.over_a_year`): 1 t/yr is 1000 kg a year. A capacity the
+vocabulary cannot read as a rate of the demanded quantity is refused with a
+`ValidationError` naming both units. The construction demand itself stays in the capacity
+unit.

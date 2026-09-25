@@ -3,6 +3,8 @@ import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from trailrunner.core.units import DEG_C, KG, MJ, UNITLESS
+from trailrunner.core.time import GYEAR
 
 HEAT_DEMAND_IRI = "https://vocab.sentier.dev/parameters/heat-demand"
 TEMPERATURE_IRI = "https://vocab.sentier.dev/parameters/air-temperature"
@@ -27,6 +29,7 @@ def write_parameter_parquet(path, rows, fields, nested=True):
             "type": field["type"],
             **({"unit": {"name": field["unit"]}} if field.get("unit") else {}),
             **({"rdfType": field["iri"]} if field.get("iri") else {}),
+            **({"timeStandard": field["time_standard"]} if field.get("time_standard") else {}),
         }
         for field in fields
     ]
@@ -57,15 +60,15 @@ def method_parquet_file(tmp_path):
     """GWP100-shaped: a global CO2 factor, a regional CH4 one, both per kg."""
     path = tmp_path / "gwp100.parquet"
     rows = [
-        {"flow_iri": CO2_IRI, "flow_unit": "kg", "location": "GLO", "cf": 1.0},
-        {"flow_iri": CH4_IRI, "flow_unit": "kg", "location": "GLO", "cf": 29.8},
-        {"flow_iri": CH4_IRI, "flow_unit": "kg", "location": "RER", "cf": 27.0},
+        {"flow_iri": CO2_IRI, "flow_unit": KG, "location": "GLO", "cf": 1.0},
+        {"flow_iri": CH4_IRI, "flow_unit": KG, "location": "GLO", "cf": 29.8},
+        {"flow_iri": CH4_IRI, "flow_unit": KG, "location": "RER", "cf": 27.0},
     ]
     fields = [
         {"name": "flow_iri", "type": "string", "unit": None, "iri": None},
         {"name": "flow_unit", "type": "string", "unit": None, "iri": None},
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "cf", "type": "number", "unit": "kg CO2eq", "iri": None},
+        {"name": "cf", "type": "number", "unit": KG, "iri": None},
     ]
     write_method_parquet(path, rows, fields)
     return path
@@ -76,17 +79,17 @@ def dac_parameter_file(tmp_path):
     """Two locations, two years each, so fallback and interpolation can be tested."""
     path = tmp_path / "dac_params.parquet"
     rows = [
-        {"location": "CH", "time": 2020, "heat_demand": 6.0, "temperature": 9.0, "humidity": 0.75},
-        {"location": "CH", "time": 2030, "heat_demand": 5.0, "temperature": 10.0, "humidity": 0.70},
-        {"location": "RER", "time": 2020, "heat_demand": 6.6, "temperature": 11.0, "humidity": 0.68},
-        {"location": "RER", "time": 2030, "heat_demand": 5.5, "temperature": 12.0, "humidity": 0.65},
+        {"location": "CH", "time": "2020", "heat_demand": 6.0, "temperature": 9.0, "humidity": 0.75},
+        {"location": "CH", "time": "2030", "heat_demand": 5.0, "temperature": 10.0, "humidity": 0.70},
+        {"location": "RER", "time": "2020", "heat_demand": 6.6, "temperature": 11.0, "humidity": 0.68},
+        {"location": "RER", "time": "2030", "heat_demand": 5.5, "temperature": 12.0, "humidity": 0.65},
     ]
     fields = [
         {"name": "location", "type": "string", "unit": None, "iri": None},
-        {"name": "time", "type": "integer", "unit": "year", "iri": None},
-        {"name": "heat_demand", "type": "number", "unit": "MJ", "iri": HEAT_DEMAND_IRI},
-        {"name": "temperature", "type": "number", "unit": "degC", "iri": TEMPERATURE_IRI},
-        {"name": "humidity", "type": "number", "unit": "dimensionless", "iri": HUMIDITY_IRI},
+        {"name": "time", "type": "string", "time_standard": GYEAR, "iri": None},
+        {"name": "heat_demand", "type": "number", "unit": MJ, "iri": HEAT_DEMAND_IRI},
+        {"name": "temperature", "type": "number", "unit": DEG_C, "iri": TEMPERATURE_IRI},
+        {"name": "humidity", "type": "number", "unit": UNITLESS, "iri": HUMIDITY_IRI},
     ]
     write_parameter_parquet(path, rows, fields)
     return path

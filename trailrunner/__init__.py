@@ -6,11 +6,13 @@ from trailrunner.core.errors import (
     DuplicateFactor,
     MissingColumns,
     MissingProperty,
+    MissingTimeStandard,
     MissingUnit,
     NoModelFound,
     ParameterNotFound,
     TrailrunnerError,
     UnallocatedCoProduction,
+    UnknownUnit,
     UnsupportedAttribution,
     ValidationError,
 )
@@ -18,6 +20,8 @@ from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import AttributionSettings, ProxySettings, Settings
+from trailrunner.core.time import TimeRange, in_year, when, year_range
+from trailrunner.core.units import UnitCatalog
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
 from trailrunner.orchestration.report import Report
@@ -42,11 +46,13 @@ __all__ = [
     "DuplicateFactor",
     "MissingColumns",
     "MissingProperty",
+    "MissingTimeStandard",
     "MissingUnit",
     "NoModelFound",
     "ParameterNotFound",
     "TrailrunnerError",
     "UnallocatedCoProduction",
+    "UnknownUnit",
     "UnsupportedAttribution",
     "ValidationError",
     # Types and components.
@@ -72,4 +78,12 @@ __all__ = [
     "Result",
     "Runner",
     "Settings",
+    "TimeRange",
+    "UnitCatalog",
+    # Time helpers. `in_year` and `when` build the context dict a Flow's
+    # `time`/`time_standard` fields expect; `year_range` builds a Coverage's
+    # `time_range`.
+    "in_year",
+    "when",
+    "year_range",
 ]

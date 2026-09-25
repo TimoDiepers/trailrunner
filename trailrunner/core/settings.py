@@ -104,17 +104,22 @@ class ProxySettings:
     ``context.<name>`` absent here takes the ``context`` budget.
     """
 
-    time_tolerance: int = 5
-    """Years. How far a demand's year may be moved to meet a model's coverage."""
+    time_tolerance: float = 5.0
+    """Years, measured between period midpoints.
 
-    context_tolerance: dict[str, tuple[float, float]] = field(default_factory=dict)
-    """Per context condition, how far ``(below, above)`` the asked value it may move.
+    How far a demand's time may be moved to meet a model's coverage.
+    """
+
+    context_tolerance: dict[str, tuple[float, float, str]] = field(default_factory=dict)
+    """Per context condition, how far ``(below, above, unit)`` the asked value may move.
 
     Two numbers, not one, because most conditions have a safe side. Gas at a
     higher pressure than asked can be throttled down at the burner; gas at a
-    lower one cannot be pushed up there, so pressure wants ``(0.0, 1.0)``, not
-    ``1.0`` either way. Both are in the condition's own unit, and a condition
-    absent here is never relaxed: empty by default, so no condition is.
+    lower one cannot be pushed up there, so pressure wants ``(0.0, 1e5, PA)``,
+    not ``1e5`` either way. The unit says what the two numbers are in,
+    because a condition may be asked in any unit of its kind: "1 above" means
+    nothing until it says 1 of what. A condition absent here is never
+    relaxed: empty by default, so no condition is.
     """
 
     def __post_init__(self) -> None:
@@ -157,10 +162,14 @@ class ProxySettings:
                     f"{', '.join(unbudgeted)}"
                 )
         for name, bounds in self.context_tolerance.items():
-            if len(bounds) != 2 or any(bound < 0 for bound in bounds):
+            if (
+                len(bounds) != 3
+                or not isinstance(bounds[2], str)
+                or any(not isinstance(bound, (int, float)) or bound < 0 for bound in bounds[:2])
+            ):
                 raise ValueError(
                     f"{bounds!r} is not a valid context tolerance for {name!r}; "
-                    "must be (below, above), both >= 0"
+                    "must be (below, above, unit) with both bounds >= 0"
                 )
         if self.time_tolerance < 0:
             raise ValueError(

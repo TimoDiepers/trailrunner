@@ -57,9 +57,34 @@ other way round, is a modelling decision. A study that prefers the background ti
 the chain in that order.
 
 When every tier declines, the demand becomes a cutoff, and the chain asks each tier in the
-same order why it declined. Tier 1 reports `coverage_excluded` if a model declares the
+same order why it declined. Tier 1 reports `unit_mismatch` if a model covers the flow but
+answers only in a unit of another quantity, and `coverage_excluded` if a model declares the
 product but its coverage misses. Tier 2 reports `generalisation_exhausted` if it had
 candidates and none matched. Otherwise the reason is `no_model_found`.
+
+## Units
+
+A unit is a vocabulary IRI, and the vocabulary states each unit's quantity kind and its
+multiplier to the SI base. That makes a change of unit exact, so it happens at **tier 1**
+and is not a proxy. A model says which units it answers in with `Coverage.units`:
+
+```python
+class CementPlant(Model):
+    coverage = Coverage(time_range=year_range(2026, 2050), units=frozenset({KG}))
+```
+
+A demand in another unit of the same quantity kind is converted before `apply` sees it, and
+the conversion is written on the node. The tour demands a tonne of cement from a plant that
+reasons in kilograms:
+
+```text
+1 t Portland cement, aluminous cement, slag cement and similar hydraulic cements, except in the form of clinkers @DK/2030-06-15  [model: CementPlant; unit: t -> kg ×1000]
+```
+
+`Coverage.units=None` (the default) passes every unit through unchanged. A demand whose unit
+is of another quantity kind (kilowatt hours from a model answering in kilograms) is not
+answered, and the cutoff reads `unit_mismatch`, naming both units. Temperatures are never
+converted, because the vocabulary gives no offset between °C and K.
 
 ## Tier 2: generalising a demand
 
@@ -73,7 +98,7 @@ from trailrunner import ProxySettings
 ProxySettings(
     order=("time", "location", "context", "product"),                    # the default order
     max_steps={"time": 1, "location": 3, "context": 1, "product": 2},    # the default budgets
-    time_tolerance=5,                                                    # years
+    time_tolerance=5,                                                    # years, midpoint to midpoint
     context_tolerance={},                                                # no condition relaxed
 )
 ```
@@ -87,34 +112,42 @@ year or context value snapped to. Each candidate that answers records a note suc
 first. With `{"CH": "RER", "RER": "GLO"}`, a demand at `CH` with no `CH` model is asked
 again at `RER`, then at `GLO`.
 
-**Time** snaps to the nearest year that some model declaring the product actually covers,
-within `time_tolerance`. A demand for 2030 with a model covering 2035–2050 and a tolerance
-of 5 is asked again for 2035. Years nothing claims are never tried.
+**Time** snaps to the nearest edge of a time range that some model declaring the product
+actually covers, within `time_tolerance` years. A time is an interval in its standard, and
+a range that already *contains* it offers nothing to snap to: a demand for `2030-06-15`
+(`DATE`) is covered by `year_range(2026, 2050)` at tier 1. Otherwise the distance is measured
+between period **midpoints**, in decimal years, so for year data it is the plain difference
+of the years. A demand for 2030 with a model covering 2035–2050 and a tolerance of 5 is
+asked again for 2035. Periods nothing claims are never tried.
 
 **Context** covers conditions other than place and year. A [`Flow`](../api/flow.md) can
 carry a `context` of named [`Property`](../api/flow.md) values, such as the pressure gas is wanted at.
-Name conditions and units by IRI, e.g. [QUDT](https://qudt.org) quantity kinds and units, so two
-models written by two people agree on what a condition means.
+Name conditions by IRI, e.g. the quantity kinds of the [sentier vocabulary](https://vocab.sentier.dev)
+(derived from QUDT), so two models written by two people agree on what a condition means.
 A model declares what it can answer with a `ContextRange` in its
 [`Coverage`](../api/coverage.md). A range only restricts flows that name that condition;
 a demand that names no pressure accepts any. When nothing matches, tier 2 snaps the
 condition into the nearest range some declaring model covers. It only does that for
-conditions listed in `context_tolerance`, and only within their `(below, above)` bounds,
-in the condition's own unit:
+conditions listed in `context_tolerance`, and only within their `(below, above, unit)`
+bounds. The unit is a vocabulary IRI, and the asked value and the ranges are converted into
+it before they are compared:
 
 ```python
+from trailrunner.core.units import PA
+
 # gas at a higher pressure can be throttled at the burner; at a lower one it cannot
-ProxySettings(context_tolerance={"http://qudt.org/vocab/quantitykind/Pressure": (0.0, 1.0)})
+ProxySettings(context_tolerance={"https://vocab.sentier.dev/units/quantity-kind/Pressure": (0.0, 1e5, PA)})
 ```
 
-The tour's kiln burners ask for 4 bar and `NaturalGasSupply` delivers at 5:
+The tour's kiln burners ask for 4e5 Pa (4 bar) and `NaturalGasSupply` delivers at 5e5 Pa:
 
 ```text
-2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR]
+  2475 MJ Natural gas, liquefied or in the gaseous state @DK/2030-06-15 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa]
 ```
 
-A 6-bar demand would not be moved down to 5, and a flow asking in QUDT `PSI` is never
-compared with a range in `BAR`. Units are not converted.
+A 6e5 Pa demand would not be moved down to 5e5 Pa. A condition asked in a unit of another
+quantity kind than its tolerance is never moved. The vocabulary has no plain `bar`, so
+pressures are written in Pa.
 
 **Product** climbs a [`Taxonomy`](../api/resolution.md)'s `skos:broader` relation,
 breadth-first: every concept one level up is tried before any concept two levels up, so the
@@ -140,7 +173,7 @@ slaked lime and hydraulic lime"), which nobody produces. Two levels up is `fi_37
 ("Plaster, lime and cement"), and a supplier there answers:
 
 ```text
-10 kg Quicklime, slaked lime and hydraulic lime @DK/2030  [proxy: product: fi_37420 -> fi_374]
+10 kg Quicklime, slaked lime and hydraulic lime @DK/2030-06-15  [proxy: product: fi_37420 -> fi_374]
 ```
 
 That is the best answer available, and a poor one in substance: `fi_374` averages over a
@@ -189,15 +222,17 @@ matches, the `generalisation_exhausted` detail counts candidates per entry, e.g.
 ### Combining context conditions
 
 Plain `"context"` moves one tolerated condition at a time. A demand that is off on two
-conditions, say gas asked for at 4 bar and 280 K from a grid delivering 5 bar at 288 K,
+conditions, say gas asked for at 4e5 Pa and 280 K from a grid delivering 5e5 Pa at 288 K,
 is not answered by it, whatever the tolerances. To allow that, name each condition as a
 dimension of its own, `context.<name>`, and combine them like any other. Here the
-conditions and units are [QUDT](https://qudt.org) IRIs, which is what the name and unit
-of a `Property` should be when the models share them:
+conditions are sentier quantity-kind IRIs, which is what the name of a `Property` should
+be when the models share it:
 
 ```python
-PRESSURE = "http://qudt.org/vocab/quantitykind/Pressure"
-TEMPERATURE = "http://qudt.org/vocab/quantitykind/ThermodynamicTemperature"
+from trailrunner.core.units import KELVIN, PA
+
+PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"
+TEMPERATURE = "https://vocab.sentier.dev/units/quantity-kind/Temperature"
 
 ProxySettings(
     order=(
@@ -205,15 +240,16 @@ ProxySettings(
         f"context.{TEMPERATURE}",                               # temperature alone
         (f"context.{PRESSURE}", f"context.{TEMPERATURE}"),      # both, only because it's listed
     ),
-    context_tolerance={PRESSURE: (0.0, 1.0), TEMPERATURE: (0.0, 10.0)},
+    context_tolerance={PRESSURE: (0.0, 1e5, PA), TEMPERATURE: (0.0, 10.0, KELVIN)},
 )
 ```
 
 ```text
-111.111 MJ natural-gas @CH/2030 (http://qudt.org/vocab/quantitykind/Pressure=4 http://qudt.org/vocab/unit/BAR, http://qudt.org/vocab/quantitykind/ThermodynamicTemperature=280 http://qudt.org/vocab/unit/K)  [proxy: context: http://qudt.org/vocab/quantitykind/Pressure 4 http://qudt.org/vocab/unit/BAR -> 5 http://qudt.org/vocab/unit/BAR; context: http://qudt.org/vocab/quantitykind/ThermodynamicTemperature 280 http://qudt.org/vocab/unit/K -> 288 http://qudt.org/vocab/unit/K]
+111.111 MJ natural-gas @CH/2030 (https://vocab.sentier.dev/units/quantity-kind/Pressure=400000 Pa, https://vocab.sentier.dev/units/quantity-kind/Temperature=280 K)  [proxy: context: https://vocab.sentier.dev/units/quantity-kind/Pressure 400000 Pa -> 500000 Pa; context: https://vocab.sentier.dev/units/quantity-kind/Temperature 280 K -> 288 K]
 ```
 
-Names and units are compared exactly, and printed in full, so an IRI always reads as one.
+Names are compared exactly and printed in full, so an IRI always reads as one; units are
+printed by their symbol.
 
 The same rules apply as for any combined entry. Each condition stays within its own
 tolerance and budget; a `context.<name>` missing from `max_steps` takes the `context`

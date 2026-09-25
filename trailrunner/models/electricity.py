@@ -19,6 +19,8 @@ from trailrunner.core.model import Model
 from trailrunner.core.result import Result
 from trailrunner.core.settings import ALLOCATION_RULES
 from trailrunner.params.coverage import Coverage
+from trailrunner.core.units import KWH, MJ
+from trailrunner.core.time import when, year_range
 
 # Real BONSAI vocabulary concepts (verified live against
 # https://vocab.sentier.dev; see dev/warm_pyst_cache.py and
@@ -56,7 +58,7 @@ interpolation between two years' rows round the way floats do.
 
 KWH_TO_MJ = 3.6
 
-ELECTRICITY_UNIT = "kWh"
+ELECTRICITY_UNIT = KWH
 """The unit this module reasons in.
 
 ``GasPower`` converts to MJ of fuel with a fixed factor, so a demand in any
@@ -74,7 +76,7 @@ class GridElectricity(Model):
     """
 
     produces = [ELECTRICITY]
-    coverage = Coverage(time_range=(2000, 2050))
+    coverage = Coverage(time_range=year_range(2000, 2050))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.
@@ -88,7 +90,7 @@ class GridElectricity(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         shares = {iri: float(row[column]) for column, iri in SOURCES.items()}
 
         # A mix that does not add up is a hole in the data, and a hole that is
@@ -116,7 +118,7 @@ class GridElectricity(Model):
             technosphere=[
                 Demand(
                     flow=Flow(
-                        iri=iri, location=demand.flow.location, time=demand.flow.time
+                        iri=iri, location=demand.flow.location, **when(demand.flow)
                     ),
                     amount=share * generated,
                     unit=demand.unit,
@@ -137,7 +139,7 @@ class GasPower(Model):
     """
 
     produces = [ELECTRICITY_GAS]
-    coverage = Coverage(time_range=(2000, 2050))
+    coverage = Coverage(time_range=year_range(2000, 2050), units=frozenset({ELECTRICITY_UNIT}))
 
     supports = ALLOCATION_RULES
     """Every rule, because this model is monofunctional.
@@ -151,24 +153,16 @@ class GasPower(Model):
     """
 
     def apply(self, demand: Demand) -> Result:
-        if demand.unit != ELECTRICITY_UNIT:
-            raise ValidationError(
-                f"{type(self).__name__} was asked for {demand.unit!r} of "
-                f"{demand.flow.iri}; it converts to fuel through a fixed "
-                f"{KWH_TO_MJ} MJ/{ELECTRICITY_UNIT} factor and only "
-                f"{ELECTRICITY_UNIT} can be read that way"
-            )
-
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         fuel = demand.amount * KWH_TO_MJ / float(row["efficiency"])
-        here = dict(location=demand.flow.location, time=demand.flow.time)
+        here = dict(location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[
                 Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)
             ],
             technosphere=[
-                Demand(flow=Flow(iri=NATURAL_GAS, **here), amount=fuel, unit="MJ")
+                Demand(flow=Flow(iri=NATURAL_GAS, **here), amount=fuel, unit=MJ)
             ],
             biosphere=[
                 Exchange(

@@ -2,6 +2,9 @@
 
 from dataclasses import dataclass
 
+from trailrunner.core.time import interval
+from trailrunner.core.units import symbol
+
 
 @dataclass(frozen=True)
 class Property:
@@ -37,8 +40,18 @@ class Flow:
     parent to fall back to. ``None`` means the flow is not location-specific.
     """
 
-    time: int | None = None
-    """A year. ``None`` means the flow is not time-specific."""
+    time: str | None = None
+    """When, as written in ``time_standard``: ``"2030"``, ``"2030-06-15"``.
+
+    ``None`` means the flow is not time-specific. Compared only through its
+    interval (``trailrunner.core.time.interval``), never as a string.
+    """
+
+    time_standard: str | None = None
+    """The IRI of the standard ``time`` is written in (``xsd:gYear`` …).
+
+    Set exactly when ``time`` is. ``Flow(iri=..., **in_year(2030))`` sets both.
+    """
 
     context: tuple[Property, ...] = ()
     """Conditions beyond place and year that decide who can answer the flow.
@@ -51,9 +64,22 @@ class Flow:
     only the demander knows what it needs.
     """
 
+    def __post_init__(self) -> None:
+        if self.time is not None and not isinstance(self.time, str):
+            raise TypeError(
+                f"Flow.time is a string in a declared standard, not {self.time!r}; "
+                f"write Flow(iri=..., **in_year({self.time}))"
+            )
+        if (self.time is None) != (self.time_standard is None):
+            raise ValueError("Flow.time and Flow.time_standard are set together or not at all")
+        if self.time is not None:
+            interval(self.time, self.time_standard)  # raises ValueError naming the standard
+
     def describe_context(self) -> str:
-        """The context as one short string, ``pressure=4 bar``; empty if there is none."""
-        return ", ".join(f"{entry.name}={entry.value:g} {entry.unit}" for entry in self.context)
+        """The context as one short string, ``pressure=400000 Pa``; empty if there is none."""
+        return ", ".join(
+            f"{entry.name}={entry.value:g} {symbol(entry.unit)}" for entry in self.context
+        )
 
     def get_context(self, name: str) -> Property | None:
         """The context entry called ``name``, or ``None``."""

@@ -13,6 +13,8 @@ receives a demand and returns what it produced, what it needs, and what it emitt
 
 ```python
 from trailrunner import Demand, Exchange, Flow, Model, Result
+from trailrunner.core.time import when
+from trailrunner.core.units import KG, KWH
 
 ELECTRICITY = "https://vocab.sentier.dev/products/electricity"
 GAS = "https://vocab.sentier.dev/products/natural-gas"
@@ -24,20 +26,21 @@ class GasTurbine(Model):
 
     def apply(self, demand: Demand) -> Result:
         fuel = demand.amount / 0.55  # kWh of gas per kWh of electricity
-        here = dict(location=demand.flow.location, time=demand.flow.time)
+        here = dict(location=demand.flow.location, **when(demand.flow))
 
         return Result(
             # what I made: the demand, echoed back
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
             # what I need: queued and traversed in turn
-            technosphere=[Demand(flow=Flow(iri=GAS, **here), amount=fuel, unit="kWh")],
+            technosphere=[Demand(flow=Flow(iri=GAS, **here), amount=fuel, unit=KWH)],
             # what I emitted: summed into the inventory
-            biosphere=[Exchange(flow=Flow(iri=CO2, **here), amount=0.2 * fuel, unit="kg")],
+            biosphere=[Exchange(flow=Flow(iri=CO2, **here), amount=0.2 * fuel, unit=KG)],
         )
 ```
 
 Passing `location` and `time` on to every flow you create is what keeps the inventory
-placed and dated. Change them where the process really does happen elsewhere or at another
+placed and dated. `**when(demand.flow)` passes the time together with the standard it is
+written in. Change them where the process really does happen elsewhere or at another
 time: the shipped `NaturalGasSupply` puts extraction at the gas's origin, and a
 construction demand goes in the year the plant was built.
 
@@ -94,17 +97,18 @@ say which rows were used:
 
 ```python
 from trailrunner import Coverage, Demand, Exchange, Flow, Model, Result
+from trailrunner.core.time import when, year_range
 
 
 class DirectAirCapture(Model):
     produces = [CO2_CAPTURED]
-    coverage = Coverage(time_range=(2020, 2050))
+    coverage = Coverage(time_range=year_range(2020, 2050))
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         penalty = ambient_penalty(row["temperature"], row["humidity"])
         heat = row["heat_demand"] * penalty * demand.amount
-        heat_flow = Flow(iri=HEAT, location=demand.flow.location, time=demand.flow.time)
+        heat_flow = Flow(iri=HEAT, location=demand.flow.location, **when(demand.flow))
 
         return Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
@@ -130,10 +134,10 @@ row of stack-monitor data, normalised per tonne, and returns it:
 ```python
 class MeteredCementPlant(Model):
     produces = [CEMENT]
-    coverage = Coverage(time_range=(2018, 2025))
+    coverage = Coverage(time_range=year_range(2018, 2025))
 
     def apply(self, demand: Demand) -> Result:
-        row = self.params.at(location=demand.flow.location, time=demand.flow.time)
+        row = self.params.at(location=demand.flow.location, **when(demand.flow))
         scale = demand.amount / 1000.0
         ...
         return Result(
@@ -146,7 +150,7 @@ class MeteredCementPlant(Model):
         )
 ```
 
-`CementPlant` declares the same product with `Coverage(time_range=(2026, 2050))`. The
+`CementPlant` declares the same product with `Coverage(time_range=year_range(2026, 2050))`. The
 ranges don't overlap, so the year on the demand decides whether a measurement or a
 calculation answers. The [CLI tutorial](getting_started/cli.md#3-change-the-year-and-a-different-model-answers)
 shows the switch.
@@ -158,11 +162,13 @@ either field means no restriction:
 
 ```python
 from trailrunner import Coverage
+from trailrunner.core.time import year_range
 
-coverage = Coverage(locations=frozenset({"CH", "DE"}), time_range=(2020, 2050))
+coverage = Coverage(locations=frozenset({"CH", "DE"}), time_range=year_range(2020, 2050))
 ```
 
-`time_range` includes both ends. A restricted field also rejects a flow that doesn't state
+`time_range` includes both ends, and covers any finer time inside them: `year_range(2020, 2050)`
+answers a demand dated `2050-12-31`. A restricted field also rejects a flow that doesn't state
 it: a model with a `time_range` never answers an undated demand. A flow outside the coverage means the glossary doesn't
 offer this model. If no model covers the flow but one declares the product, the demand is
 recorded as `coverage_excluded`, not `no_model_found`, and its `detail` names the model.
@@ -176,12 +182,13 @@ the [`Property`](../api/flow.md) values an allocation rule might partition on:
 
 ```python
 from trailrunner import Exchange, Flow, Property
+from trailrunner.core.units import MJ
 
 production = [
-    Exchange(flow=heat_flow, amount=100.0, unit="MJ",
-             properties=(Property("price", 3.0, "EUR"), Property("energy", 100.0, "MJ"))),
-    Exchange(flow=power_flow, amount=50.0, unit="MJ",
-             properties=(Property("price", 9.0, "EUR"), Property("energy", 50.0, "MJ"))),
+    Exchange(flow=heat_flow, amount=100.0, unit=MJ,
+             properties=(Property("price", 3.0, "EUR"), Property("energy", 100.0, MJ))),
+    Exchange(flow=power_flow, amount=50.0, unit=MJ,
+             properties=(Property("price", 9.0, "EUR"), Property("energy", 50.0, MJ))),
 ]
 ```
 
@@ -243,14 +250,97 @@ MODELS = [GasTurbine(), DirectAirCapture(params=dac_params)]
 Two registered models that both cover the same product at the same place and year raise
 [`AmbiguousModelMatch`](../api/errors.md). Narrow one of their coverages.
 
+## Migrating from int years and string units
+
+`Flow.time`, `Coverage.time_range` and every `unit` used to accept whatever you handed
+them: an `int` year, a `(start, end)` tuple, a free-text string like `"kg"` or `"bar"`.
+None of that round-tripped safely — a year compared as a string sorts wrong, and a
+misspelled unit just failed to match instead of telling you so. Both are typed now, and
+each old shape raises immediately, naming the fix.
+
+**`Flow(time=2030)`** — an int year. `Flow.time` is a string in the standard named by
+`Flow.time_standard`, so a bare int has nowhere to go:
+
+```text
+TypeError: Flow.time is a string in a declared standard, not 2030; write Flow(iri=..., **in_year(2030))
+```
+
+Write `Flow(iri=..., **in_year(2030))` instead; `in_year` sets `time` and
+`time_standard` together.
+
+**`Coverage(time_range=(2026, 2050))`** — a plain tuple. `time_range` is a `TimeRange`,
+which knows how to compare a coarse range against a finer date; a tuple of ints doesn't:
+
+```text
+TypeError: Coverage.time_range is a TimeRange; write time_range=year_range(2026, 2050)
+```
+
+Write `Coverage(time_range=year_range(2026, 2050))`.
+
+**`unit="kg"`** — a free-text unit reaching a demand. Units are vocabulary IRIs, not
+symbols, so a model or `ModelProvider` that gets a bare string can't tell KG from a typo:
+
+```text
+UnknownUnit: 'kg' is not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Write `unit=KG`, imported from `trailrunner.core.units`.
+
+**`Property("pressure", 4, "bar")`** — the same problem on a context condition. A
+`Coverage` compares context by converting into its own unit, so it has to recognise the
+one the demander wrote:
+
+```text
+UnknownUnit: context condition 'pressure' is in 'bar', not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Write the value in the vocabulary's own unit, and name the condition by the vocabulary's
+quantity kind: `Property(PRESSURE, 4e5, PA)`, with
+`PRESSURE = "https://vocab.sentier.dev/units/quantity-kind/Pressure"`.
+
+**An int year column in a parquet file** — the old `time_column` held integers with no
+declared standard. `ParameterSet.from_parquet` refuses to guess which calendar `2030`
+means, or whether it sorts as a number or a string:
+
+```text
+MissingTimeStandard: column 'time' in dac.parquet declares no time standard; add "timeStandard": "http://www.w3.org/2001/XMLSchema#gYear" (or another registered standard) to its field in the embedded datapackage, and make sure the column holds strings (e.g. '2030'), not integers
+```
+
+Cast the column to string and add a `"timeStandard"` field to the embedded datapackage
+schema.
+
+**`unit="tkm"`** — a unit that packs two quantities (mass and distance) into one
+symbol. The vocabulary has no such compound unit, so it fails the same way `"kg"` does:
+
+```text
+UnknownUnit: 'tkm' is not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Split it: demand `unit=TONNE` and put the distance on the flow's context, e.g.
+`Property("distance", 500, KILOMETRE)`, the way `NaturalGasPipelineTransport` does.
+
+**`"kg/year"`** — a rate written as a unit string, for a capacity or a fleet limit.
+Same failure, same reason: it isn't an IRI the vocabulary knows.
+
+```text
+UnknownUnit: 'kg/year' is not a unit of the vocabulary (https://vocab.sentier.dev/units/unit/); units are IRIs such as https://vocab.sentier.dev/units/unit/KiloGM — write unit=KG (from trailrunner.core.units)
+```
+
+Write `unit=TONNE_PER_YEAR`, one of the vocabulary's own rate units.
+
+The code blocks above show the error each old shape now raises, not code this page runs;
+`tests/test_writing_a_model.py` only executes the blocks that define a model.
+
 ## Testing it
 
 `Runner.validate` is the same check the orchestrator runs, callable on its own:
 
 ```python
 from trailrunner import Demand, Flow, Runner
+from trailrunner.core.time import in_year
+from trailrunner.core.units import KWH
 
-demand = Demand(flow=Flow(iri=ELECTRICITY, location="CH", time=2030), amount=10.0, unit="kWh")
+demand = Demand(flow=Flow(iri=ELECTRICITY, location="CH", **in_year(2030)), amount=10.0, unit=KWH)
 Runner.validate(demand, GasTurbine().apply(demand), model=GasTurbine())
 ```
 

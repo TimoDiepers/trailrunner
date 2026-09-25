@@ -19,15 +19,16 @@ before trusting a number that comes out of it -- a CF attached to an IRI
 nothing emits is silently no CF at all, which the Assessment will tell you
 about in `uncharacterized`.
 
-Check the **`flow_unit`** column too, not only `flow_iri`. Matching in
-`Method.factor` is string equality in both, so a factor written for
-`"kilogram"` against a model that emits `"kg"` is just as invisible as a
-mismatched IRI. This script normalises the Brightway spellings it knows
-(`UNIT_SPELLINGS` below) to the short forms trailrunner's models use, prints
-every spelling it did not recognise, and leaves those untouched for you to
-decide about. That normalisation happens once, here, at authoring time -- it
-is not a runtime conversion, and nothing in `trailrunner.assessment` ever
-converts between units.
+Check the **`flow_unit`** column too, not only `flow_iri`. `Method` refuses to
+construct at all if a row's `flow_unit` is not a vocabulary IRI the catalog
+confirms, so a factor written for Brightway's `"kilogram"` against a model
+that emits the `KG` IRI would otherwise be an outright construction error, not
+a quietly empty score. This script maps the Brightway spellings it knows
+(`UNIT_SPELLINGS` below) to the vocabulary IRIs trailrunner's models emit, and
+fails the whole conversion -- naming every spelling it did not recognise --
+rather than writing an unmapped spelling through. That mapping happens once,
+here, at authoring time -- it is not a runtime conversion, and nothing in
+`trailrunner.assessment` ever converts between units.
 """
 
 import argparse
@@ -37,25 +38,33 @@ import re
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from trailrunner.core.errors import UnknownUnit
+from trailrunner.core.units import KG, KWH, M3, MJ, SQUARE_METRE, TONNE, default_catalog
 
 UNIT_SPELLINGS = {
-    "kilogram": "kg",
-    "cubic meter": "m3",
-    "cubic metre": "m3",
-    "megajoule": "MJ",
-    "kilowatt hour": "kWh",
-    "square meter": "m2",
-    "square metre": "m2",
-    "ton": "tonne",
-    "metric ton": "tonne",
+    "kilogram": KG,
+    "cubic meter": M3,
+    "cubic metre": M3,
+    "megajoule": MJ,
+    "kilowatt hour": KWH,
+    "square meter": SQUARE_METRE,
+    "square metre": SQUARE_METRE,
+    "ton": TONNE,
+    "metric ton": TONNE,
 }
-"""Brightway's spellings -> the short forms trailrunner's models emit.
+"""Brightway's spellings -> the vocabulary IRIs trailrunner's models emit.
 
 Authoring-time spelling normalisation, not unit conversion: every pair here
-names one quantity twice. A unit this table does not know is left exactly as
-it was and printed, because guessing at it is how a factor of 1000 gets into
-a score.
+names one quantity twice. A unit this table does not know is not written
+through -- it is collected and the conversion fails, naming every spelling it
+could not map, because guessing at it is how a factor of 1000 gets into a
+score in a method file that looks perfectly valid.
 """
+
+CO2_EQ_MASS_UNITS = {"kg co2-eq", "kg co2 eq", "kg co2eq", "kg co2-equivalent"}
+"""Brightway metadata spellings of "a mass of CO2-equivalent", read case- and
+punctuation-loosely. The only metadata unit this script will turn into an IRI
+on its own; anything else needs ``--unit``."""
 
 
 def slug(name: str) -> str:
@@ -76,7 +85,14 @@ def flow_iri(prefix: str, flow) -> str:
 
 
 def normalise_unit(unit: str, unknown: set) -> str:
-    """The short spelling, or the original with a note for the operator."""
+    """The vocabulary IRI for a known Brightway spelling.
+
+    An unmapped spelling is recorded in ``unknown`` and returned unchanged --
+    still not an IRI -- so that a single pass over every flow in the method
+    can collect every spelling that needs a decision before ``check_units``
+    fails the whole conversion in one message, rather than stopping at the
+    first row.
+    """
     mapped = UNIT_SPELLINGS.get(unit.strip().lower())
     if mapped is None:
         unknown.add(unit)
@@ -84,12 +100,61 @@ def normalise_unit(unit: str, unknown: set) -> str:
     return mapped
 
 
+def check_units(unknown: set) -> None:
+    """Fail the conversion, naming every unmapped spelling at once.
+
+    Writing an unmapped spelling through used to be the quiet failure: a
+    method's ``flow_unit`` that matches no model's ``KG``-style IRI is now not
+    a small number, it is ``Method`` refusing to construct at all -- so this
+    stops it here instead, before anything is written, with the full list.
+    """
+    if not unknown:
+        return
+    raise ValueError(
+        "unrecognised flow units, not written -- add them to UNIT_SPELLINGS "
+        "in this script or convert this method by hand: " + ", ".join(sorted(unknown))
+    )
+
+
+def resolve_score_unit(unit_arg: str | None, metadata_unit: str) -> str:
+    """The IRI to write into the ``cf`` column's metadata.
+
+    An explicit ``--unit`` is resolved against the bundled catalog -- an IRI,
+    a vocabulary id (``KiloGM``) or a symbol (``kg``) -- entirely offline, so
+    an operator's typo is caught here rather than surfacing later as
+    ``UnknownUnit`` the first time the method is loaded. Failing that, the
+    only guess this script makes on its own is a CO2-eq mass -- Brightway's
+    own convention for climate change methods -- because a wrong default here
+    silently mislabels every score the method ever produces. Anything else
+    needs a human to say what the number means.
+    """
+    if unit_arg:
+        try:
+            return default_catalog().resolve(unit_arg)
+        except UnknownUnit as exc:
+            raise ValueError(f"--unit {unit_arg!r} is not a unit: {exc}") from exc
+    if metadata_unit.strip().lower() in CO2_EQ_MASS_UNITS:
+        return KG
+    raise ValueError(
+        f"the method's metadata unit is {metadata_unit!r}, which trailrunner "
+        "cannot turn into a unit IRI on its own; pass --unit IRI (e.g. "
+        f"--unit {KG})"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", required=True)
     parser.add_argument("--method", required=True, nargs="+")
     parser.add_argument("--iri-prefix", default="https://vocab.sentier.dev/flows/")
-    parser.add_argument("--unit", default=None, help="score unit; read from the method if omitted")
+    parser.add_argument(
+        "--unit",
+        default=None,
+        help=(
+            "score unit, as a vocabulary IRI; defaulted to KG when the "
+            "method's metadata unit is a CO2-eq mass, otherwise required"
+        ),
+    )
     parser.add_argument(
         "--location",
         default="GLO",
@@ -103,7 +168,7 @@ def main() -> None:
     bd.projects.set_current(args.project)
     method = bd.Method(tuple(args.method))
     metadata = method.metadata
-    unit = args.unit or metadata.get("unit", "unit")
+    unit = resolve_score_unit(args.unit, metadata.get("unit", ""))
 
     rows = []
     unknown_units: set[str] = set()
@@ -119,6 +184,7 @@ def main() -> None:
                 "cf": float(cf),
             }
         )
+    check_units(unknown_units)
 
     table = pa.Table.from_pylist(rows)
     datapackage = {
@@ -143,13 +209,6 @@ def main() -> None:
     )
     pq.write_table(table.cast(schema), args.out)
     print(f"wrote {len(rows)} factors to {args.out} (unit: {unit})")
-    if unknown_units:
-        # Named rather than guessed at: matching is string equality, so an
-        # unrecognised spelling means those factors quietly match nothing.
-        print(
-            "unrecognised flow units, written through unchanged -- check them "
-            "against what your models emit: " + ", ".join(sorted(unknown_units))
-        )
 
 
 if __name__ == "__main__":
