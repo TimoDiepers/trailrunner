@@ -391,16 +391,60 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
   </div>
 </section>
 
+<!-- ============================ 4b. PARAMS ============================ -->
+<section class="slide" data-title="Where the numbers come from">
+  <div class="kicker"><b>04</b> example</div>
+  <h2>self.params reads a parquet, found by IRI</h2>
+  <div class="row" style="gap:36px; align-items:flex-start">
+    <div class="col grow">
+      <div class="mono c-mut" style="font-size:18px">computed &mdash; CementPlant</div>
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>examples/cement_params.parquet</span></div>
+<pre class="out" style="font-size:14px; padding:14px 18px">location  time  clinker_factor  fuel_demand  moisture
+      DK  2030            0.75          3.3     0.04
+      DK  2040            0.68          3.1     0.04
+     RER  2030            0.80          3.5     0.06</pre>
+      </div>
+      <div class="small" style="font-size:18px">a fuel and clinker model, written by an engineer</div>
+    </div>
+    <div class="col grow" data-f="1">
+      <div class="mono c-mut" style="font-size:18px">measured &mdash; MeteredCementPlant</div>
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>examples/cement_metered_params.parquet</span></div>
+<pre class="out" style="font-size:14px; padding:14px 18px">location  time  metered_fuel  metered_lime  metered_co2
+      DK  2018        2810.0          11.7       601.0
+      DK  2019        2775.0          11.5       594.0
+      DK  2020        2740.0          11.4       587.0</pre>
+      </div>
+      <div class="small" style="font-size:18px">a stack monitor, read straight off the plant</div>
+    </div>
+  </div>
+  <p class="lead" data-f="2" style="margin-top:28px; font-size:36px; font-weight:600; color:var(--ink); line-height:1.15">Every column is an IRI too.</p>
+  <p class="small" data-f="2" style="margin-top:6px; font-size:21px">It carries metadata of what it's used for &mdash; also as IRIs.</p>
+  <div class="row" data-f="2" style="gap:60px; margin-top:20px; align-items:baseline">
+    <div><div class="mono c-mut" style="font-size:14px; margin-bottom:4px">unit</div><span class="mono c-t2" style="font-size:22px">https://vocab.sentier.dev/units/unit/MegaJ</span></div>
+    <div><div class="mono c-mut" style="font-size:14px; margin-bottom:4px">meaning</div><span class="mono c-t2" style="font-size:22px">https://vocab.sentier.dev/parameters/air-temperature</span></div>
+  </div>
+  <div class="panel" data-f="3" style="align-self:flex-start; width:fit-content; margin-top:24px; padding:18px 28px; border-color:var(--accent)">
+    <a href="https://github.com/TimoDiepers/trailpack" style="font-family:var(--font-mono); font-size:24px; font-weight:600; border:none; color:var(--accent)">trailpack</a>
+    <span class="mono" style="font-size:15px; color:var(--muted); margin-left:18px">last year's hackathon project &middot; BrightCon 2025</span>
+  </div>
+</section>
+
 <!-- ============================ 5. CALL IT ============================ -->
 <section class="slide" data-title="Calling the model">
-  <div class="kicker"><b>04</b> example</div>
-  <h2>Call it, get flows back as IRIs</h2>
+  <div class="kicker"><b>05</b> example</div>
+  <h2>Call the model, get flows back as IRIs</h2>
   <div class="panel">
     <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
-<pre style="font-size:17px; padding:14px 24px"><span class="cm"># called directly, so ask in the model's own unit (the runner converts inside a run)</span>
-<span class="k">IN_KG</span> = Demand(flow=DEMAND.flow, amount=<span class="n">1000.0</span>, unit=<span class="s">"https://vocab.sentier.dev/units/unit/KiloGM"</span>)
+<pre style="font-size:14px; padding:10px 22px; line-height:1.3"><span class="cm"># called directly, so ask in the model's own unit (the runner converts inside a run)</span>
+<span class="k">IN_KG</span> = Demand(
+    flow=Flow(iri=<span class="s">"https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"</span>,
+              location=<span class="s">"DK"</span>, time=<span class="s">"2030-06-15"</span>, time_standard=<span class="s">"http://www.w3.org/2001/XMLSchema#date"</span>),
+    amount=<span class="n">1000.0</span>, unit=<span class="s">"https://vocab.sentier.dev/units/unit/KiloGM"</span>,
+)
 <span class="k">answer</span> = cement_model.<span class="fn">apply</span>(IN_KG)</pre>
-<pre class="out" style="font-size:14px; padding:14px 24px">  production  1000.0  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440
+<pre class="out" style="font-size:13px; padding:10px 22px; line-height:1.35">  production  1000.0  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440
 technosphere  1125.0  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_15200
 technosphere  <span class="hl">2475.0  https://vocab.sentier.dev/units/unit/MegaJ    https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020</span>
 technosphere    10.0  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37420
@@ -408,15 +452,15 @@ technosphere   100.0  https://vocab.sentier.dev/units/unit/KiloW-HR https://voca
    biosphere   <span class="c-inv">397.5  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/flows/co2-fossil</span>
    biosphere   <span class="c-inv">138.6  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/flows/co2-fossil</span></pre>
   </div>
-  <div class="row" style="margin-top:26px; align-items:center; gap:30px" data-f="1">
+  <div class="row" style="margin-top:16px; align-items:center; gap:30px" data-f="1">
     <div class="mono c-mut" style="font-size:19px; width:300px">natural gas per 1000 kg,<br>asked elsewhere</div>
-    <svg id="gasbars" class="bar-chart" viewBox="0 0 560 300" style="height:230px; width:430px" aria-label="Gas demand per tonne of cement"></svg>
+    <svg id="gasbars" class="bar-chart" viewBox="0 0 560 300" style="height:190px; width:355px" aria-label="Gas demand per tonne of cement"></svg>
   </div>
 </section>
 
 <!-- ============================ 6. RUN IT ============================ -->
 <section class="slide" data-title="Running the chain">
-  <div class="kicker"><b>05</b> example</div>
+  <div class="kicker"><b>06</b> example</div>
   <h2>Run the whole chain</h2>
   <div class="panel">
     <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
@@ -437,7 +481,7 @@ attribution: allocation=none, capital=per_output</pre>
 
 <!-- ============================ 7. THE GRAPH ============================ -->
 <section class="slide" data-title="Resolved supply chain" style="padding-top:60px">
-  <div class="kicker"><b>06</b> example</div>
+  <div class="kicker"><b>07</b> example</div>
   <div class="row" style="justify-content:space-between; align-items:baseline">
     <h2 style="font-size:40px; margin:0">The supply chain it found</h2>
 
@@ -453,7 +497,7 @@ attribution: allocation=none, capital=per_output</pre>
 
 <!-- ============================ 8. FALLBACKS ============================ -->
 <section class="slide" data-title="Recorded fallbacks">
-  <div class="kicker"><b>07</b> example</div>
+  <div class="kicker"><b>08</b> example</div>
   <h2>Every fallback is on the record</h2>
 
   <div class="swap">
@@ -493,7 +537,7 @@ attribution: allocation=none, capital=per_output</pre>
 
 <!-- ============================ 9. RESULTS ============================ -->
 <section class="slide" data-title="Results">
-  <div class="kicker"><b>08</b> results</div>
+  <div class="kicker"><b>09</b> results</div>
   <h2>552.96 kg CO₂-eq, and when it happens</h2>
   <div class="row" style="gap:50px; align-items:flex-start; flex:1">
     <div class="col" style="width:700px; padding-top:10px">
@@ -515,7 +559,7 @@ metric: GWP, horizon: 100 years</pre>
 
 <!-- ============================ 10. SUMMARY ============================ -->
 <section class="slide center" data-title="Summary">
-  <div class="kicker"><b>09</b> summary</div>
+  <div class="kicker"><b>10</b> summary</div>
   <ul class="claims">
     <li><span class="no">01</span><span>Everything is an IRI from the sentier vocabulary.</span></li>
     <li><span class="no">02</span><span>Processes compute their answer from the demand.</span></li>
