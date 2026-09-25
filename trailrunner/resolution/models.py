@@ -31,7 +31,7 @@ class ModelProvider:
                 f"{demand.unit!r} is not a unit of the vocabulary ({VOCAB}); units are "
                 f"IRIs such as {KG} — write unit=KG (from trailrunner.core.units)"
             )
-        model = self.glossary.resolve(demand.flow, exclude=exclude)
+        model = self.glossary.resolve(demand.flow, exclude=exclude, units=self.units)
         if model is None:
             return None
         answered, conversion = self._in_model_unit(demand, model)
@@ -80,7 +80,7 @@ class ModelProvider:
         answer: the model covers this flow and would answer it, in a unit the
         demand cannot be converted into.
         """
-        model = self.glossary.resolve(demand.flow, exclude=exclude)
+        model = self.glossary.resolve(demand.flow, exclude=exclude, units=self.units)
         if model is not None:
             accepted = sorted(model.coverage.units)  # non-None, or offer() would have answered
             demand_symbol = self.units.symbol(demand.unit)

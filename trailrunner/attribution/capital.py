@@ -8,12 +8,17 @@ same one.
 """
 
 from trailrunner.core.errors import ValidationError
-from trailrunner.core.units import default_catalog, symbol
+from trailrunner.core.units import UnitCatalog, default_catalog, symbol
 
 CAPITAL_RULES = ("per_output", "per_year", "first_life")
 
 
-def output_over_a_year(capacity: float, capacity_unit: str, demand_unit: str) -> float:
+def output_over_a_year(
+    capacity: float,
+    capacity_unit: str,
+    demand_unit: str,
+    units: UnitCatalog | None = None,
+) -> float:
     """A plant's capacity as one year of output, in the demand's unit.
 
     A fleet states capacity as a rate (``TONNE_PER_YEAR``) and a demand is an
@@ -21,8 +26,14 @@ def output_over_a_year(capacity: float, capacity_unit: str, demand_unit: str) ->
     once both are in the same unit, so the model converts here, per plant,
     and refuses a pair the vocabulary cannot relate -- a capacity in m3/yr
     against a demand in kg would need a density nobody stated.
+
+    ``units`` is the catalog to convert with; ``None`` keeps the previous
+    behaviour of the bundled default. Existing callers (the models) pass
+    nothing new here -- a model that wants a different catalog can pass one
+    once it needs to.
     """
-    output = default_catalog().over_a_year(capacity, capacity_unit, demand_unit)
+    catalog = units if units is not None else default_catalog()
+    output = catalog.over_a_year(capacity, capacity_unit, demand_unit)
     if output is None:
         raise ValidationError(
             f"cannot read a capacity in {symbol(capacity_unit)} ({capacity_unit}) as a "

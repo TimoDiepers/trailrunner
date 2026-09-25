@@ -1,13 +1,15 @@
+import json
+
 import pytest
 
 from trailrunner.core.errors import UnknownUnit
-from trailrunner.core.flow import Demand, Exchange, Flow
+from trailrunner.core.flow import Demand, Exchange, Flow, Property
 from trailrunner.core.model import Model
 from trailrunner.core.result import Result
-from trailrunner.core.units import KG, M3, MJ, TONNE, VOCAB
+from trailrunner.core.units import KG, KILOMETRE, M3, MJ, TONNE, VOCAB, UnitCatalog
 from trailrunner.orchestration.glossary import Glossary
 from trailrunner.orchestration.orchestrator import Orchestrator
-from trailrunner.params.coverage import Coverage
+from trailrunner.params.coverage import Coverage, ContextRange
 from trailrunner.resolution.chain import ResolutionChain
 from trailrunner.resolution.generalising import GeneralisingProvider, StaticTaxonomy
 from trailrunner.resolution.models import ModelProvider
@@ -122,3 +124,41 @@ def test_an_uncached_vocab_unit_with_a_colliding_symbol_shows_full_iris():
     assert KG in record.detail
     assert demand_unit in record.detail
     assert "warm_unit_cache" in record.detail
+
+
+MILLI_M = VOCAB + "MilliM"
+
+
+def test_orchestrators_catalog_converts_a_context_condition_in_the_glossary(tmp_path):
+    # Review focus 5: the catalog Orchestrator/ModelProvider is given must
+    # reach Coverage.covers by way of Glossary.resolve, not just the Runner.
+    cache = tmp_path / "units.json"
+    cache.write_text(
+        json.dumps(
+            {
+                MILLI_M: {
+                    "quantity_kind": "https://vocab.sentier.dev/units/quantity-kind/Length",
+                    "multiplier": 0.001,
+                    "offset": 0.0,
+                    "symbol": "mm",
+                }
+            }
+        )
+    )
+    catalog = UnitCatalog(cache_path=cache)
+
+    class LengthLimited(PerKilogram):
+        coverage = Coverage(
+            units=frozenset({KG}),
+            context=(ContextRange(name="length", unit=KILOMETRE, minimum=0.0, maximum=10.0),),
+        )
+
+    demand = Demand(
+        flow=Flow(iri=CEMENT, context=(Property(name="length", value=500.0, unit=MILLI_M),)),
+        amount=1.0,
+        unit=KG,
+    )
+    report = Orchestrator(Glossary([LengthLimited()]), units=catalog).calculate(demand)
+    assert report.unresolved == []
+    [node] = report.nodes
+    assert node.resolution["tier"] == "model"
