@@ -474,13 +474,20 @@ attribution: allocation=none, capital=per_output</pre>
 <section class="slide" data-title="Results">
   <div class="kicker"><b>08</b> results</div>
   <h2>552.96 kg CO₂-eq, and when it happens</h2>
-  <div class="row" style="gap:50px; align-items:center; flex:1">
-    <div class="col" style="width:700px">
+  <div class="row" style="gap:50px; align-items:flex-start; flex:1">
+    <div class="col" style="width:700px; padding-top:10px">
       <div class="mono c-mut" style="font-size:18px">GWP100 by model, kg CO₂-eq</div>
       <svg id="contrib" class="bar-chart" viewBox="0 0 760 330" style="width:700px; height:304px" aria-label="GWP100 by model"></svg>
     </div>
-    <div class="col grow">
-      <svg id="rf" class="bar-chart" viewBox="0 0 700 520" style="height:500px" aria-label="Marginal radiative forcing per year, log scale"></svg>
+    <div class="col grow" style="gap:14px">
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
+<pre class="sm" style="font-size:16px; padding:12px 22px">dynamic = <span class="fn">assess_dynamic</span>(report, metric=<span class="s">"GWP"</span>, horizon=<span class="n">100</span>)</pre>
+<pre class="out sm" style="font-size:16px; padding:12px 22px">552.937 kg
+metric: GWP, horizon: 100 years</pre>
+      </div>
+      <div class="mono c-mut" style="font-size:18px">GWP100 by emission date, kg CO₂-eq (log scale)</div>
+      <svg id="dyn" class="bar-chart" viewBox="0 0 700 470" style="height:380px" aria-label="Dynamic GWP100 by emission date, log scale"></svg>
     </div>
   </div>
 </section>
@@ -524,9 +531,10 @@ const GWP = [ // kg CO2-eq, IPCC AR6 GWP100, direct by model
   ["OffshorePipelineTransport", 0.263, "t1"],
   ["background datasets", 0.054, "t3"],
 ];
-const RF = [ // marginal radiative forcing [W/m2] per year
-  [2027, 2.973750e-17], [2028, 5.434073e-17], [2029, 2.520040e-17],
-  [2030, 5.947499e-17], [2031, 9.120960e-13], [2032, 8.562483e-13],
+const DYN = [ // dynamic GWP100 [kg CO2-eq] by emission date, assess_dynamic(metric="GWP")
+  ["2026", "kiln built", 0.018053],
+  ["2029", "kiln built", 0.036107],
+  ["2030-06-15", "cement made", 552.883143],
 ];
 
 const COL = { t1: "#d9a441", t2: "#6f9fd6", t3: "#5fbfae", cut: "#d4716c", inv: "#9d8bd6",
@@ -570,24 +578,23 @@ function contribBars() {
   });
 }
 
-function rfBars() {
-  const svg = document.getElementById("rf");
-  const lo = -18, hi = -11, x0 = 90, y0 = 440, h = 400, bw = 70, gap = 30;
+function dynBars() {
+  const svg = document.getElementById("dyn");
+  const lo = -2, hi = 3, x0 = 90, y0 = 400, h = 340, bw = 120, gap = 60;
   for (let d = lo; d <= hi; d++) {
     const y = y0 - ((d - lo) / (hi - lo)) * h;
     el("line", { x1: x0, x2: 690, y1: y, y2: y, stroke: COL.line, "stroke-width": 1 }, svg);
     el("text", { x: x0 - 12, y: y + 6, "text-anchor": "end", "font-size": 16, fill: COL.faint, "font-family": "Consolas, IBM Plex Mono, monospace" }, svg, "1e" + d);
   }
-  RF.forEach(([year, v], i) => {
+  DYN.forEach(([date, what, v], i) => {
     const bh = ((Math.log10(v) - lo) / (hi - lo)) * h;
-    const x = x0 + 30 + i * (bw + gap);
-    const kiln = year <= 2030;
-    el("rect", { x, y: y0 - bh, width: bw, height: bh, rx: 5, fill: kiln ? "#3a4441" : COL.t1, class: "grow-bar-v" }, svg);
-    el("text", { x: x + bw / 2, y: y0 + 30, "text-anchor": "middle", "font-size": 18, fill: COL.muted, "font-family": "Consolas, IBM Plex Mono, monospace" }, svg, year);
+    const x = x0 + 50 + i * (bw + gap);
+    const cement = i === DYN.length - 1;
+    el("rect", { x, y: y0 - bh, width: bw, height: bh, rx: 5, fill: cement ? COL.t1 : "#3a4441", class: "grow-bar-v" }, svg);
+    el("text", { x: x + bw / 2, y: y0 - bh - 12, "text-anchor": "middle", "font-size": 18, fill: COL.ink, "font-family": "Consolas, IBM Plex Mono, monospace" }, svg, v >= 1 ? v.toFixed(1) : v.toFixed(3));
+    el("text", { x: x + bw / 2, y: y0 + 30, "text-anchor": "middle", "font-size": 17, fill: COL.muted, "font-family": "Consolas, IBM Plex Mono, monospace" }, svg, date);
+    el("text", { x: x + bw / 2, y: y0 + 54, "text-anchor": "middle", "font-size": 16, fill: COL.faint }, svg, what);
   });
-  el("text", { x: x0 + 30, y: 30, "font-size": 18, fill: COL.muted }, svg, "marginal radiative forcing, W/m² (log scale)");
-  el("text", { x: x0 + 30 + 2 * (bw + gap), y: y0 - 130, "text-anchor": "middle", "font-size": 18, fill: COL.muted }, svg, "kilns being built");
-  el("text", { x: x0 + 30 + 4.5 * (bw + gap), y: 70, "text-anchor": "middle", "font-size": 18, fill: COL.t1 }, svg, "making cement");
 }
 
 /* ===========================================================
@@ -785,7 +792,7 @@ class Deck {
   }
 }
 
-topo(); gasBars(); contribBars(); rfBars(); trailGraph();
+topo(); gasBars(); contribBars(); dynBars(); trailGraph();
 new Deck();
 </script>
 </body>
