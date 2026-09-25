@@ -230,7 +230,7 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
 .group .gl { font-family: var(--font-mono); font-size: 18px; margin-bottom: 8px; }
 .kv { display: grid; grid-template-columns: 1fr; font-size: 15px; line-height: 1.45; margin-bottom: 8px; }
 .kv span:first-child { color: var(--faint); font-family: var(--font-mono); }
-.kv span:last-child { font-family: var(--font-mono); color: var(--ink); font-size: 17px; }
+.kv span:last-child { font-family: var(--font-mono); color: var(--ink); font-size: 17px; word-break: break-all; }
 .mini-loop svg { width: 100%; height: 100%; overflow: visible; }
 .ladder.compact { gap: 12px; }
 .ladder.compact .step { grid-template-columns: 56px 220px 1fr; padding: 16px 22px; }
@@ -274,9 +274,9 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
 </section>
 
 <!-- ============================ 2. CONCEPT: FUNCTION ============================ -->
-<section class="slide" data-title="A process is a function">
+<section class="slide" data-title="A model is a function">
   <div class="kicker"><b>01</b> idea</div>
-  <h2>A process is a function of its demand</h2>
+  <h2>A model is a function of its demand</h2>
   <div class="concept">
     <div class="card">
       <h5>Demand</h5>
@@ -363,17 +363,30 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
   <h2>A cement plant, written as a model</h2>
   <div class="panel">
     <div class="panel-head"><i></i><i></i><i></i><span>trailrunner/models/cement.py (abridged)</span></div>
-<pre class="sm" style="font-size:19px; line-height:1.6"><span class="k">class</span> <span class="cl">CementPlant</span>(Model):
+<pre class="sm" style="font-size:15px; line-height:1.4; padding:16px 22px"><span class="k">class</span> <span class="cl">CementPlant</span>(Model):
     produces = [<span class="s">"https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440"</span>]
 
     <span class="k">def</span> <span class="fn">apply</span>(self, demand):
         row = self.params.at(location=demand.flow.location, **when(demand.flow))   <span class="cm"># data for this place and time</span>
+        penalty = moisture_penalty(row[<span class="s">"moisture"</span>], row[<span class="s">"temperature"</span>])
         clinker = row[<span class="s">"clinker_factor"</span>] * demand.amount
-        fuel = row[<span class="s">"fuel_demand"</span>] * clinker * moisture_penalty(row[<span class="s">"moisture"</span>], row[<span class="s">"temperature"</span>])
+        limestone = LIMESTONE_PER_CLINKER * clinker
+        fuel = row[<span class="s">"fuel_demand"</span>] * clinker * penalty
+        lime = row[<span class="s">"lime_demand"</span>] * demand.amount
+        electricity = row[<span class="s">"electricity_demand"</span>] * demand.amount
+        <span class="k">def</span> <span class="fn">here</span>(iri): <span class="k">return</span> Flow(iri=iri, location=demand.flow.location, **when(demand.flow))  <span class="cm"># same place &amp; time as the demand</span>
         <span class="k">return</span> Result(
             production=[Exchange(flow=demand.flow, amount=demand.amount, unit=demand.unit)],
-            technosphere=[Demand(flow=here(NATURAL_GAS), amount=fuel, unit=row.unit_of("fuel_demand")), ...],
-            biosphere=[Exchange(flow=here(CO2_FOSSIL), amount=CLINKER_CALCINATION_CO2 * clinker, unit=KG), ...],
+            technosphere=[
+                Demand(flow=here(LIMESTONE), amount=limestone, unit=KG),
+                Demand(flow=self._gas(here(NATURAL_GAS)), amount=fuel, unit=row.unit_of(<span class="s">"fuel_demand"</span>)),
+                Demand(flow=here(LIME), amount=lime, unit=row.unit_of(<span class="s">"lime_demand"</span>)),
+                Demand(flow=here(ELECTRICITY), amount=electricity, unit=row.unit_of(<span class="s">"electricity_demand"</span>)),
+            ],
+            biosphere=[  <span class="cm"># the rock's CO2 and the flame's, kept apart</span>
+                Exchange(flow=here(CO2_FOSSIL), amount=CLINKER_CALCINATION_CO2 * clinker, unit=KG),
+                Exchange(flow=here(CO2_FOSSIL), amount=GAS_CO2_PER_MJ * fuel, unit=KG),
+            ],
         )</pre>
   </div>
 </section>
@@ -384,7 +397,9 @@ pre.xs { font-size: 12.6px; line-height: 1.5; }
   <h2>Call it, get flows back as IRIs</h2>
   <div class="panel">
     <div class="panel-head"><i></i><i></i><i></i><span>examples/showcase.ipynb</span></div>
-<pre style="font-size:17px; padding:14px 24px"><span class="k">answer</span> = cement_model.<span class="fn">apply</span>(IN_KG)   <span class="cm"># 1000 kg cement, DK, 2030-06-15</span></pre>
+<pre style="font-size:17px; padding:14px 24px"><span class="cm"># called directly, so ask in the model's own unit (the runner converts inside a run)</span>
+<span class="k">IN_KG</span> = Demand(flow=DEMAND.flow, amount=<span class="n">1000.0</span>, unit=<span class="s">"https://vocab.sentier.dev/units/unit/KiloGM"</span>)
+<span class="k">answer</span> = cement_model.<span class="fn">apply</span>(IN_KG)</pre>
 <pre class="out" style="font-size:14px; padding:14px 24px">  production  1000.0  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_37440
 technosphere  1125.0  https://vocab.sentier.dev/units/unit/KiloGM   https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_15200
 technosphere  <span class="hl">2475.0  https://vocab.sentier.dev/units/unit/MegaJ    https://vocab.sentier.dev/products/bonsai/2025.1/BONSAI2025.1/fi_12020</span>
