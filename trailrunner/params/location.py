@@ -9,7 +9,7 @@ class LocationHierarchy:
 
     def __init__(self, parents: dict[str, str] | None = None, root: str = "GLO") -> None:
         self._parents = dict(parents or {})
-        self._root = root
+        self._root = rootw
 
     def chain(self, location: str | None) -> list[str | None]:
         """Ordered candidates, most specific first.
