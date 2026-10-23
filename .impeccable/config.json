@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "codex-grid-background",
+        "value": "*",
+        "files": [
+          "slides/index.html"
+        ],
+        "createdAt": "2026-09-25T06:35:58.102Z",
+        "reason": "Claude decided: .slab is a concrete-aggregate dot texture for the 'concrete example' pun slide, not a decorative grid"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "slides/index.html"
+        ],
+        "createdAt": "2026-09-25T07:22:45.162Z",
+        "reason": "Claude decided: flagged rule is .swap .arrow .line::after, a border-triangle arrowhead on the fallback slide, not a card side accent"
+      }
+    ]
+  }
+}
